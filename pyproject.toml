@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "epinterface"
-version = "0.0.1"
+version = "1.0.0"
 description = "This is a repository for dynamically generating energy models within Python, relying on Archetypal and Eppy for most of its functionality."
 authors = ["Sam Wolk <wolk.sam@gmail.com>"]
 repository = "https://github.com/szvsw/epinterface"
@@ -13,6 +13,10 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
 archetypal = {git = "https://github.com/samuelduchesne/archetypal", branch = "main"}
+geopandas = "^1.0.1"
+pydantic = "^2.9.2"
+pandas = "^2.2.3"
+httpx = "^0.27.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.0"
@@ -20,6 +24,7 @@ pytest-cov = "^4.0.0"
 pyright = "^1.1.382"
 pre-commit = "^3.4.0"
 tox = "^4.11.1"
+pandas-stubs = "^2.2.2.240909"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
@@ -34,7 +39,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pyright]
 include = ["epinterface"]
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
 
