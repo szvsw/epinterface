@@ -1,0 +1,65 @@
+site_name: epinterface
+repo_url: https://github.com/szvsw/epinterface
+site_url: https://szvsw.github.io/epinterface
+site_description: This is a repository for dynamically generating energy models within Python, relying on Archetypal and Eppy for most of its functionality.
+site_author: Sam Wolk
+edit_uri: edit/main/docs/
+repo_name: szvsw/epinterface
+copyright: Maintained by <a href="https://github.com/szvsw">Sam Wolk</a>.
+
+nav:
+  - Home: index.md
+  - Modules: modules.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          setup_commands:
+            - import sys
+            - sys.path.append('../')
+theme:
+  name: material
+  feature:
+    tabs: true
+  features:
+    # - toc.follow
+    # - toc.integrate
+    - navigation.top
+    - navigation.path
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tracking
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/szvsw/epinterface
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/epinterface
+
+markdown_extensions:
+  - toc:
+      permalink: "#"
+  - pymdownx.arithmatex:
+      generic: true
