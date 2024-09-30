@@ -1,6 +1,7 @@
 """A module for parsing climate studio data and generating EnergyPlus objects."""
 
 import logging
+import re
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeVar, cast
 
@@ -8,7 +9,15 @@ import numpy as np
 import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
-from pydantic import AliasChoices, BaseModel, BeforeValidator, Field, validate_call
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    BeforeValidator,
+    Field,
+    field_serializer,
+    field_validator,
+    validate_call,
+)
 
 from epinterface.interface import (
     Construction,
@@ -137,7 +146,7 @@ def str_to_bool(v: str | bool) -> bool:
         return False
 
 
-def str_to_float_list(v: str):
+def str_to_float_list(v: str | list):
     """Converts a string to a list of floats.
 
     Args:
@@ -148,7 +157,19 @@ def str_to_float_list(v: str):
     """
     if v == "[]":
         return []
-    return [float(x) for x in v[1:-1].split(",")]
+    if isinstance(v, str):
+        # re should be used to parse the string -
+        # check that it starts with "["  and ends with "]"
+        # and the elements are separated by ", "
+        # and the elements are all ints or floats
+
+        if not re.match(r"^\[.*\]$", v):
+            raise ValueError(f"STRING:NOT_LIST:{v}")
+        v = v[1:-1]
+        if not re.match(r"^[\-0-9\., ]*$", v):
+            raise ValueError(f"STRING:NOT_LIST:{v}")
+        v = v.replace(" ", "").split(",")
+    return [float(x) for x in v]
 
 
 NanStr = Annotated[str | None, BeforeValidator(nan_to_none_or_str)]
@@ -494,7 +515,7 @@ OpaqueMaterialType = Literal[
 ]
 
 
-class OpaqueMaterialProperties(CommonMaterialProperties):
+class OpaqueMaterialProperties(CommonMaterialProperties, populate_by_name=True):
     """Properties of an opaque material."""
 
     Roughness: str = Field(..., title="Roughness of the opaque material")
@@ -640,7 +661,11 @@ OpaqueConstructionType = Literal[
 
 
 class OpaqueConstruction(
-    NamedObject, StandardMaterializedMetadata, ManufacturerData, extra="forbid"
+    NamedObject,
+    StandardMaterializedMetadata,
+    ManufacturerData,
+    extra="forbid",
+    populate_by_name=True,
 ):
     """Opaque construction object."""
 
@@ -1508,6 +1533,62 @@ class ClimateStudioLibraryV2(BaseModel, arbitrary_types_allowed=True):
     OpaqueConstructions: dict[str, OpaqueConstruction]
     OpaqueMaterials: dict[str, OpaqueMaterial]
     Schedules: dict[str, Schedule]
+
+    @field_validator("Schedules", mode="before")
+    @classmethod
+    def validate_schedules(cls, value: dict[str, Any]):
+        """Validate the schedules."""
+        for key, val in value.items():
+            if isinstance(val, dict):
+                transfer = ScheduleTransferObject.model_validate(val)
+                limit_type = ScheduleTypeLimits.from_dict(transfer.Type)
+                value[key] = Schedule.from_values(
+                    Name=transfer.Name,
+                    Type=limit_type,  # pyright: ignore [reportArgumentType]
+                    Values=transfer.Values,
+                )
+            elif isinstance(val, ScheduleTransferObject):
+                limit_type = ScheduleTypeLimits.from_dict(val.Type)
+                value[key] = Schedule.from_values(
+                    Name=val.Name,
+                    Type=limit_type,  # pyright: ignore [reportArgumentType]
+                    Values=val.Values,
+                )
+            elif not isinstance(val, Schedule):
+                raise TypeError(f"SCHEDULE_LOAD_ERROR:{type(val)}")
+            else:
+                continue
+        return value
+
+    @field_serializer("Schedules")
+    def serialize_schedules(
+        self, schedules: dict[str, Schedule]
+    ) -> dict[str, "ScheduleTransferObject"]:
+        """Serialize the schedules to a dataframe.
+
+        Args:
+            schedules (dict[str, Schedule]): The schedules to serialize.
+
+        Returns:
+            serialized_schedules (dict[str, list[float]])
+        """
+        out_result: dict[str, ScheduleTransferObject] = {}
+        for name, sch in schedules.items():
+            out_result[name] = ScheduleTransferObject(
+                Name=sch.Name,
+                Type=sch.Type.to_dict(),
+                Values=list(cast(np.ndarray, sch.Values)),
+            )
+
+        return out_result
+
+
+class ScheduleTransferObject(BaseModel):
+    """Schedule transfer object for help with de/serialization."""
+
+    Name: str
+    Type: dict
+    Values: list[float]
 
 
 class ClimateStudioLibraryV1(BaseModel, arbitrary_types_allowed=True):
