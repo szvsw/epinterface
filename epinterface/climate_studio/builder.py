@@ -1,6 +1,7 @@
 """A module for building the energy model using the Climate Studio API."""
 
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Literal, cast
 from uuid import uuid4
@@ -385,11 +386,28 @@ class Model(BaseWeather, validate_assignment=True):
         sql = Sql(idf.sql_file)
         return idf, sql
 
-    def standard_results_postprocess(self, sql: Sql) -> pd.Series:
+    def get_warnings(self, idf: IDF) -> str:
+        """Get the warning text from the idf model.
+
+        Args:
+            idf (IDF): The IDF model to get the warning text from.
+
+        Returns:
+            str: The warning text.
+        """
+        err_files = filter(
+            lambda x: x.suffix == ".err",
+            [idf.output_directory / Path(f) for f in idf.simulation_files],
+        )
+        err_text = "\n".join([f.read_text() for f in err_files])
+        return err_text
+
+    def standard_results_postprocess(self, sql: Sql, move_energy: bool) -> pd.Series:
         """Postprocess the sql file to get the standard results.
 
         Args:
             sql (Sql): The sql file to postprocess.
+            move_energy (bool): Whether to move the energy to fuels based off of the CoP/Fuel Types.
 
         Returns:
             pd.DataFrame: The postprocessed results.
@@ -402,8 +420,6 @@ class Model(BaseWeather, validate_assignment=True):
             res_df[
                 [
                     "Electricity",
-                    "Natural Gas",
-                    "Fuel Oil No 2",
                     "District Cooling",
                     "District Heating",
                 ]
@@ -413,7 +429,41 @@ class Model(BaseWeather, validate_assignment=True):
 
         res_series.name = "kWh/m2"
 
+        if move_energy:
+            heat_cop = self.space_use.Conditioning.HeatingCOP
+            cool_cop = self.space_use.Conditioning.CoolingCOP
+            heat_fuel = self.space_use.Conditioning.HeatingFuelType
+            cool_fuel = self.space_use.Conditioning.CoolingFuelType
+            heat_energy = res_series["District Heating"] / heat_cop
+            cool_energy = res_series["District Cooling"] / cool_cop
+            if heat_fuel not in res_series.index:
+                res_series[heat_fuel] = 0
+            if cool_fuel not in res_series.index:
+                res_series[cool_fuel] = 0
+            res_series[heat_fuel] += heat_energy
+            res_series[cool_fuel] += cool_energy
+            res_series = res_series.drop(["District Cooling", "District Heating"])
+
         return cast(pd.Series, res_series)
+
+    async def run(self, move_energy: bool) -> tuple[IDF, pd.Series, str]:
+        """Build and simualte the idf model.
+
+        Args:
+            move_energy (bool): Whether to move the energy to fuels based off of the CoP/Fuel Types.
+
+        Returns:
+            idf (IDF): The built energy model.
+            results (pd.Series): The postprocessed results.
+            err_text (str): The warning text.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            config = SimulationPathConfig(output_dir=output_dir)
+            idf, sql = await self.simulate(config)
+            results = self.standard_results_postprocess(sql, move_energy=move_energy)
+            err_text = self.get_warnings(idf)
+            return idf, results, err_text
 
 
 # TODO: move to interface?
@@ -505,8 +555,8 @@ class SurfaceHandler(BaseModel):
 if __name__ == "__main__":
     import asyncio
     import json
-    import tempfile
 
+    # import tempfile
     from pydantic import AnyUrl
 
     from epinterface.climate_studio.interface import (
@@ -584,6 +634,7 @@ if __name__ == "__main__":
             w=10,
             d=10,
             h=3,
+            wwr=0.2,
             num_stories=2,
             basement_depth=None,
             zoning="by_storey",
@@ -594,20 +645,7 @@ if __name__ == "__main__":
     model.space_use.Conditioning.CoolingSetpoint = 23
     model.space_use.Loads.LightingPowerDensity = 10
     model.space_use.Loads.EquipmentPowerDensity = 10
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        output_dir = Path(temp_dir)
-        config = SimulationPathConfig(output_dir=output_dir)
-        idf, sql = asyncio.run(model.simulate(config))
-        idf.saveas("notebooks/test-out.idf")
-        results = model.standard_results_postprocess(sql)
-        err_files = filter(
-            lambda x: x.suffix == ".err",
-            [idf.output_directory / Path(f) for f in idf.simulation_files],
-        )
-        for file in err_files:
-            print(file.read_text())
-        print(results)
-        print(model.geometry.total_living_area)
-        print(model.space_use.Conditioning.HeatingSetpoint)
-        print(model.space_use.Conditioning.CoolingSetpoint)
+    model.envelope.Infiltration.InfiltrationAch = 0.4
+    idf, results, err_text = asyncio.run(model.run(move_energy=False))
+    print(err_text)
+    print(results)
