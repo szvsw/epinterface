@@ -2,6 +2,7 @@
 
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, cast
 from uuid import uuid4
@@ -372,16 +373,23 @@ class Model(BaseWeather, validate_assignment=True):
             yr_sch.to_epbunch(idf)
         return idf
 
-    async def simulate(self, config: SimulationPathConfig) -> tuple[IDF, Sql]:
+    async def simulate(
+        self,
+        config: SimulationPathConfig,
+        post_build_callback: Callable[[IDF], IDF] | None = None,
+    ) -> tuple[IDF, Sql]:
         """Build and simualte the idf model.
 
         Args:
-           config (SimulationConfig): The configuration for the simulation.
+            config (SimulationConfig): The configuration for the simulation.
+            post_build_callback (Callable[[IDF],IDF] | None): A callback to run after the model is built.
 
         Returns:
             tuple[IDF, Sql]: The built energy model and the sql file.
         """
         idf = await self.build(config)
+        if post_build_callback is not None:
+            idf = post_build_callback(idf)
         idf.simulate()
         sql = Sql(idf.sql_file)
         return idf, sql
@@ -446,10 +454,15 @@ class Model(BaseWeather, validate_assignment=True):
 
         return cast(pd.Series, res_series)
 
-    async def run(self, move_energy: bool) -> tuple[IDF, pd.Series, str]:
+    async def run(
+        self,
+        post_build_callback: Callable[[IDF], IDF] | None = None,
+        move_energy: bool = False,
+    ) -> tuple[IDF, pd.Series, str]:
         """Build and simualte the idf model.
 
         Args:
+            post_build_callback (Callable[[IDF],IDF] | None): A callback to run after the model is built.
             move_energy (bool): Whether to move the energy to fuels based off of the CoP/Fuel Types.
 
         Returns:
@@ -460,7 +473,10 @@ class Model(BaseWeather, validate_assignment=True):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
             config = SimulationPathConfig(output_dir=output_dir)
-            idf, sql = await self.simulate(config)
+            idf, sql = await self.simulate(
+                config,
+                post_build_callback=post_build_callback,
+            )
             results = self.standard_results_postprocess(sql, move_energy=move_energy)
             err_text = self.get_warnings(idf)
             return idf, results, err_text
