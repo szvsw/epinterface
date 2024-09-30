@@ -217,7 +217,7 @@ class Model(BaseWeather, validate_assignment=True):
             return new_const
 
         slab_reversed = reverse_construction(constructions.SlabConstruction, self.lib)
-        lib.OpaqueConstructions[slab_reversed.Name] = slab_reversed
+        self.lib.OpaqueConstructions[slab_reversed.Name] = slab_reversed
 
         actions = [
             (
