@@ -456,12 +456,14 @@ class Model(BaseWeather, validate_assignment=True):
 
     async def run(
         self,
+        weather_dir: Path | None = None,
         post_build_callback: Callable[[IDF], IDF] | None = None,
         move_energy: bool = False,
     ) -> tuple[IDF, pd.Series, str]:
         """Build and simualte the idf model.
 
         Args:
+            weather_dir (Path): The directory to store the weather files.
             post_build_callback (Callable[[IDF],IDF] | None): A callback to run after the model is built.
             move_energy (bool): Whether to move the energy to fuels based off of the CoP/Fuel Types.
 
@@ -472,7 +474,15 @@ class Model(BaseWeather, validate_assignment=True):
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            config = SimulationPathConfig(output_dir=output_dir)
+            config = (
+                SimulationPathConfig(
+                    output_dir=output_dir,
+                    weather_dir=weather_dir,
+                )
+                if weather_dir is not None
+                else SimulationPathConfig(output_dir=output_dir)
+            )
+
             idf, sql = await self.simulate(
                 config,
                 post_build_callback=post_build_callback,
