@@ -22,7 +22,9 @@ from epinterface.interface import (
     Material,
     OutdoorAirEconomizerTypeType,
     People,
+    SimpleGlazingMaterial,
     ZoneInfiltrationDesignFlowRate,
+    ZoneList,
 )
 
 logger = logging.getLogger(__name__)
@@ -227,7 +229,7 @@ class ClimateStudioMetadata(BaseModel):
     ClimateZone: str = Field(..., title="Climate zone of the object")
     Standard: str = Field(..., title="Standard of the object")
     Program: str = Field(..., title="Program of the object")
-    Version: NanStr = Field(..., title="Version of the object")
+    Version: NanStr | None = Field(default=None, title="Version of the object")
 
 
 class StandardMaterializedMetadata(
@@ -299,7 +301,11 @@ WindowType = Literal["Single", "Double", "Triple"]
 
 
 class GlazingConstructionSimple(
-    NamedObject, StandardMaterializedMetadata, ManufacturerData, extra="forbid"
+    NamedObject,
+    StandardMaterializedMetadata,
+    ManufacturerData,
+    extra="forbid",
+    populate_by_name=True,
 ):
     """Simple glazing construction object."""
 
@@ -312,6 +318,30 @@ class GlazingConstructionSimple(
     )
     TVis: float = Field(..., title="Visible transmittance", ge=0, le=1)
     Type: WindowType = Field(..., title="Type of the glazing construction")
+
+    def add_to_idf(self, idf: IDF) -> IDF:
+        """Adds the glazing construction to an IDF object.
+
+        Args:
+            idf (IDF): The IDF object to add the construction to.
+
+        Returns:
+            IDF: The updated IDF object.
+        """
+        glazing_mat = SimpleGlazingMaterial(
+            Name=self.Name,
+            UFactor=self.UValue,
+            Solar_Heat_Gain_Coefficient=self.SHGF,
+            Visible_Transmittance=self.TVis,
+        )
+
+        construction = Construction(
+            name=self.Name,
+            layers=[glazing_mat],
+        )
+
+        idf = construction.add(idf)
+        return idf
 
 
 class CommonMaterialProperties(BaseModel):
@@ -679,13 +709,13 @@ class ZoneConditioning(
     CoolingSetpointConstant: BoolStr = Field(..., title="Cooling setpoint constant")
     HeatingSetpointSchedule: str = Field(..., title="Heating setpoint schedule")
     CoolingSetpointSchedule: str = Field(..., title="Cooling setpoint schedule")
-    MinFreshAirPerPerson: float = Field(
+    MinFreshAirPerson: float = Field(
         ...,
         title="Minimum fresh air per person [L/s/p]",
         validation_alias="MinFreshAirPerson [L/s/p]",
         ge=0,
     )
-    MinFreshAirPerArea: float = Field(
+    MinFreshAirArea: float = Field(
         ...,
         title="Minimum fresh air per area [L/s/m²]",
         validation_alias="MinFreshAirArea [L/s/m²]",
@@ -932,8 +962,8 @@ class ZoneConditioning(
             Cooling_Limit=self.CoolingLimitType,
             Humidification_Control_Type="None",
             Outdoor_Air_Method="Sum" if self.MechVentIsOn else "None",
-            Outdoor_Air_Flow_Rate_per_Person=self.MinFreshAirPerPerson,
-            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.MinFreshAirPerArea,
+            Outdoor_Air_Flow_Rate_per_Person=self.MinFreshAirPerson,
+            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.MinFreshAirArea,
             Outdoor_Air_Flow_Rate_per_Zone=0,
             Demand_Controlled_Ventilation_Type="None",
             Outdoor_Air_Economizer_Type=self.EconomizerType,
@@ -947,7 +977,9 @@ class ZoneConditioning(
         return idf
 
 
-class ZoneConstruction(NamedObject, ClimateStudioMetadata, extra="forbid"):
+class ZoneConstruction(
+    NamedObject, ClimateStudioMetadata, extra="forbid", populate_by_name=True
+):
     """Zone construction object."""
 
     RoofConstruction: str = Field(..., title="Roof construction object name")
@@ -993,10 +1025,12 @@ class ZoneDefinition(NamedObject, extra="forbid"):
     )
 
 
-InfCalculationMethodType = Literal["FlowExtArea", "ACH"]
+# InfCalculationMethodType = Literal["FlowExtArea", "ACH"]
 
 
-class ZoneInfiltration(NamedObject, ClimateStudioMetadata, extra="forbid"):
+class ZoneInfiltration(
+    NamedObject, ClimateStudioMetadata, extra="forbid", populate_by_name=True
+):
     """Zone infiltration object."""
 
     InfiltrationIsOn: BoolStr = Field(..., title="Infiltration is on")
@@ -1021,7 +1055,7 @@ class ZoneInfiltration(NamedObject, ClimateStudioMetadata, extra="forbid"):
         title="AFN air mass flow coefficient crack",
     )
 
-    InfiltrationACH: float = Field(
+    InfiltrationAch: float = Field(
         ...,
         title="Infiltration air changes per hour",
         ge=0,
@@ -1033,24 +1067,10 @@ class ZoneInfiltration(NamedObject, ClimateStudioMetadata, extra="forbid"):
         ge=0,
         validation_alias="InfiltrationFlowPerExteriorSurfaceArea [m3/s/m2]",
     )
-    CalculationMethod: InfCalculationMethodType = Field(
+    CalculationMethod: InfDesignFlowRateCalculationMethodType = Field(
         ...,
         title="Calculation method",
     )
-
-    @property
-    def calculation_method(self) -> InfDesignFlowRateCalculationMethodType:
-        """Converts the calculation method to the IDF parameter value."""
-        if self.CalculationMethod == "FlowExtArea":
-            return "Flow/ExteriorArea"
-        elif self.CalculationMethod == "ACH":
-            return "AirChanges/Hour"
-        else:
-            raise NotImplementedClimateStudioParameter(
-                f"CalculationMethod:{self.CalculationMethod}",
-                self.Name,
-                "Infiltration",
-            )
 
     def add_infiltration_to_idf_zone(
         self, idf: IDF, target_zone_or_zone_list_name: str
@@ -1079,9 +1099,9 @@ class ZoneInfiltration(NamedObject, ClimateStudioMetadata, extra="forbid"):
             Name=f"{target_zone_or_zone_list_name}_{self.Name}_Infiltration",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
             Schedule_Name=inf_schedule.Name,
-            Design_Flow_Rate_Calculation_Method=self.calculation_method,
+            Design_Flow_Rate_Calculation_Method=self.CalculationMethod,
             Flow_Rate_per_Exterior_Surface_Area=self.InfiltrationFlowPerExteriorSurfaceArea,
-            Air_Changes_per_Hour=self.InfiltrationACH,
+            Air_Changes_per_Hour=self.InfiltrationAch,
             Flow_Rate_per_Floor_Area=None,
             Design_Flow_Rate=None,
             Constant_Term_Coefficient=self.InfiltrationConstantCoefficient,
@@ -1093,6 +1113,62 @@ class ZoneInfiltration(NamedObject, ClimateStudioMetadata, extra="forbid"):
         return idf
 
 
+class WindowDefinition(NamedObject, ClimateStudioMetadata, extra="ignore"):
+    """Window definition object."""
+
+    Construction: str = Field(..., title="Construction object name")
+
+    @property
+    def schedule_names(self) -> set[str]:
+        """Get the schedule names used in the object.
+
+        Returns:
+            set[str]: The schedule names.
+        """
+        return set()
+
+
+class Foundation(BaseModel, extra="ignore"):
+    """Foundation object."""
+
+    pass
+
+
+class OtherSettings(BaseModel, extra="ignore"):
+    """Other settings object."""
+
+    pass
+
+
+class ZoneEnvelope(NamedObject, ClimateStudioMetadata, extra="forbid"):
+    """Zone envelope object."""
+
+    Constructions: ZoneConstruction
+    Infiltration: ZoneInfiltration
+    WindowDefinition: WindowDefinition | None
+    WWR: float | None = Field(
+        default=0.1, description="Window to wall ratio", ge=0, le=1
+    )
+    Foundation: Foundation | None
+    OtherSettings: OtherSettings | None
+    BuildingType: str | int = Field(..., title="Building type")
+
+    # TODO: add envelope to idf zone
+    # (currently in builder)
+
+    @property
+    def schedule_names(self) -> set[str]:
+        """Get the schedule names used in the object.
+
+        Returns:
+            set[str]: The schedule names.
+        """
+        win_sch = (
+            self.WindowDefinition.schedule_names if self.WindowDefinition else set()
+        )
+        return win_sch
+
+
 DimmingTypeType = Literal["Off", "Stepped", "Continuous"]
 
 
@@ -1101,7 +1177,7 @@ class ZoneLoad(
 ):
     """Zone load object."""
 
-    BuildingType: str = Field(..., title="Building type")
+    BuildingType: str | int = Field(..., title="Building type")
     PeopleDensity: float = Field(
         ...,
         title="People density [people/m²]",
@@ -1331,10 +1407,110 @@ class ZoneLoad(
         return idf
 
 
+class ZoneHotWater(
+    NamedObject, ClimateStudioMetadata, extra="ignore", populate_by_name=True
+):
+    """Zone Hot Water object."""
+
+    @property
+    def schedule_names(self) -> set[str]:
+        """Get the schedule names used in the object.
+
+        Returns:
+            set[str]: The schedule names.
+        """
+        return set()
+
+
+class ZoneUse(
+    NamedObject, ClimateStudioMetadata, extra="forbid", populate_by_name=True
+):
+    """Zone use object."""
+
+    Conditioning: ZoneConditioning
+    Loads: ZoneLoad
+    HotWater: ZoneHotWater
+
+    def add_loads_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
+        """Add the loads to an IDF zone.
+
+        This will add the people, equipment, and lights to the zone.
+
+        nb: remember to add the schedules.
+
+        Args:
+            idf (IDF): The IDF object to add the loads to.
+            target_zone_name (str): The name of the zone to add the loads to.
+
+        Returns:
+            IDF: The updated IDF object.
+        """
+        idf = self.Loads.add_loads_to_idf_zone(idf, target_zone_name)
+        return idf
+
+    def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
+        """Add the conditioning to an IDF zone.
+
+        Args:
+            idf (IDF): The IDF object to add the conditioning to.
+            target_zone_name (str): The name of the zone to add the conditioning to.
+
+        Returns:
+            IDF: The updated IDF object.
+        """
+        idf = self.Conditioning.add_conditioning_to_idf_zone(idf, target_zone_name)
+        return idf
+
+    def add_space_use_to_idf_zone(self, idf: IDF, target_zone: str | ZoneList) -> IDF:
+        """Add the use to an IDF zone.
+
+        This will add the loads and conditioning to the zone.
+
+        Args:
+            idf (IDF): The IDF object to add the use to.
+            target_zone (str | ZoneList): The name of the zone to add the use to.
+
+        Returns:
+            IDF: The updated IDF object.
+        """
+        loads_target = target_zone if isinstance(target_zone, str) else target_zone.Name
+        idf = self.add_loads_to_idf_zone(idf, loads_target)
+        if isinstance(target_zone, str):
+            idf = self.add_conditioning_to_idf_zone(idf, target_zone)
+        else:
+            for zone in target_zone.Names:
+                idf = self.add_conditioning_to_idf_zone(idf, zone)
+        return idf
+
+    @property
+    def schedule_names(self) -> set[str]:
+        """Get the schedule names used in the object.
+
+        Returns:
+            set[str]: The schedule names.
+        """
+        return (
+            self.Loads.schedule_names
+            | self.Conditioning.schedule_names
+            | self.HotWater.schedule_names
+        )
+
+
 NamedType = TypeVar("NamedType", bound=NamedObject)
 
 
-class ClimateStudioLibrary(BaseModel, arbitrary_types_allowed=True):
+class ClimateStudioLibraryV2(BaseModel, arbitrary_types_allowed=True):
+    """Climate Studio library object."""
+
+    SpaceUses: dict[str, ZoneUse]
+    Envelopes: dict[str, ZoneEnvelope]
+    GlazingConstructions: dict[str, GlazingConstructionSimple]
+    OpaqueConstructions: dict[str, OpaqueConstruction]
+    OpaqueMaterials: dict[str, OpaqueMaterial]
+    Schedules: dict[str, Schedule]
+
+
+class ClimateStudioLibraryV1(BaseModel, arbitrary_types_allowed=True):
     """Climate Studio library object."""
 
     # DaySchedules: dict[str, DaySchedule]
@@ -1489,4 +1665,4 @@ if __name__ == "__main__":
 
     base_path = Path("D:/climatestudio/default")
 
-    lib = ClimateStudioLibrary.Load(base_path)
+    lib = ClimateStudioLibraryV1.Load(base_path)

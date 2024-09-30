@@ -25,6 +25,8 @@ pyright = "^1.1.382"
 pre-commit = "^3.4.0"
 tox = "^4.11.1"
 pandas-stubs = "^2.2.2.240909"
+jupyter = "^1.1.1"
+pyarrow = "^17.0.0"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"

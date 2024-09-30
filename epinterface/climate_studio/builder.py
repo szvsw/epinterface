@@ -2,7 +2,7 @@
 
 import shutil
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 from uuid import uuid4
 
 import pandas as pd
@@ -10,7 +10,16 @@ from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
 from pydantic import BaseModel, Field
 
-from epinterface.climate_studio.interface import ClimateStudioLibrary, ZoneDefinition
+from epinterface.climate_studio.interface import (
+    ClimateStudioLibraryV2,
+    GlazingConstructionSimple,
+    OpaqueConstruction,
+    WindowDefinition,
+    ZoneConstruction,
+    ZoneEnvelope,
+    ZoneInfiltration,
+    ZoneUse,
+)
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
 from epinterface.geometry import ShoeboxGeometry
@@ -19,6 +28,7 @@ from epinterface.interface import (
     add_default_schedules,
     add_default_sim_controls,
 )
+from epinterface.weather import BaseWeather
 
 
 class ClimateStudioBuilderNotImplementedError(NotImplementedError):
@@ -43,21 +53,39 @@ class SimulationPathConfig(BaseModel):
         default_factory=lambda: EnergyPlusArtifactDir / "cache" / str(uuid4())[:8],
         description="The output directory for the IDF model.",
     )
-    epw_path: Path = Field(..., description="The path to the EPW file.")
-    ddy_path: Path = Field(..., description="The path to the DDY file.")
+    weather_dir: Path = Field(
+        default_factory=lambda: EnergyPlusArtifactDir / "cache" / "weather",
+        description="The directory to store the weather files.",
+    )
 
 
-class Model(BaseModel):
+class Model(BaseWeather, validate_assignment=True):
     """A simple model constructor for the IDF model.
 
     Creates geometry as well as zone definitions.
     """
 
     geometry: ShoeboxGeometry
-    zone_name: str
-    library: ClimateStudioLibrary
+    space_use_name: str
+    envelope_name: str
+    lib: ClimateStudioLibraryV2
 
-    def build(self, config: SimulationPathConfig) -> IDF:
+    @property
+    def space_use(self) -> ZoneUse:
+        """The space use definition for the model."""
+        if self.space_use_name not in self.lib.SpaceUses:
+            raise KeyError(f"MISSING:SPACE_USE:{self.space_use_name}")
+        return self.lib.SpaceUses[self.space_use_name]
+
+    @property
+    def envelope(self) -> ZoneEnvelope:
+        """The envelope definition for the model."""
+        if self.envelope_name not in self.lib.Envelopes:
+            raise KeyError(f"MISSING:ENVELOPE:{self.envelope_name}")
+
+        return self.lib.Envelopes[self.envelope_name]
+
+    async def build(self, config: SimulationPathConfig) -> IDF:
         """Build the energy model using the Climate Studio API.
 
         Args:
@@ -76,15 +104,16 @@ class Model(BaseModel):
         base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
         target_base_filepath = config.output_dir / "Minimal.idf"
         shutil.copy(base_filepath, target_base_filepath)
+        epw_path, ddy_path = await self.fetch_weather(config.weather_dir)
         idf = IDF(
             target_base_filepath.as_posix(),
             as_version=None,  # pyright: ignore [reportArgumentType]
             prep_outputs=True,
-            epw=config.epw_path,
-            output_directory=config.output_dir,
+            epw=epw_path.as_posix(),
+            output_directory=config.output_dir.as_posix(),
         )
         ddy = IDF(
-            config.ddy_path.as_posix(),
+            ddy_path.as_posix(),
             as_version="9.2.0",
             file_version="9.2.0",
             prep_outputs=False,
@@ -100,27 +129,57 @@ class Model(BaseModel):
         idf = self.geometry.add(idf)
 
         # construct zone lists
-        idf, conditioned_zone_list, _all_zones_list = self.add_zone_lists(idf)
+        idf, conditioned_zone_list, all_zones_list = self.add_zone_lists(idf)
 
-        # Acquire the template
-        zone_template = self.library.ZoneDefinition[self.zone_name]
-
-        # TODO: assign window types
-
-        idf = self.add_srf_constructions(idf, zone_template)
-        idf = self.add_loads(idf, zone_template, conditioned_zone_list)
         # TODO: Handle separately ventilated attic/basement?
-        idf = self.add_infiltration(idf, zone_template, conditioned_zone_list)
-        idf = self.add_conditioning(idf, zone_template, conditioned_zone_list)
+        idf = self.add_space_use(idf, self.space_use, conditioned_zone_list)
+        idf = self.add_envelope(idf, self.envelope, all_zones_list)
 
         return idf
 
-    def add_srf_constructions(self, idf: IDF, zone_template: ZoneDefinition) -> IDF:
+    def add_envelope(
+        self, idf: IDF, envelope: ZoneEnvelope, inf_zone_list: ZoneList
+    ) -> IDF:
+        """Add the envelope to the IDF model.
+
+        Takes care of both the constructions and infiltration and windows.
+
+        Args:
+            idf (IDF): The IDF model to add the envelope to.
+            envelope (ZoneEnvelope): The envelope template.
+            inf_zone_list (ZoneList): The list of zones to add the infiltration to.
+
+
+        Returns:
+            IDF: The IDF model with the added envelope.
+        """
+        constructions = envelope.Constructions
+        infiltration = envelope.Infiltration
+        window_def = envelope.WindowDefinition
+        _other_settings = envelope.OtherSettings
+        _foundation_settings = envelope.Foundation
+        # TODO: other settings
+
+        self.add_srf_constructions(idf, constructions, window_def)
+        self.add_infiltration(idf, infiltration, inf_zone_list)
+
+        sch_names = self.envelope.schedule_names
+        idf = self.add_schedules_by_name(idf, sch_names)
+
+        return idf
+
+    def add_srf_constructions(
+        self,
+        idf: IDF,
+        constructions: ZoneConstruction,
+        window_def: WindowDefinition | None,
+    ) -> IDF:
         """Assigns the constructions to the surfaces in the model.
 
         Args:
             idf (IDF): The IDF model to select the surfaces from.
-            zone_template (ZoneDefinition): The zone definition template.
+            constructions (ZoneConstruction): The construction template.
+            window_def (WindowDefinition): The window definition template.
 
         Returns:
             IDF: The IDF model with the selected surfaces.
@@ -131,59 +190,98 @@ class Model(BaseModel):
         if self.geometry.roof_height:
             raise ClimateStudioBuilderNotImplementedError("roof_height")
 
-        zone_constructions_def = self.library.ZoneConstruction[
-            zone_template.Constructions
-        ]
-
         if (
-            zone_constructions_def.FacadeIsAdiabatic
-            or zone_constructions_def.RoofIsAdiabatic
-            or zone_constructions_def.GroundIsAdiabatic
-            or zone_constructions_def.PartitionIsAdiabatic
-            or zone_constructions_def.SlabIsAdiabatic
+            constructions.FacadeIsAdiabatic
+            or constructions.RoofIsAdiabatic
+            or constructions.GroundIsAdiabatic
+            or constructions.PartitionIsAdiabatic
+            or constructions.SlabIsAdiabatic
         ):
             raise ClimateStudioBuilderNotImplementedError("_IsAdiabatic")
 
-        if zone_constructions_def.InternalMassIsOn:
+        if constructions.InternalMassIsOn:
             raise ClimateStudioBuilderNotImplementedError("InternalMassIsOn")
 
-        def handle_srfs_for_filter(
-            idf: IDF,
-            construction_name: str,
-            boundary_condition: str,
-            original_construction_name: str,
-        ) -> IDF:
-            srfs = [
-                srf
-                for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
-                if srf.Outside_Boundary_Condition == boundary_condition
-                and srf.Construction_Name == original_construction_name
-            ]
-            construction = self.library.OpaqueConstructions[construction_name]
-            idf = construction.add_to_idf(idf, self.library.OpaqueMaterials)
-            for srf in srfs:
-                srf.Construction_Name = construction.Name
-            return idf
-
         # outside walls are the ones with outdoor boundary condition and vertical orientation
+        def make_reversed(const: OpaqueConstruction):
+            new_const = const.model_copy(deep=True)
+            new_const.Layers = new_const.Layers[::-1]
+            new_const.Name = f"{const.Name}_Reversed"
+            return new_const
+
+        def reverse_construction(const_name: str, lib: ClimateStudioLibraryV2):
+            const = lib.OpaqueConstructions[const_name]
+            new_const = make_reversed(const)
+            return new_const
+
+        slab_reversed = reverse_construction(constructions.SlabConstruction, self.lib)
+        lib.OpaqueConstructions[slab_reversed.Name] = slab_reversed
+
         actions = [
-            (zone_constructions_def.FacadeConstruction, "outdoors", "Project Wall"),
-            (zone_constructions_def.RoofConstruction, "outdoors", "Project Flat Roof"),
             (
-                zone_constructions_def.PartitionConstruction,
-                "surface",
-                "Project Partition",
+                constructions.FacadeConstruction,
+                SurfaceHandler(
+                    boundary_condition="outdoors",
+                    original_construction_name="Project Wall",
+                    surface_type="opaque",
+                ),
             ),
             (
-                zone_constructions_def.SlabConstruction,
-                "surface",
-                "Project Ceiling",
+                constructions.RoofConstruction,
+                SurfaceHandler(
+                    boundary_condition="outdoors",
+                    original_construction_name="Project Flat Roof",
+                    surface_type="opaque",
+                ),
             ),
-            (zone_constructions_def.SlabConstruction, "surface", "Project Floor"),
-            (zone_constructions_def.GroundSlabConstruction, "ground", "Project Floor"),
+            (
+                constructions.PartitionConstruction,
+                SurfaceHandler(
+                    boundary_condition="surface",
+                    original_construction_name="Project Partition",
+                    surface_type="opaque",
+                ),
+            ),
+            (
+                slab_reversed.Name,
+                SurfaceHandler(
+                    boundary_condition="surface",
+                    original_construction_name="Project Floor",
+                    surface_type="opaque",
+                ),
+            ),
+            (
+                constructions.SlabConstruction,
+                SurfaceHandler(
+                    boundary_condition="surface",
+                    original_construction_name="Project Ceiling",
+                    surface_type="opaque",
+                ),
+            ),
+            (
+                constructions.GroundSlabConstruction,
+                SurfaceHandler(
+                    boundary_condition="ground",
+                    original_construction_name="Project Floor",
+                    surface_type="opaque",
+                ),
+            ),
         ]
-        for action in actions:
-            idf = handle_srfs_for_filter(idf, *action)
+
+        # TODO: External floors, basements, etc
+
+        if window_def:
+            actions.append((
+                window_def.Construction,
+                SurfaceHandler(
+                    boundary_condition=None,
+                    original_construction_name="Project External Window",
+                    surface_type="glazing",
+                ),
+            ))
+
+        for const_name, action in actions:
+            idf = action.asssign_srfs(idf, self.lib, const_name)
 
         return idf
 
@@ -226,61 +324,35 @@ class Model(BaseModel):
         return idf, conditioned_zone_list, all_zones_list
 
     def add_infiltration(
-        self, idf: IDF, zone_template: ZoneDefinition, zone_list: ZoneList
+        self, idf: IDF, infiltration: ZoneInfiltration, zone_list: ZoneList
     ):
         """Add the infiltration to the IDF model.
 
         Args:
             idf (IDF): The IDF model to add the infiltration to.
-            zone_template (ZoneInfiltration): The zone infiltration template.
+            infiltration: The infiltration object.
             zone_list (ZoneList): The list of zones to add the infiltration to.
 
         Returns:
             IDF: The IDF model with the added infiltration.
         """
-        infiltration_name = zone_template.Infiltration
-        infiltration = self.library.ZoneInfiltration[infiltration_name]
         idf = infiltration.add_infiltration_to_idf_zone(idf, zone_list.Name)
         # idf = self.add_schedules_by_name(idf, infiltration.schedule_names)
         return idf
 
-    def add_loads(
-        self, idf: IDF, zone_template: ZoneDefinition, zone_list: ZoneList
-    ) -> IDF:
-        """Add the loads to the IDF model.
+    def add_space_use(self, idf: IDF, space_use: ZoneUse, zone_list: ZoneList) -> IDF:
+        """Add the space use to the IDF model.
 
         Args:
-            idf (IDF): The IDF model to add the loads to.
-            zone_template (ZoneLoads): The zone loads template.
-            zone_list (ZoneList): The list of zones to add the loads to.
+            idf (IDF): The IDF model to add the space use to.
+            space_use (ZoneUse): The zone use template.
+            zone_list (ZoneList): The list of zones to add the space use to.
 
         Returns:
-            IDF: The IDF model with the added loads.
+            IDF: The IDF model with the added space use.
         """
-        zone_load_name = zone_template.Loads
-        zone_load = self.library.ZoneLoad[zone_load_name]
-        idf = zone_load.add_loads_to_idf_zone(idf, zone_list.Name)
-        idf = self.add_schedules_by_name(idf, zone_load.schedule_names)
-        return idf
-
-    def add_conditioning(
-        self, idf: IDF, zone_template: ZoneDefinition, zone_list: ZoneList
-    ) -> IDF:
-        """Add the conditioning to the IDF model.
-
-        Args:
-            idf (IDF): The IDF model to add the conditioning to.
-            zone_template (ZoneConditioning): The zone conditioning template.
-            zone_list (ZoneList): The list of zones to add the conditioning to.
-
-        Returns:
-            IDF: The IDF model with the added conditioning.
-        """
-        hvac_name = zone_template.Conditioning
-        hvac = self.library.ZoneConditioning[hvac_name]
-        for zone in zone_list.Names:
-            idf = hvac.add_conditioning_to_idf_zone(idf, zone)
-        idf = self.add_schedules_by_name(idf, hvac.schedule_names)
+        idf = space_use.add_space_use_to_idf_zone(idf, zone_list)
+        idf = self.add_schedules_by_name(idf, space_use.schedule_names)
         return idf
 
     def add_schedules_by_name(self, idf: IDF, schedule_names: set[str]) -> IDF:
@@ -293,13 +365,13 @@ class Model(BaseModel):
         Returns:
             IDF: The IDF model with the added schedules.
         """
-        schedules = [self.library.Schedules[s] for s in schedule_names]
+        schedules = [self.lib.Schedules[s] for s in schedule_names]
         for schedule in schedules:
             yr_sch, *_ = schedule.to_year_week_day()
             yr_sch.to_epbunch(idf)
         return idf
 
-    def simulate(self, config: SimulationPathConfig) -> tuple[IDF, Sql]:
+    async def simulate(self, config: SimulationPathConfig) -> tuple[IDF, Sql]:
         """Build and simualte the idf model.
 
         Args:
@@ -308,7 +380,7 @@ class Model(BaseModel):
         Returns:
             tuple[IDF, Sql]: The built energy model and the sql file.
         """
-        idf = self.build(config)
+        idf = await self.build(config)
         idf.simulate()
         sql = Sql(idf.sql_file)
         return idf, sql
@@ -328,7 +400,13 @@ class Model(BaseModel):
         kWh_per_GJ = 277.778
         res_series = (
             res_df[
-                ["Electricity", "Natural Gas", "District Cooling", "District Heating"]
+                [
+                    "Electricity",
+                    "Natural Gas",
+                    "Fuel Oil No 2",
+                    "District Cooling",
+                    "District Heating",
+                ]
             ].droplevel(-1, axis=1)
             * kWh_per_GJ
         ).loc["Total End Uses"] / self.geometry.total_living_area
@@ -338,44 +416,190 @@ class Model(BaseModel):
         return cast(pd.Series, res_series)
 
 
+# TODO: move to interface?
+class SurfaceHandler(BaseModel):
+    """A handler for filtering and adding surfaces to a model."""
+
+    boundary_condition: str | None
+    original_construction_name: str | None
+    surface_type: Literal["glazing", "opaque"]
+
+    def asssign_srfs(
+        self, idf: IDF, lib: ClimateStudioLibraryV2, construction_name: str
+    ) -> IDF:
+        """Adds a construction (and its materials) to an IDF and assigns it to matching surfaces.
+
+        Args:
+            idf (IDF): The IDF model to add the construction to.
+            lib (ClimateStudioLibraryV2): The library of constructions.
+            construction_name (str): The name of the construction to add.
+        """
+        srf_key = (
+            "FENESTRATIONSURFACE:DETAILED"
+            if self.surface_type == "glazing"
+            else "BUILDINGSURFACE:DETAILED"
+        )
+        if self.boundary_condition is not None and self.surface_type == "glazing":
+            raise ClimateStudioBuilderNotImplementedError(
+                f"{self.surface_type}:BOUNDARY_CONDITON:{self.boundary_condition}"
+            )
+
+        srfs = [
+            srf
+            for srf in idf.idfobjects[srf_key]
+            if self.check_boundary(srf) and self.check_construction_name(srf)
+        ]
+        construction_lib = (
+            lib.OpaqueConstructions
+            if self.surface_type != "glazing"
+            else lib.GlazingConstructions
+        )
+        if construction_name not in construction_lib:
+            raise KeyError(
+                f"MISSING_CONSTRUCTION:{construction_name}:TARGET={self.__repr__()}"
+            )
+        construction = construction_lib[construction_name]
+        idf = (
+            construction.add_to_idf(idf)
+            if isinstance(construction, GlazingConstructionSimple)
+            else construction.add_to_idf(idf, lib.OpaqueMaterials)
+        )
+        for srf in srfs:
+            srf.Construction_Name = construction.Name
+        return idf
+
+    def check_boundary(self, srf):
+        """Check if the surface matches the boundary condition.
+
+        Args:
+            srf: The surface to check.
+
+        Returns:
+            bool: True if the surface matches the boundary condition.
+        """
+        if self.surface_type == "glazing":
+            # Ignore the bc filter check for windows
+            return True
+        if self.boundary_condition is None:
+            # Ignore the bc filter when filter not provided
+            return True
+        # Check the boundary condition
+        return srf.Outside_Boundary_Condition == self.boundary_condition
+
+    def check_construction_name(self, srf):
+        """Check if the surface matches the original construction name.
+
+        Args:
+            srf: The surface to check.
+
+        Returns:
+            bool: True if the surface matches the original construction name.
+        """
+        if self.original_construction_name is None:
+            # Ignore the original construction name check when filter not provided
+            return True
+        # Check the original construction name
+        return srf.Construction_Name == self.original_construction_name
+
+
 if __name__ == "__main__":
+    import asyncio
+    import json
     import tempfile
 
-    from epinterface.data import DefaultDDYPath, DefaultEPWPath
+    from pydantic import AnyUrl
 
-    lib_base_path = Path("D:/climatestudio/Default")
-    lib = ClimateStudioLibrary.Load(lib_base_path)
+    from epinterface.climate_studio.interface import (
+        ClimateStudioLibraryV1,
+        OpaqueConstruction,
+        OpaqueMaterial,
+        extract_sch,
+    )
 
-    # the default library has some errors in its export which
-    # need to be fixed
-    for zone_def in lib.ZoneDefinition.values():
-        zone_def.Infiltration = "Residential"
-        zone_def.Constructions = "UVal_0.4_Light"
+    lib = ClimateStudioLibraryV2(
+        SpaceUses={},
+        Schedules={},
+        Envelopes={},
+        GlazingConstructions={},
+        OpaqueConstructions={},
+        OpaqueMaterials={},
+    )
+    base_path = Path("D:/climatestudio/default")
+    merge_path = Path("C:/users/szvsw/Downloads")
+    opaque_mats = ClimateStudioLibraryV1.LoadObjects(
+        merge_path, OpaqueMaterial, pluralize=True
+    )
+    opaque_mats_2 = ClimateStudioLibraryV1.LoadObjects(
+        base_path, OpaqueMaterial, pluralize=True
+    )
+    opaque_mats.update(opaque_mats_2)
+    lib.OpaqueMaterials = opaque_mats
+    opaque_constructions = ClimateStudioLibraryV1.LoadObjects(
+        base_path, OpaqueConstruction, pluralize=True
+    )
+    opaque_constructions_2 = ClimateStudioLibraryV1.LoadObjects(
+        merge_path,
+        OpaqueConstruction,
+        pluralize=True,
+    )
+    opaque_constructions.update(opaque_constructions_2)
+    lib.OpaqueConstructions = opaque_constructions
+
+    year_schs = pd.read_csv(base_path / "YearSchedules.csv", dtype=str)
+    sch_names = year_schs.columns
+    schedules_list = [extract_sch(year_schs, sch_name) for sch_name in sch_names]
+    schedules = {sch.Name: sch for sch in schedules_list}
+    if len(schedules) != len(schedules_list):
+        raise ValueError("Schedules")
+    lib.Schedules = schedules
+
+    with open("notebooks/data/test_outputs_construction.json") as f:
+        const_data = json.load(f)
+
+    with open("notebooks/data/v1_CS_output_space_use_MA.json") as f:
+        su_data = list(json.load(f).values())
+
+    for val in su_data:
+        zu = ZoneUse(**val)
+        if zu.Name in lib.SpaceUses:
+            raise ValueError(f"DUPLICATE_SPACE_USE_NAME:{zu.Name}")
+        lib.SpaceUses[zu.Name] = zu
+
+    for val in const_data:
+        ze = ZoneEnvelope(**val)
+        if ze.Name in lib.Envelopes:
+            raise ValueError(f"DUPLICATE_ENVELOPE_NAME:{ze.Name}")
+        lib.Envelopes[ze.Name] = ze
 
     model = Model(
+        Weather=AnyUrl(
+            "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
+        ),
+        lib=lib,
+        space_use_name=next(iter(lib.SpaceUses)),
+        envelope_name=next(iter(lib.Envelopes)),
         geometry=ShoeboxGeometry(
             x=0,
             y=0,
             w=10,
             d=10,
-            h=6,
+            h=3,
             num_stories=2,
             basement_depth=None,
-            zoning="core/perim",
+            zoning="by_storey",
             roof_height=None,
         ),
-        zone_name="Residential",
-        library=lib,
     )
+    model.space_use.Conditioning.HeatingSetpoint = 18
+    model.space_use.Conditioning.CoolingSetpoint = 23
+    model.space_use.Loads.LightingPowerDensity = 10
+    model.space_use.Loads.EquipmentPowerDensity = 10
 
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = Path(temp_dir)
-        epw_path = DefaultEPWPath
-        ddy_path = DefaultDDYPath
-        config = SimulationPathConfig(
-            output_dir=output_dir, epw_path=epw_path, ddy_path=ddy_path
-        )
-        idf, sql = model.simulate(config)
+        config = SimulationPathConfig(output_dir=output_dir)
+        idf, sql = asyncio.run(model.simulate(config))
+        idf.saveas("notebooks/test-out.idf")
         results = model.standard_results_postprocess(sql)
         err_files = filter(
             lambda x: x.suffix == ".err",
@@ -384,3 +608,6 @@ if __name__ == "__main__":
         for file in err_files:
             print(file.read_text())
         print(results)
+        print(model.geometry.total_living_area)
+        print(model.space_use.Conditioning.HeatingSetpoint)
+        print(model.space_use.Conditioning.CoolingSetpoint)

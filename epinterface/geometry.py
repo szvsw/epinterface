@@ -1,13 +1,78 @@
 """Geometry utilities for the UBEM construction."""
 
-from typing import Literal
+from typing import Literal, cast
 
 import geopandas as gpd
 import numpy as np
 from archetypal.idfclass import IDF
 from geomeppy.geom.vectors import Vector2D
 from pydantic import BaseModel, Field
+from shapely import Polygon, from_wkt
 from shapely.affinity import translate
+
+
+def match_idf_to_building_and_neighbors(
+    idf: IDF,
+    building: Polygon | str,
+    neighbor_polys: list[Polygon | str | None],
+    neighbor_floors: list[float | int | None],
+    neighbor_f2f_height: float,
+    target_short_length: float,
+    target_long_length: float,
+    rotation_angle: float,
+) -> IDF:
+    """Match an IDF model to a building and neighbors by scaling and rotating the IDF model and adding shading blocks for neighbors.
+
+    Args:
+        idf (IDF): The IDF model to match.
+        building (Polygon | str): The building to match.
+        neighbor_polys (list[Polygon | str | None]): The neighbors to inject as shading.
+        neighbor_floors (list[float | int | None]): The counts of the neighbors.
+        neighbor_f2f_height (float | None): The height of the building to match
+        target_short_length (float): The target short length of the building.
+        target_long_length (float): The target long length of the building.
+        rotation_angle (float): The rotation angle of the building (radians).
+
+    Returns:
+        idf (IDF): The matched IDF model.
+    """
+    building_geo = (
+        cast(Polygon, from_wkt(building)) if isinstance(building, str) else building
+    )
+    neighbor_geos = [
+        (cast(Polygon, from_wkt(n)), h * neighbor_f2f_height)
+        if isinstance(n, str)
+        else (n, h * neighbor_f2f_height)
+        for n, h in zip(neighbor_polys, neighbor_floors, strict=True)
+        if n is not None and h is not None
+    ]
+    centroid = building_geo.centroid
+    translated_neighbors = [
+        (translate(n, xoff=-centroid.x, yoff=-centroid.y), h) for n, h in neighbor_geos
+    ]
+    idf_lengths = {(e.p1 - e.p2).length for e in idf.bounding_box().edges}
+    if len(idf_lengths) > 2:
+        raise NotImplementedError(
+            "The IDF model is not a rectangle, which is not yet supported."
+        )
+
+    long_length = max(idf_lengths)
+    short_length = min(idf_lengths)
+    idf.scale(target_long_length / long_length, anchor=Vector2D(0, 0), axes="x")
+    idf.scale(target_short_length / short_length, anchor=Vector2D(0, 0), axes="y")
+    idf.translate((-target_long_length / 2, -target_short_length / 2, 0))
+    idf.rotate(rotation_angle * 180 / np.pi)
+    for i, (geom, height) in enumerate(translated_neighbors):
+        if not height:
+            height = 3.5 * 2
+        if np.isnan(height):
+            height = 3.5 * 2
+        idf.add_shading_block(
+            name=f"shading_{i}",
+            coordinates=[Vector2D(*coord) for coord in geom.exterior.coords[:-1]],
+            height=height,
+        )
+    return idf
 
 
 def match_idf_to_scene(
