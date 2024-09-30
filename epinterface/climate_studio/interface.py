@@ -190,7 +190,11 @@ class EmbodiedCarbonData(BaseModel):
         ...,
         title="Embodied energy [MJ/unit]",
         validation_alias=AliasChoices(
-            "EmbodiedEnergy [MJ/Kg]", "EmbodiedEnergy", "EmbodiedEnergy [MJ/m²]"
+            "EmbodiedEnergy [MJ/Kg]",
+            "EmbodiedEnergy",
+            "EmbodiedEnergy [MJ/m²]",
+            "EmbodiedEnergy [MJ/mÂ²]",
+            "EmbodiedEnergy [MJ/mÃ‚Â²]",  # noqa: RUF001
         ),
     )
     EmbodiedEnergyStdDev: float = Field(
@@ -206,6 +210,8 @@ class EmbodiedCarbonData(BaseModel):
             "EmbodiedCarbon [kgCO2eq/Kg]",
             "EmbodiedCarbon",
             "EmbodiedCarbon [kgCO2eq/m²]",
+            "EmbodiedCarbon [kgCO2eq/mÂ²]",
+            "EmbodiedCarbon [kgCO2eq/mÃ‚Â²]",  # noqa: RUF001
         ),
     )
     EmbodiedCarbonStdDev: float = Field(
@@ -230,6 +236,8 @@ class LifecycleData(BaseModel):
             "Cost [$/m2]",
             "Cost [$/m]",
             "Cost [$/kg]",
+            "Cost [$/mÂ²]",
+            "Cost [$/mÃ‚Â²]",  # noqa: RUF001
         ),
         ge=0,
     )
@@ -653,8 +661,10 @@ OpaqueConstructionType = Literal[
     "Slab",
     "Partition",
     "ExternalFloor",
+    "ExteriorFloor",
     "GroundSlab",
     "GroundWall",
+    "GroundFloor",
     "InternalMass",
     "InteriorFloor",
 ]

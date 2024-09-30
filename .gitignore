@@ -168,3 +168,5 @@ cython_debug/
 
 notebooks/cache/
 epinterface/data/cache/
+epinterface/data/Everett_templates_CS_export/
+epinterface/data/Everett_templates_CS_export.zip
