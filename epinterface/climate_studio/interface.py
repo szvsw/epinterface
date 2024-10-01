@@ -997,8 +997,10 @@ class ZoneConditioning(
             Cooling_Limit=self.CoolingLimitType,
             Humidification_Control_Type="None",
             Outdoor_Air_Method="Sum" if self.MechVentIsOn else "None",
-            Outdoor_Air_Flow_Rate_per_Person=self.MinFreshAirPerson,
-            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.MinFreshAirArea,
+            Outdoor_Air_Flow_Rate_per_Person=self.MinFreshAirPerson
+            / 1000,  # convert to m3
+            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.MinFreshAirArea
+            / 1000,  # convert to m3
             Outdoor_Air_Flow_Rate_per_Zone=0,
             Demand_Controlled_Ventilation_Type="None",
             Outdoor_Air_Economizer_Type=self.EconomizerType,

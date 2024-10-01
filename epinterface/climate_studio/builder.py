@@ -667,21 +667,18 @@ if __name__ == "__main__":
             roof_height=None,
         ),
     )
-    model.space_use.Conditioning.HeatingSetpoint = 18
-    model.space_use.Conditioning.CoolingSetpoint = 23
-    model.space_use.Loads.LightingPowerDensity = 10
-    model.space_use.Loads.EquipmentPowerDensity = 10
-    model.envelope.Infiltration.InfiltrationAch = 0.4
+
     idf, results, err_text = asyncio.run(model.run(move_energy=False))
-    import json
-
-    with open("notebooks/lib_demo.json", "w") as f:
-        json.dump(lib.model_dump(mode="json"), f, indent=2)
-    with open("notebooks/lib_demo.json") as f:
-        lib = ClimateStudioLibraryV2.model_validate(json.load(f))
-
-    model.lib = lib
-    idf, results_2, err_text = asyncio.run(model.run(move_energy=False))
-
     print(results)
-    print(results_2)
+    # import json
+
+    # with open("notebooks/lib_demo.json", "w") as f:
+    #     json.dump(lib.model_dump(mode="json"), f, indent=2)
+    # with open("notebooks/lib_demo.json") as f:
+    #     lib = ClimateStudioLibraryV2.model_validate(json.load(f))
+
+    # model.lib = lib
+    # idf, results_2, err_text = asyncio.run(model.run(move_energy=False))
+
+    # print(results)
+    # print(results_2)
