@@ -520,6 +520,7 @@ OpaqueMaterialType = Literal[
     "Plaster",
     "Finishes",
     "Siding",
+    "Sealing",
 ]
 
 
