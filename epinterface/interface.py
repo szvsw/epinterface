@@ -777,18 +777,22 @@ def add_default_sim_controls(idf: IDF) -> IDF:
     return idf
 
 
-def add_default_schedules(idf: IDF) -> IDF:
+def add_default_schedules(idf: IDF) -> tuple[IDF, dict[str, Schedule]]:
     """Helper to add default schedules to the IDF model.
 
     Args:
         idf (IDF): The IDF model to add the schedules to.
 
     Returns:
-        IDF: The IDF model with the added schedules.
+        idf (IDF): The IDF model with the added schedules.
+        scheds (dict[str, Schedule]): A dictionary of the added schedules.
     """
     # create constant scheds
+    all_scheds: dict[str, Schedule] = {}
     always_on_schedule = Schedule.constant_schedule(Name="Always_On", value=1)
     always_off_schedule = Schedule.constant_schedule(Name="Always_Off", value=0)
+    all_scheds["Always_On"] = always_on_schedule
+    all_scheds["Always_Off"] = always_off_schedule
     year, *_ = always_on_schedule.to_year_week_day()
     year.to_epbunch(idf)
     year, *_ = always_off_schedule.to_year_week_day()
@@ -796,6 +800,8 @@ def add_default_schedules(idf: IDF) -> IDF:
 
     always_on_schedule = Schedule.constant_schedule(Name="Always On", value=1)
     always_off_schedule = Schedule.constant_schedule(Name="Always Off", value=0)
+    all_scheds["Always On"] = always_on_schedule
+    all_scheds["Always Off"] = always_off_schedule
     year, *_ = always_on_schedule.to_year_week_day()
     year.to_epbunch(idf)
     year, *_ = always_off_schedule.to_year_week_day()
@@ -803,6 +809,17 @@ def add_default_schedules(idf: IDF) -> IDF:
 
     always_on_schedule = Schedule.constant_schedule(Name="On", value=1)
     always_off_schedule = Schedule.constant_schedule(Name="Off", value=0)
+    all_scheds["On"] = always_on_schedule
+    all_scheds["Off"] = always_off_schedule
+    year, *_ = always_on_schedule.to_year_week_day()
+    year.to_epbunch(idf)
+    year, *_ = always_off_schedule.to_year_week_day()
+    year.to_epbunch(idf)
+
+    always_on_schedule = Schedule.constant_schedule(Name="AllOn", value=1)
+    always_off_schedule = Schedule.constant_schedule(Name="AllOff", value=0)
+    all_scheds["AllOn"] = always_on_schedule
+    all_scheds["AllOff"] = always_off_schedule
     year, *_ = always_on_schedule.to_year_week_day()
     year.to_epbunch(idf)
     year, *_ = always_off_schedule.to_year_week_day()
@@ -810,9 +827,11 @@ def add_default_schedules(idf: IDF) -> IDF:
 
     always_on_schedule = Schedule.constant_schedule(Name="AlwaysOn", value=1)
     always_off_schedule = Schedule.constant_schedule(Name="AlwaysOff", value=0)
+    all_scheds["AlwaysOn"] = always_on_schedule
+    all_scheds["AlwaysOff"] = always_off_schedule
     year, *_ = always_on_schedule.to_year_week_day()
     year.to_epbunch(idf)
     year, *_ = always_off_schedule.to_year_week_day()
     year.to_epbunch(idf)
 
-    return idf
+    return idf, all_scheds

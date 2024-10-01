@@ -128,7 +128,8 @@ class Model(BaseWeather, validate_assignment=True):
         ddy_spec.inject_ddy(idf, ddy)
 
         idf = add_default_sim_controls(idf)
-        idf = add_default_schedules(idf)
+        idf, scheds = add_default_schedules(idf)
+        self.lib.Schedules.update(scheds)
 
         idf = SiteGroundTemperature.FromValues([
             18.3,
@@ -300,7 +301,7 @@ class Model(BaseWeather, validate_assignment=True):
             ))
 
         for const_name, action in actions:
-            idf = action.asssign_srfs(idf, self.lib, const_name)
+            idf = action.assign_srfs(idf, self.lib, const_name)
 
         return idf
 
@@ -517,7 +518,7 @@ class SurfaceHandler(BaseModel):
     original_construction_name: str | None
     surface_type: Literal["glazing", "opaque"]
 
-    def asssign_srfs(
+    def assign_srfs(
         self, idf: IDF, lib: ClimateStudioLibraryV2, construction_name: str
     ) -> IDF:
         """Adds a construction (and its materials) to an IDF and assigns it to matching surfaces.
@@ -687,15 +688,3 @@ if __name__ == "__main__":
 
     idf, results, err_text = model.run(move_energy=False)
     print(results)
-    # import json
-
-    # with open("notebooks/lib_demo.json", "w") as f:
-    #     json.dump(lib.model_dump(mode="json"), f, indent=2)
-    # with open("notebooks/lib_demo.json") as f:
-    #     lib = ClimateStudioLibraryV2.model_validate(json.load(f))
-
-    # model.lib = lib
-    # idf, results_2, err_text = asyncio.run(model.run(move_energy=False))
-
-    # print(results)
-    # print(results_2)

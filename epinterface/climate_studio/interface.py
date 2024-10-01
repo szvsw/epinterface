@@ -916,13 +916,23 @@ class ZoneConditioning(
         Returns:
             set[str]: The schedule names.
         """
-        return {
-            self.HeatingSchedule,
-            self.CoolingSchedule,
-            self.MechVentSchedule,
-            self.HeatingSetpointSchedule,
-            self.CoolingSetpointSchedule,
-        }
+        cond_scheds = set()
+
+        if self.HeatIsOn:
+            cond_scheds.add(self.HeatingSchedule)
+
+        if self.CoolIsOn:
+            cond_scheds.add(self.CoolingSchedule)
+        if not self.HeatingSetpointConstant and self.HeatIsOn:
+            cond_scheds.add(self.HeatingSetpointSchedule)
+
+        if not self.CoolingSetpointConstant and self.CoolIsOn:
+            cond_scheds.add(self.CoolingSetpointSchedule)
+
+        if self.MechVentIsOn:
+            cond_scheds.add(self.MechVentSchedule)
+
+        return cond_scheds
 
     def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add conditioning to an IDF zone.
