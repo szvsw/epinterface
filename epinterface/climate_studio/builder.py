@@ -1,5 +1,6 @@
 """A module for building the energy model using the Climate Studio API."""
 
+import asyncio
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -88,7 +89,7 @@ class Model(BaseWeather, validate_assignment=True):
 
         return self.lib.Envelopes[self.envelope_name]
 
-    async def build(self, config: SimulationPathConfig) -> IDF:
+    def build(self, config: SimulationPathConfig) -> IDF:
         """Build the energy model using the Climate Studio API.
 
         Args:
@@ -107,7 +108,7 @@ class Model(BaseWeather, validate_assignment=True):
         base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
         target_base_filepath = config.output_dir / "Minimal.idf"
         shutil.copy(base_filepath, target_base_filepath)
-        epw_path, ddy_path = await self.fetch_weather(config.weather_dir)
+        epw_path, ddy_path = asyncio.run(self.fetch_weather(config.weather_dir))
         idf = IDF(
             target_base_filepath.as_posix(),
             as_version=None,  # pyright: ignore [reportArgumentType]
@@ -389,7 +390,7 @@ class Model(BaseWeather, validate_assignment=True):
             yr_sch.to_epbunch(idf)
         return idf
 
-    async def simulate(
+    def simulate(
         self,
         config: SimulationPathConfig,
         post_build_callback: Callable[[IDF], IDF] | None = None,
@@ -403,7 +404,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             tuple[IDF, Sql]: The built energy model and the sql file.
         """
-        idf = await self.build(config)
+        idf = self.build(config)
         if post_build_callback is not None:
             idf = post_build_callback(idf)
         idf.simulate()
@@ -470,7 +471,7 @@ class Model(BaseWeather, validate_assignment=True):
 
         return cast(pd.Series, res_series)
 
-    async def run(
+    def run(
         self,
         weather_dir: Path | None = None,
         post_build_callback: Callable[[IDF], IDF] | None = None,
@@ -499,7 +500,7 @@ class Model(BaseWeather, validate_assignment=True):
                 else SimulationPathConfig(output_dir=output_dir)
             )
 
-            idf, sql = await self.simulate(
+            idf, sql = self.simulate(
                 config,
                 post_build_callback=post_build_callback,
             )
@@ -684,7 +685,7 @@ if __name__ == "__main__":
         ),
     )
 
-    idf, results, err_text = asyncio.run(model.run(move_energy=False))
+    idf, results, err_text = model.run(move_energy=False)
     print(results)
     # import json
 
