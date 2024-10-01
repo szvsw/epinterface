@@ -95,7 +95,7 @@ def match_idf_to_scene(
 
 
     Returns:
-        IDF: The matched IDF model.
+        idf (IDF): The matched IDF model.
     """
     # TODO: add PANDERA schema validation
     center = gdf_buildings.iloc[building_ix].rotated_rectangle
@@ -190,7 +190,7 @@ class ZoneDimensions(BaseModel):
             idf (IDF): The IDF object to add the zone to.
 
         Returns:
-            IDF: The updated IDF object.
+            idf (IDF): The updated IDF object.
         """
         lower_left_corner = (self.x, self.y)
         lower_right_corner = (self.x + self.w, self.y)

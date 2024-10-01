@@ -336,7 +336,7 @@ class Model(BaseWeather, validate_assignment=True):
             zone_list (ZoneList): The list of zones to add the infiltration to.
 
         Returns:
-            IDF: The IDF model with the added infiltration.
+            idf (IDF): The IDF model with the added infiltration.
         """
         idf = infiltration.add_infiltration_to_idf_zone(idf, zone_list.Name)
         # idf = self.add_schedules_by_name(idf, infiltration.schedule_names)
@@ -548,10 +548,10 @@ class SurfaceHandler(BaseModel):
         """Check if the surface matches the boundary condition.
 
         Args:
-            srf: The surface to check.
+            srf (eppy.IDF.BLOCK): The surface to check.
 
         Returns:
-            bool: True if the surface matches the boundary condition.
+            match (bool): True if the surface matches the boundary condition.
         """
         if self.surface_type == "glazing":
             # Ignore the bc filter check for windows
@@ -566,10 +566,10 @@ class SurfaceHandler(BaseModel):
         """Check if the surface matches the original construction name.
 
         Args:
-            srf: The surface to check.
+            srf (eppy.IDF.BLOCK): The surface to check.
 
         Returns:
-            bool: True if the surface matches the original construction name.
+            match (bool): True if the surface matches the original construction name.
         """
         if self.original_construction_name is None:
             # Ignore the original construction name check when filter not provided

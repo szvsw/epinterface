@@ -153,7 +153,7 @@ def str_to_float_list(v: str | list):
         v (str): String to convert
 
     Returns:
-        list[float]: List of floats
+        vals (list[float]): List of floats
     """
     if v == "[]":
         return []
@@ -1117,7 +1117,7 @@ class ZoneInfiltration(
             target_zone_or_zone_list_name (str): The name of the zone or zone list to add the infiltration to.
 
         Returns:
-            IDF: The updated IDF object.
+            idf (IDF): The updated IDF object.
         """
         if not self.InfiltrationIsOn:
             return idf
@@ -1631,7 +1631,7 @@ class ClimateStudioLibraryV1(BaseModel, arbitrary_types_allowed=True):
             base_path (Path): The base path to the library directory.
 
         Returns:
-            ClimateStudioLibrary: The Climate Studio library object.
+            lib (ClimateStudioLibrary): The Climate Studio library object.
         """
         if isinstance(base_path, str):
             base_path = Path(base_path)

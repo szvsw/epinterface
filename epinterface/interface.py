@@ -28,7 +28,7 @@ class BaseObj(BaseModel):
             idf (IDF): The IDF object to add the object to.
 
         Returns:
-            IDF: The updated IDF object.
+            idf (IDF): The updated IDF object.
         """
         idf.newidfobject(self.key, **self.model_dump())
         return idf
@@ -41,7 +41,7 @@ class BaseObj(BaseModel):
             idf (IDF): The IDF object to extract objects from.
 
         Returns:
-            list[BaseObj]: A list of objects extracted from the IDF object.
+            objs (list[BaseObj]): A list of objects extracted from the IDF object.
         """
         objs = idf.idfobjects[cls.key]
         try:
@@ -158,7 +158,7 @@ class BaseMaterial(BaseModel, extra="ignore", populate_by_name=True):
             thickness (float): The thickness of the material.
 
         Returns:
-            Material: The new material object with the given thickness.
+            mat (Material): The new material object with the given thickness.
         """
         name = f"{self.Name}_{thickness}m"
         return Material(
@@ -257,7 +257,7 @@ class Material(BaseObj, BaseMaterial, extra="ignore"):
             v (Any): The value to cast.
 
         Returns:
-            float: The casted value.
+            v (float): The casted value.
         """
         if v == "" or v is None:
             return None
@@ -339,7 +339,7 @@ class Construction(BaseObj, extra="ignore"):
             idf (IDF): The IDF object to extract objects from.
 
         Returns:
-            list[Construction]: A list of objects extracted from the IDF object.
+            constructions (list[Construction]): A list of objects extracted from the IDF object.
         """
         constructions = idf.idfobjects["CONSTRUCTION"]
         res: list[Construction] = []
@@ -420,7 +420,7 @@ class Construction(BaseObj, extra="ignore"):
             idf (IDF): The IDF object to add the object to.
 
         Returns:
-            IDF: The updated IDF object.
+            idf (IDF): The updated IDF object.
         """
         for layer in self.layers:
             idf = layer.add(idf)
@@ -500,7 +500,7 @@ class HVACTemplateThermostat(BaseModel):
             idf (IDF): The IDF object to add the object to.
 
         Returns:
-            IDF: The updated IDF object
+            idf (IDF): The updated IDF object
         """
         idf.newidfobject("HVACTEMPLATE:THERMOSTAT", **self.model_dump())
         return idf
@@ -547,7 +547,7 @@ class HVACTemplateZoneIdealLoadsAirSystem(BaseModel):
             idf (IDF): The IDF object to add the object to.
 
         Returns:
-            IDF: The updated IDF object
+            idf (IDF): The updated IDF object
         """
         idf.newidfobject("HVACTEMPLATE:ZONE:IDEALLOADSAIRSYSTEM", **self.model_dump())
         return idf
@@ -679,7 +679,7 @@ class ZoneList(BaseModel, extra="ignore"):
             idf (IDF): The IDF object to add the object to.
 
         Returns:
-            IDF: The updated IDF object.
+            idf (IDF): The updated IDF object.
         """
         names = {
             f"Zone_{i + 1}_Name": zone for i, zone in enumerate(self.Names) if zone
