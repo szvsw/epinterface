@@ -26,6 +26,7 @@ from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
 from epinterface.geometry import ShoeboxGeometry
 from epinterface.interface import (
+    SiteGroundTemperature,
     ZoneList,
     add_default_schedules,
     add_default_sim_controls,
@@ -127,6 +128,21 @@ class Model(BaseWeather, validate_assignment=True):
 
         idf = add_default_sim_controls(idf)
         idf = add_default_schedules(idf)
+
+        idf = SiteGroundTemperature.FromValues([
+            18.3,
+            18.2,
+            18.3,
+            18.4,
+            20.1,
+            22.0,
+            22.3,
+            22.5,
+            22.5,
+            20.7,
+            18.9,
+            18.5,
+        ]).add(idf)
 
         idf = self.geometry.add(idf)
 

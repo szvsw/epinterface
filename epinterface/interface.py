@@ -126,6 +126,51 @@ class Timestep(BaseObj, extra="ignore"):
     Number_of_Timesteps_per_Hour: int = 6
 
 
+class SiteGroundTemperature(BaseObj, extra="ignore"):
+    """GroundTemperature object."""
+
+    key: ClassVar[str] = "SITE:GROUNDTEMPERATURE:BUILDINGSURFACE"
+    January_Ground_Temperature: float
+    February_Ground_Temperature: float
+    March_Ground_Temperature: float
+    April_Ground_Temperature: float
+    May_Ground_Temperature: float
+    June_Ground_Temperature: float
+    July_Ground_Temperature: float
+    August_Ground_Temperature: float
+    September_Ground_Temperature: float
+    October_Ground_Temperature: float
+    November_Ground_Temperature: float
+    December_Ground_Temperature: float
+
+    @classmethod
+    def FromValues(cls, values: list[float]):
+        """Create a new SiteGroundTemperature object from a list of 12 monthly values.
+
+        Args:
+            values (list[float]): A list of 12 monthly values.
+
+        Returns:
+            ground_temp (SiteGroundTemperature): The new SiteGroundTemperature object.
+        """
+        if len(values) != 12:
+            raise ValueError(f"GROUNDTEMP:EXPECTED_12:RECEIVED_{len(values)}")
+        return cls(
+            January_Ground_Temperature=values[0],
+            February_Ground_Temperature=values[1],
+            March_Ground_Temperature=values[2],
+            April_Ground_Temperature=values[3],
+            May_Ground_Temperature=values[4],
+            June_Ground_Temperature=values[5],
+            July_Ground_Temperature=values[6],
+            August_Ground_Temperature=values[7],
+            September_Ground_Temperature=values[8],
+            October_Ground_Temperature=values[9],
+            November_Ground_Temperature=values[10],
+            December_Ground_Temperature=values[11],
+        )
+
+
 # TODO: InternalMass, Building
 
 
