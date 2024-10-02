@@ -32,6 +32,7 @@ from epinterface.interface import (
     OutdoorAirEconomizerTypeType,
     People,
     SimpleGlazingMaterial,
+    SizingParameters,
     ZoneInfiltrationDesignFlowRate,
     ZoneList,
 )
@@ -999,11 +1000,19 @@ class ZoneConditioning(
                 self.CoolingSchedule if self.CoolIsOn else None
             ),
             Maximum_Heating_Supply_Air_Temperature=self.MaxHeatSupplyAirTemp,
-            Maximum_Heating_Air_Flow_Rate=self.MaxHeatFlow,
-            Maximum_Sensible_Heating_Capacity=self.MaxHeatingCapacity,
+            Maximum_Heating_Air_Flow_Rate=self.MaxHeatFlow
+            if not self.Autosize
+            else "autosize",
+            Maximum_Sensible_Heating_Capacity=self.MaxHeatingCapacity
+            if not self.Autosize
+            else "autosize",
             Minimum_Cooling_Supply_Air_Temperature=self.MinCoolSupplyAirTemp,
-            Maximum_Cooling_Air_Flow_Rate=self.MaxCoolFlow,
-            Maximum_Total_Cooling_Capacity=self.MaxCoolingCapacity,
+            Maximum_Cooling_Air_Flow_Rate=self.MaxCoolFlow
+            if not self.Autosize
+            else "autosize",
+            Maximum_Total_Cooling_Capacity=self.MaxCoolingCapacity
+            if not self.Autosize
+            else "autosize",
             Heating_Limit=self.HeatingLimitType,
             Cooling_Limit=self.CoolingLimitType,
             Humidification_Control_Type="None",
@@ -1022,6 +1031,12 @@ class ZoneConditioning(
 
         idf = thermostat.add(idf)
         idf = hvac_template.add(idf)
+        if self.Autosize:
+            sizing = SizingParameters(
+                Heating_Sizing_Factor=self.HeatingSizingFactor,
+                Cooling_Sizing_Factor=self.CoolingSizingFactor,
+            )
+            idf = sizing.add(idf)
         return idf
 
 

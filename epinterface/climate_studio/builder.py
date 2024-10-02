@@ -103,7 +103,6 @@ class Model(BaseWeather, validate_assignment=True):
 
         if self.geometry.roof_height:
             raise ClimateStudioBuilderNotImplementedError("roof_height")
-
         config.output_dir.mkdir(parents=True, exist_ok=True)
         base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
         target_base_filepath = config.output_dir / "Minimal.idf"
@@ -132,18 +131,30 @@ class Model(BaseWeather, validate_assignment=True):
         self.lib.Schedules.update(scheds)
 
         idf = SiteGroundTemperature.FromValues([
-            18.3,
-            18.2,
-            18.3,
-            18.4,
-            20.1,
-            22.0,
-            22.3,
-            22.5,
-            22.5,
-            20.7,
-            18.9,
-            18.5,
+            # 18.3,
+            # 18.2,
+            # 18.3,
+            # 18.4,
+            # 20.1,
+            # 22.0,
+            # 22.3,
+            # 22.5,
+            # 22.5,
+            # 20.7,
+            # 18.9,
+            # 18.5,
+            18,
+            18,
+            18,
+            18,
+            18,
+            18,
+            18,
+            18,
+            18,
+            18,
+            18,
+            18,
         ]).add(idf)
 
         idf = self.geometry.add(idf)

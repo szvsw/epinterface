@@ -126,6 +126,14 @@ class Timestep(BaseObj, extra="ignore"):
     Number_of_Timesteps_per_Hour: int = 6
 
 
+class SizingParameters(BaseObj, extra="ignore"):
+    """SizingParameters object."""
+
+    key: ClassVar[str] = "SIZING:PARAMETERS"
+    Heating_Sizing_Factor: float
+    Cooling_Sizing_Factor: float
+
+
 class SiteGroundTemperature(BaseObj, extra="ignore"):
     """GroundTemperature object."""
 
@@ -564,11 +572,11 @@ class HVACTemplateZoneIdealLoadsAirSystem(BaseModel):
     Maximum_Heating_Supply_Air_Humidity_Ratio: float = 0.0156
     Minimum_Cooling_Supply_Air_Humidity_Ratio: float = 0.0077
     Heating_Limit: IdealLoadsLimitType = "NoLimit"
-    Maximum_Heating_Air_Flow_Rate: float | None = None
-    Maximum_Sensible_Heating_Capacity: float | None = None
+    Maximum_Heating_Air_Flow_Rate: float | None | Literal["autosize"] = None
+    Maximum_Sensible_Heating_Capacity: float | None | Literal["autosize"] = None
     Cooling_Limit: IdealLoadsLimitType = "NoLimit"
-    Maximum_Cooling_Air_Flow_Rate: float | None = None
-    Maximum_Total_Cooling_Capacity: float | None = None
+    Maximum_Cooling_Air_Flow_Rate: float | None | Literal["autosize"] = None
+    Maximum_Total_Cooling_Capacity: float | None | Literal["autosize"] = None
     Dehumidification_Control_Type: DehumidificationControlTypeType = "None"
     Cooling_Sensible_Heat_Ratio: float = 0.7
     Dehumidification_Setpoint: float = 60
@@ -750,6 +758,7 @@ def add_default_sim_controls(idf: IDF) -> IDF:
         Run_Simulation_for_Sizing_Periods="Yes",
         Run_Simulation_for_Weather_File_Run_Periods="Yes",
         Do_HVAC_Sizing_Simulation_for_Sizing_Periods="Yes",
+        Maximum_Number_of_HVAC_Sizing_Simulation_Passes=2,
     )
     sim_control.add(idf)
 
@@ -773,6 +782,12 @@ def add_default_sim_controls(idf: IDF) -> IDF:
         Number_of_Timesteps_per_Hour=6,
     )
     timestep.add(idf)
+
+    sizing = SizingParameters(
+        Heating_Sizing_Factor=1.15,
+        Cooling_Sizing_Factor=1.15,
+    )
+    sizing.add(idf)
 
     return idf
 
