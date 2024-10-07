@@ -48,7 +48,7 @@ docs: ## Build and serve the documentation
 	@poetry run mkdocs serve
 
 .PHONY: docs-deploy
-docs: ## Build and serve the documentation
+docs-deploy: ## Build and serve the documentation
 	@poetry run mkdocs gh-deploy
 
 

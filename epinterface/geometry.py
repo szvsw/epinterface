@@ -291,6 +291,9 @@ class ShoeboxGeometry(BaseModel):
             idf.translate((0, 0, -self.h))
 
         if self.roof_height:
+            for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
+                if srf.Surface_Type.lower() == "roof":
+                    srf.Surface_Type = "ceiling"
             idf.newidfobject("ZONE", Name="Attic")
             roof_centerline = self.x + self.w / 2
             vert_0 = (self.x, self.y + self.d, self.zones_height)
@@ -406,6 +409,7 @@ class ShoeboxGeometry(BaseModel):
             )
 
         idf.intersect_match()
+
         idf.set_default_constructions()
 
         # Handle Windows
@@ -414,7 +418,11 @@ class ShoeboxGeometry(BaseModel):
             for w in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
             if w.Outside_Boundary_Condition.lower() == "outdoors"
             and "attic" not in w.Zone_Name.lower()
-            and not w.Zone_Name.lower().endswith(self.basement_suffix.lower())
+            and (
+                not w.Zone_Name.lower().endswith(self.basement_suffix.lower())
+                if self.basement
+                else True
+            )
             and w.Surface_Type.lower() == "wall"
         ]
         idf.set_wwr(
