@@ -30,6 +30,14 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
+        energyplus-version: [22.2.0] # later, add 9.4.0
+        include:
+          - runs-on: ubuntu-latest
+            compiler: gcc
+          - energyplus-version: 22.2.0
+            energyplus-sha: c249759bad
+            energyplus-install: 22-2-0
+            energyplus-tag: v22.2.0
       fail-fast: false
     defaults:
       run:
@@ -43,11 +51,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run tests
-        run: poetry run pytest tests --cov --cov-config=pyproject.toml --cov-report=xml
-
       - name: Check typing
         run: poetry run pyright
+
+      - name: Install EnergyPlus
+        uses: Elementa-Engineering/install-energyplus@v1
+        with:
+          energyplus-version: ${{ matrix.energyplus-version }}
+          energyplus-sha: ${{ matrix.energyplus-sha }}
+          energyplus-install: ${{ matrix.energyplus-install }}
+
+      - name: Run tests
+        run: poetry run pytest tests --cov --cov-config=pyproject.toml --cov-report=xml
 
       - name: Upload coverage reports to Codecov with GitHub Action on Python 3.11
         uses: codecov/codecov-action@v4
