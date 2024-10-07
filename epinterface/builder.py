@@ -10,7 +10,7 @@ from archetypal.schedule import Schedule
 from archetypal.schedule import ScheduleTypeLimits as AScheduleTypeLimits
 
 from epinterface.ddy_injector_bayes import DDYSizingSpec
-from epinterface.geometry import ZoneDimensions
+from epinterface.geometry import ShoeboxGeometry
 from epinterface.interface import (
     Construction,
     DefaultMaterialLibrary,
@@ -142,33 +142,20 @@ class SimpleResidentialModel(BaseWeather, extra="allow"):
         year.to_epbunch(idf)
 
         # Handle Geometry
-        zone_dims = ZoneDimensions(
+        zone_dims = ShoeboxGeometry(
             x=0,
             y=0,
             w=10,
             d=10,
             h=3,
             num_stories=3,
-            roof_height=2.5,  # zoning='core/perim'
+            roof_height=2.5,
+            basement_depth=None,
+            wwr=0.15,
+            zoning="by_storey",
         )
         idf = zone_dims.add(idf)
-        idf.set_default_constructions()
-        idf.intersect_match()
 
-        # Handle Windows
-        window_walls = [
-            w
-            for w in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
-            if w.Outside_Boundary_Condition.lower() == "outdoors"
-            and "attic" not in w.Zone_Name.lower()
-            and w.Surface_Type.lower() == "wall"
-        ]
-        idf.set_wwr(
-            wwr=self.WWR,
-            construction="Project External Window",
-            force=True,
-            surfaces=window_walls,
-        )
         window_construction = Construction(
             name="Project External Window",
             layers=[
