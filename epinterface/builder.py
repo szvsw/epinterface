@@ -150,7 +150,7 @@ class SimpleResidentialModel(BaseWeather, extra="allow"):
             h=3,
             num_stories=3,
             roof_height=2.5,
-            basement_depth=None,
+            basement=False,
             wwr=0.15,
             zoning="by_storey",
         )

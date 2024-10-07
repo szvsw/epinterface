@@ -72,6 +72,7 @@ class Model(BaseWeather, validate_assignment=True):
     geometry: ShoeboxGeometry
     space_use_name: str
     envelope_name: str
+    conditioned_basement: bool = False
     lib: ClimateStudioLibraryV2
 
     @property
@@ -98,8 +99,8 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The built energy model.
         """
-        if self.geometry.basement_depth:
-            raise ClimateStudioBuilderNotImplementedError("basement_depth")
+        if (not self.geometry.basement) and self.conditioned_basement:
+            raise ValueError("CONDITIONEDBASEMENT:TRUE:BASEMENT:FALSE")
 
         if self.geometry.roof_height:
             raise ClimateStudioBuilderNotImplementedError("roof_height")
@@ -131,30 +132,30 @@ class Model(BaseWeather, validate_assignment=True):
         self.lib.Schedules.update(scheds)
 
         idf = SiteGroundTemperature.FromValues([
-            # 18.3,
-            # 18.2,
-            # 18.3,
-            # 18.4,
-            # 20.1,
-            # 22.0,
-            # 22.3,
-            # 22.5,
-            # 22.5,
-            # 20.7,
-            # 18.9,
-            # 18.5,
-            18,
-            18,
-            18,
-            18,
-            18,
-            18,
-            18,
-            18,
-            18,
-            18,
-            18,
-            18,
+            18.3,
+            18.2,
+            18.3,
+            18.4,
+            20.1,
+            22.0,
+            22.3,
+            22.5,
+            22.5,
+            20.7,
+            18.9,
+            18.5,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
+            # 18,
         ]).add(idf)
 
         idf = self.geometry.add(idf)
@@ -215,9 +216,6 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The IDF model with the selected surfaces.
         """
-        if self.geometry.basement_depth:
-            raise ClimateStudioBuilderNotImplementedError("basement_depth")
-
         if self.geometry.roof_height:
             raise ClimateStudioBuilderNotImplementedError("roof_height")
 
@@ -298,6 +296,15 @@ class Model(BaseWeather, validate_assignment=True):
                 ),
             ),
         ]
+        if self.geometry.basement:
+            actions.append((
+                constructions.GroundWallConstruction,
+                SurfaceHandler(
+                    boundary_condition="ground",
+                    original_construction_name="Project Wall",
+                    surface_type="opaque",
+                ),
+            ))
 
         # TODO: External floors, basements, etc
 
@@ -336,20 +343,29 @@ class Model(BaseWeather, validate_assignment=True):
         """
         all_zone_names = [zone.Name for zone in idf.idfobjects["ZONE"]]
         all_zones_list = ZoneList(Name="All_Zones", Names=all_zone_names)
-        zone_names = [
+        conditioned_zone_names = [
             zone.Name
             for zone in idf.idfobjects["ZONE"]
-            if "attic" not in zone.Name.lower() and not zone.Name.endswith("-1")
+            if "attic" not in zone.Name.lower()
+            and (
+                not zone.Name.lower().endswith(self.geometry.basement_suffix.lower())
+                if not self.conditioned_basement
+                else True
+            )
         ]
 
-        expected_zone_count = self.geometry.num_stories * (
-            1 if self.geometry.zoning == "by_storey" else 5
+        conditioned_storey_count = self.geometry.num_stories + (
+            1 if self.conditioned_basement else 0
         )
-        if len(zone_names) != expected_zone_count:
-            msg = f"Expected {expected_zone_count} zones, but found {len(zone_names)}."
+        zones_per_storey = 1 if self.geometry.zoning == "by_storey" else 5
+        expected_zone_count = conditioned_storey_count * zones_per_storey
+        if len(conditioned_zone_names) != expected_zone_count:
+            msg = f"Expected {expected_zone_count} zones, but found {len(conditioned_zone_names)}."
             raise ValueError(msg)
 
-        conditioned_zone_list = ZoneList(Name="Conditioned_Zones", Names=zone_names)
+        conditioned_zone_list = ZoneList(
+            Name="Conditioned_Zones", Names=conditioned_zone_names
+        )
         idf = conditioned_zone_list.add(idf)
         idf = all_zones_list.add(idf)
         return idf, conditioned_zone_list, all_zones_list
@@ -453,6 +469,11 @@ class Model(BaseWeather, validate_assignment=True):
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
         kWh_per_GJ = 277.778
+        conditioned_floor_area = self.geometry.total_living_area + (
+            self.geometry.footprint_area
+            if self.geometry.basement and self.conditioned_basement
+            else 0
+        )
         res_series = (
             res_df[
                 [
@@ -462,7 +483,7 @@ class Model(BaseWeather, validate_assignment=True):
                 ]
             ].droplevel(-1, axis=1)
             * kWh_per_GJ
-        ).loc["Total End Uses"] / self.geometry.total_living_area
+        ).loc["Total End Uses"] / conditioned_floor_area
 
         res_series.name = "kWh/m2"
 
@@ -691,7 +712,7 @@ if __name__ == "__main__":
             h=3,
             wwr=0.2,
             num_stories=2,
-            basement_depth=None,
+            basement=False,
             zoning="by_storey",
             roof_height=None,
         ),

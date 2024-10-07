@@ -198,11 +198,10 @@ class ShoeboxGeometry(BaseModel):
         title="Roof gable height",
         description="The height of the roof gable.  If None, a flat roof is assumed.",
     )
-    basement_depth: float | None = Field(
-        default=None,
-        title="Basement depth",
-        description="The depth of the basement.  If None, no basement is assumed.",
-        ge=1.5,
+    basement: bool = Field(
+        default=False,
+        title="Basement",
+        description="Whether or not to use a basement with same f2f height as building.",
     )
     wwr: float = Field(
         default=0.15,
@@ -215,7 +214,7 @@ class ShoeboxGeometry(BaseModel):
     @property
     def basement_storey_count(self) -> int:
         """Return the number of basement stories."""
-        return 1 if self.basement_depth else 0
+        return 1 if self.basement else 0
 
     @property
     def zones_height(self) -> float:
@@ -246,6 +245,14 @@ class ShoeboxGeometry(BaseModel):
             + self.footprint_area * (1 if self.roof_height else 0)
         )
 
+    @property
+    def basement_suffix(self) -> str:
+        """Return the basement suffix for the building."""
+        if not self.basement:
+            msg = "Building has no basement."
+            raise ValueError(msg)
+        return "Storey 0" if self.zoning == "core/perim" else "Storey -1"
+
     def add(self, idf: IDF) -> IDF:
         """Constructs a simple shoebox geometry in the IDF model.
 
@@ -272,13 +279,16 @@ class ShoeboxGeometry(BaseModel):
         idf.add_block(
             name="shoebox",
             coordinates=bottom_plane,
-            height=self.zones_height,
+            height=self.zones_height
+            + (self.h if self.basement and self.zoning == "core/perim" else 0),
             num_stories=self.num_stories + self.basement_storey_count,
             zoning=self.zoning,
             perim_depth=self.perim_depth,
             below_ground_stories=self.basement_storey_count,
-            below_ground_storey_height=self.basement_depth or 2.5,
+            below_ground_storey_height=self.h,
         )
+        if self.basement and self.zoning == "core/perim":
+            idf.translate((0, 0, -self.h))
 
         if self.roof_height:
             idf.newidfobject("ZONE", Name="Attic")
@@ -404,7 +414,7 @@ class ShoeboxGeometry(BaseModel):
             for w in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
             if w.Outside_Boundary_Condition.lower() == "outdoors"
             and "attic" not in w.Zone_Name.lower()
-            and not w.Zone_Name.lower().endswith("-1")
+            and not w.Zone_Name.lower().endswith(self.basement_suffix.lower())
             and w.Surface_Type.lower() == "wall"
         ]
         idf.set_wwr(
