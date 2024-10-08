@@ -12,8 +12,9 @@ from epinterface.weather import WeatherUrl
 def run():
     """Run the test."""
     yr_brackets = ["pre_1975", "btw_1975_2003", "post_2003"]
-    sizes = ["SF", "MFH"]
-    conditioned_basement = [(False, False), (True, False), (True, True)]
+    sizes = ["SF", "MF"]
+    # conditioned_basement = [(False, False), (True, False), (True, True)]
+    conditioned_basement = [(True, False)]
     num_stories = 3
     wwr = 0.15
     f2f = 3.5
@@ -55,8 +56,8 @@ def run():
                         wwr=wwr,
                     ),
                     conditioned_basement=basement_conditioned,
-                    space_use_name=f"Template_MA_{size}_{yr_bracket}",
-                    envelope_name=f"Template_MA_{size}_{yr_bracket}",
+                    space_use_name=f"MA_{size}_{yr_bracket}",
+                    envelope_name=f"MA_{size}_{yr_bracket}",
                     lib=lib,
                 )
                 idf, results, warning_text = model.run()

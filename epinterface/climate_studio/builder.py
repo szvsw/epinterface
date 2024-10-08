@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 from uuid import uuid4
 
 import pandas as pd
@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 
 from epinterface.climate_studio.interface import (
     ClimateStudioLibraryV2,
-    GlazingConstructionSimple,
     OpaqueConstruction,
+    SurfaceHandlers,
     WindowDefinition,
     ZoneConstruction,
     ZoneEnvelope,
@@ -156,6 +156,30 @@ class Model(BaseWeather, validate_assignment=True):
             # 18,
             # 18,
             # 18,
+            # 7.9,
+            # 6.05,
+            # 5.65,
+            # 6.21,
+            # 8.98,
+            # 11.97,
+            # 14.71,
+            # 16.62,
+            # 17.06,
+            # 15.98,
+            # 13.61,
+            # 10.71,
+            # 1.11,
+            # 0.1,
+            # 1.89,
+            # 4.69,
+            # 12.02,
+            # 17.68,
+            # 21.5,
+            # 22.66,
+            # 20.68,
+            # 16.29,
+            # 10.42,
+            # 4.97,
         ]).add(idf)
 
         idf = self.geometry.add(idf)
@@ -231,95 +255,8 @@ class Model(BaseWeather, validate_assignment=True):
         if constructions.InternalMassIsOn:
             raise ClimateStudioBuilderNotImplementedError("InternalMassIsOn")
 
-        # outside walls are the ones with outdoor boundary condition and vertical orientation
-        def make_reversed(const: OpaqueConstruction):
-            new_const = const.model_copy(deep=True)
-            new_const.Layers = new_const.Layers[::-1]
-            new_const.Name = f"{const.Name}_Reversed"
-            return new_const
-
-        def reverse_construction(const_name: str, lib: ClimateStudioLibraryV2):
-            const = lib.OpaqueConstructions[const_name]
-            new_const = make_reversed(const)
-            return new_const
-
-        slab_reversed = reverse_construction(constructions.SlabConstruction, self.lib)
-        self.lib.OpaqueConstructions[slab_reversed.Name] = slab_reversed
-
-        actions = [
-            (
-                constructions.FacadeConstruction,
-                SurfaceHandler(
-                    boundary_condition="outdoors",
-                    original_construction_name="Project Wall",
-                    surface_type="opaque",
-                ),
-            ),
-            (
-                constructions.RoofConstruction,
-                SurfaceHandler(
-                    boundary_condition="outdoors",
-                    original_construction_name="Project Flat Roof",
-                    surface_type="opaque",
-                ),
-            ),
-            (
-                constructions.PartitionConstruction,
-                SurfaceHandler(
-                    boundary_condition="surface",
-                    original_construction_name="Project Partition",
-                    surface_type="opaque",
-                ),
-            ),
-            (
-                slab_reversed.Name,
-                SurfaceHandler(
-                    boundary_condition="surface",
-                    original_construction_name="Project Floor",
-                    surface_type="opaque",
-                ),
-            ),
-            (
-                constructions.SlabConstruction,
-                SurfaceHandler(
-                    boundary_condition="surface",
-                    original_construction_name="Project Ceiling",
-                    surface_type="opaque",
-                ),
-            ),
-            (
-                constructions.GroundSlabConstruction,
-                SurfaceHandler(
-                    boundary_condition="ground",
-                    original_construction_name="Project Floor",
-                    surface_type="opaque",
-                ),
-            ),
-        ]
-        if self.geometry.basement:
-            actions.append((
-                constructions.GroundWallConstruction,
-                SurfaceHandler(
-                    boundary_condition="ground",
-                    original_construction_name="Project Wall",
-                    surface_type="opaque",
-                ),
-            ))
-
-        # TODO: External floors, basements, etc
-
-        if window_def:
-            actions.append((
-                window_def.Construction,
-                SurfaceHandler(
-                    boundary_condition=None,
-                    original_construction_name="Project External Window",
-                    surface_type="glazing",
-                ),
-            ))
-
-        for const_name, action in actions:
-            idf = action.assign_srfs(idf, self.lib, const_name)
+        handlers = SurfaceHandlers.Default()
+        idf = handlers.handle_envelope(idf, self.lib, constructions, window_def)
 
         return idf
 
@@ -349,7 +286,7 @@ class Model(BaseWeather, validate_assignment=True):
             if "attic" not in zone.Name.lower()
             and (
                 not zone.Name.lower().endswith(self.geometry.basement_suffix.lower())
-                if not self.conditioned_basement
+                if ((not self.conditioned_basement) and self.geometry.basement)
                 else True
             )
         ]
@@ -543,91 +480,6 @@ class Model(BaseWeather, validate_assignment=True):
 
 
 # TODO: move to interface?
-class SurfaceHandler(BaseModel):
-    """A handler for filtering and adding surfaces to a model."""
-
-    boundary_condition: str | None
-    original_construction_name: str | None
-    surface_type: Literal["glazing", "opaque"]
-
-    def assign_srfs(
-        self, idf: IDF, lib: ClimateStudioLibraryV2, construction_name: str
-    ) -> IDF:
-        """Adds a construction (and its materials) to an IDF and assigns it to matching surfaces.
-
-        Args:
-            idf (IDF): The IDF model to add the construction to.
-            lib (ClimateStudioLibraryV2): The library of constructions.
-            construction_name (str): The name of the construction to add.
-        """
-        srf_key = (
-            "FENESTRATIONSURFACE:DETAILED"
-            if self.surface_type == "glazing"
-            else "BUILDINGSURFACE:DETAILED"
-        )
-        if self.boundary_condition is not None and self.surface_type == "glazing":
-            raise ClimateStudioBuilderNotImplementedError(
-                f"{self.surface_type}:BOUNDARY_CONDITON:{self.boundary_condition}"
-            )
-
-        srfs = [
-            srf
-            for srf in idf.idfobjects[srf_key]
-            if self.check_boundary(srf) and self.check_construction_name(srf)
-        ]
-        construction_lib = (
-            lib.OpaqueConstructions
-            if self.surface_type != "glazing"
-            else lib.GlazingConstructions
-        )
-        if construction_name not in construction_lib:
-            raise KeyError(
-                f"MISSING_CONSTRUCTION:{construction_name}:TARGET={self.__repr__()}"
-            )
-        construction = construction_lib[construction_name]
-        idf = (
-            construction.add_to_idf(idf)
-            if isinstance(construction, GlazingConstructionSimple)
-            else construction.add_to_idf(idf, lib.OpaqueMaterials)
-        )
-        for srf in srfs:
-            srf.Construction_Name = construction.Name
-        return idf
-
-    def check_boundary(self, srf):
-        """Check if the surface matches the boundary condition.
-
-        Args:
-            srf (eppy.IDF.BLOCK): The surface to check.
-
-        Returns:
-            match (bool): True if the surface matches the boundary condition.
-        """
-        if self.surface_type == "glazing":
-            # Ignore the bc filter check for windows
-            return True
-        if self.boundary_condition is None:
-            # Ignore the bc filter when filter not provided
-            return True
-        # Check the boundary condition
-        return srf.Outside_Boundary_Condition == self.boundary_condition
-
-    def check_construction_name(self, srf):
-        """Check if the surface matches the original construction name.
-
-        Args:
-            srf (eppy.IDF.BLOCK): The surface to check.
-
-        Returns:
-            match (bool): True if the surface matches the original construction name.
-        """
-        if self.original_construction_name is None:
-            # Ignore the original construction name check when filter not provided
-            return True
-        # Check the original construction name
-        return srf.Construction_Name == self.original_construction_name
-
-
 if __name__ == "__main__":
     import asyncio
     import json
