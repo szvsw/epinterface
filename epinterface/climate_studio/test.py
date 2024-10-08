@@ -76,7 +76,7 @@ def run():
                 )
                 all_results.append(df)
                 idf.saveas(
-                    f"notebooks/everett_{size}_{yr_bracket}_HB{has_basement}_BC{basement_conditioned}.idf"
+                    f"notebooks/cache/everett_{size}_{yr_bracket}_HB{has_basement}_BC{basement_conditioned}.idf"
                 )
 
     all_results_df = pd.concat(all_results).round()

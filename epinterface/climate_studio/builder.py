@@ -90,6 +90,34 @@ class Model(BaseWeather, validate_assignment=True):
 
         return self.lib.Envelopes[self.envelope_name]
 
+    @property
+    def total_conditioned_area(self) -> float:
+        """The total conditioned area of the model.
+
+        Returns:
+            float: The total conditioned area of the model.
+        """
+        return self.geometry.total_living_area + (
+            self.geometry.footprint_area
+            if self.geometry.basement and self.conditioned_basement
+            else 0
+        )
+
+    @property
+    def total_people(self) -> float:
+        """The total number of people in the model.
+
+        Returns:
+            ppl (float): The total number of people in the model
+
+        """
+        ppl_per_m2 = (
+            self.space_use.Loads.PeopleDensity if self.space_use.Loads.PeopleIsOn else 0
+        )
+        total_area = self.total_conditioned_area
+        total_ppl = ppl_per_m2 * total_area
+        return total_ppl
+
     def build(self, config: SimulationPathConfig) -> IDF:
         """Build the energy model using the Climate Studio API.
 
@@ -406,11 +434,6 @@ class Model(BaseWeather, validate_assignment=True):
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
         kWh_per_GJ = 277.778
-        conditioned_floor_area = self.geometry.total_living_area + (
-            self.geometry.footprint_area
-            if self.geometry.basement and self.conditioned_basement
-            else 0
-        )
         res_series = (
             res_df[
                 [
@@ -420,7 +443,7 @@ class Model(BaseWeather, validate_assignment=True):
                 ]
             ].droplevel(-1, axis=1)
             * kWh_per_GJ
-        ).loc["Total End Uses"] / conditioned_floor_area
+        ).loc["Total End Uses"] / self.total_conditioned_area
 
         res_series.name = "kWh/m2"
 
