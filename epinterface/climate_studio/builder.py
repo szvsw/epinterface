@@ -12,10 +12,10 @@ import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
 from pydantic import BaseModel, Field
+from shapely import Polygon
 
 from epinterface.climate_studio.interface import (
     ClimateStudioLibraryV2,
-    OpaqueConstruction,
     SurfaceHandlers,
     WindowDefinition,
     ZoneConstruction,
@@ -118,6 +118,31 @@ class Model(BaseWeather, validate_assignment=True):
         total_ppl = ppl_per_m2 * total_area
         return total_ppl
 
+    def compute_dhw(self) -> float:
+        """Compute the domestic hot water energy demand.
+
+        Returns:
+            energy (float): The domestic hot water energy demand (kWh/m2)
+        """
+        # TODO: this should be computed from the DHW schedule
+        if not self.space_use.HotWater.IsOn:
+            return 0
+        flow_rate_per_person = self.space_use.HotWater.FlowRatePerPerson  # m3/hr/person
+        temperature_rise = (
+            self.space_use.HotWater.WaterSupplyTemperature
+            - self.space_use.HotWater.WaterTemperatureInlet
+        )  # K
+        water_density = 1000  # kg/m3
+        c = 4186  # J/kg.K
+        total_flow_rate = flow_rate_per_person * self.total_people  # m3/hr
+        total_volume = total_flow_rate * 8760  # m3 / yr
+        total_energy = total_volume * temperature_rise * water_density * c  # J / yr
+        total_energy_kWh = total_energy / 3600000  # kWh / yr
+        total_energy_kWh_per_m2 = (
+            total_energy_kWh / self.total_conditioned_area
+        )  # kWh/m2 / yr
+        return total_energy_kWh_per_m2
+
     def build(self, config: SimulationPathConfig) -> IDF:
         """Build the energy model using the Climate Studio API.
 
@@ -219,6 +244,55 @@ class Model(BaseWeather, validate_assignment=True):
         idf = self.add_space_use(idf, self.space_use, conditioned_zone_list)
         idf = self.add_envelope(idf, self.envelope, all_zones_list)
 
+        return idf
+
+    def add_hot_water_to_zone_list(
+        self, idf: IDF, space_use: ZoneUse, zone_list: ZoneList
+    ) -> IDF:
+        """Add the hot water to the zone list.
+
+        Args:
+            idf (IDF): The IDF model to add the hot water to.
+            space_use (ZoneUse): The zone use template.
+            zone_list (ZoneList): The list of zones to add the hot water to.
+
+        Returns:
+            idf (IDF): The IDF model with the added hot water.
+        """
+        for zone_name in zone_list.Names:
+            idf = self.add_hot_water_to_zone(idf, space_use, zone_name)
+        return idf
+
+    def add_hot_water_to_zone(
+        self, idf: IDF, space_use: ZoneUse, zone_name: str
+    ) -> IDF:
+        """Add the hot water to the zone.
+
+        Args:
+            idf (IDF): The IDF model to add the hot water to.
+            space_use (ZoneUse): The zone use template.
+            zone_name (str): The name of the zone to add the hot water to.
+
+        Returns:
+            idf (IDF): The IDF model with the added hot water.
+        """
+        zone = next(filter(lambda x: x.Name == zone_name, idf.idfobjects["ZONE"]), None)
+        if zone is None:
+            raise ValueError(f"NO_ZONE:{zone_name}")
+        area = 0
+        area_ct = 0
+        for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
+            if srf.Zone_Name == zone.Name and srf.Surface_Type.lower() == "floor":
+                poly = Polygon(srf.coords)
+                area += poly.area
+                area_ct += 1
+        if area_ct > 1:
+            raise ValueError(f"TOO_MANY_FLOORS:{zone.Name}")
+        if area == 0 or area_ct == 0:
+            raise ValueError(f"NO_AREA:{zone.Name}")
+        ppl_density = space_use.Loads.PeopleDensity
+        total_ppl = ppl_density * area
+        idf = space_use.HotWater.add_water_to_idf_zone(idf, zone.Name, total_ppl)
         return idf
 
     def add_envelope(
@@ -364,6 +438,7 @@ class Model(BaseWeather, validate_assignment=True):
             IDF: The IDF model with the added space use.
         """
         idf = space_use.add_space_use_to_idf_zone(idf, zone_list)
+        idf = self.add_hot_water_to_zone_list(idf, space_use, zone_list)
         idf = self.add_schedules_by_name(idf, space_use.schedule_names)
         return idf
 
@@ -434,7 +509,7 @@ class Model(BaseWeather, validate_assignment=True):
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
         kWh_per_GJ = 277.778
-        res_series = (
+        res_df = (
             res_df[
                 [
                     "Electricity",
@@ -443,24 +518,38 @@ class Model(BaseWeather, validate_assignment=True):
                 ]
             ].droplevel(-1, axis=1)
             * kWh_per_GJ
-        ).loc["Total End Uses"] / self.total_conditioned_area
+        ) / self.total_conditioned_area
+        res_series_hot_water = res_df.loc["Water Systems"]
+        res_series = res_df.loc["Total End Uses"] - res_series_hot_water
+        res_series["Domestic Hot Water"] = res_series_hot_water.sum()
+        res_series["DHWAlt"] = self.compute_dhw()
 
         res_series.name = "kWh/m2"
 
         if move_energy:
             heat_cop = self.space_use.Conditioning.HeatingCOP
             cool_cop = self.space_use.Conditioning.CoolingCOP
+            dhw_cop = self.space_use.HotWater.DomHotWaterCOP
             heat_fuel = self.space_use.Conditioning.HeatingFuelType
             cool_fuel = self.space_use.Conditioning.CoolingFuelType
+            dhw_fuel = self.space_use.HotWater.HotWaterFuelType
             heat_energy = res_series["District Heating"] / heat_cop
             cool_energy = res_series["District Cooling"] / cool_cop
+            dhw_energy = res_series["Domestic Hot Water"] / dhw_cop
             if heat_fuel not in res_series.index:
                 res_series[heat_fuel] = 0
             if cool_fuel not in res_series.index:
                 res_series[cool_fuel] = 0
+            if dhw_fuel not in res_series.index:
+                res_series[dhw_fuel] = 0
             res_series[heat_fuel] += heat_energy
             res_series[cool_fuel] += cool_energy
-            res_series = res_series.drop(["District Cooling", "District Heating"])
+            res_series[dhw_fuel] += dhw_energy
+            res_series = res_series.drop([
+                "District Cooling",
+                "District Heating",
+                "Domestic Hot Water",
+            ])
 
         return cast(pd.Series, res_series)
 
@@ -510,67 +599,14 @@ if __name__ == "__main__":
     # import tempfile
     from pydantic import AnyUrl
 
-    from epinterface.climate_studio.interface import (
-        ClimateStudioLibraryV1,
-        OpaqueConstruction,
-        OpaqueMaterial,
-        extract_sch,
-    )
-
-    lib = ClimateStudioLibraryV2(
-        SpaceUses={},
-        Schedules={},
-        Envelopes={},
-        GlazingConstructions={},
-        OpaqueConstructions={},
-        OpaqueMaterials={},
-    )
-    base_path = Path("D:/climatestudio/default")
-    merge_path = Path("C:/users/szvsw/Downloads")
-    opaque_mats = ClimateStudioLibraryV1.LoadObjects(
-        merge_path, OpaqueMaterial, pluralize=True
-    )
-    opaque_mats_2 = ClimateStudioLibraryV1.LoadObjects(
-        base_path, OpaqueMaterial, pluralize=True
-    )
-    opaque_mats.update(opaque_mats_2)
-    lib.OpaqueMaterials = opaque_mats
-    opaque_constructions = ClimateStudioLibraryV1.LoadObjects(
-        base_path, OpaqueConstruction, pluralize=True
-    )
-    opaque_constructions_2 = ClimateStudioLibraryV1.LoadObjects(
-        merge_path,
-        OpaqueConstruction,
-        pluralize=True,
-    )
-    opaque_constructions.update(opaque_constructions_2)
-    lib.OpaqueConstructions = opaque_constructions
-
-    year_schs = pd.read_csv(base_path / "YearSchedules.csv", dtype=str)
-    sch_names = year_schs.columns
-    schedules_list = [extract_sch(year_schs, sch_name) for sch_name in sch_names]
-    schedules = {sch.Name: sch for sch in schedules_list}
-    if len(schedules) != len(schedules_list):
-        raise ValueError("Schedules")
-    lib.Schedules = schedules
-
-    with open("notebooks/data/test_outputs_construction.json") as f:
-        const_data = json.load(f)
-
-    with open("notebooks/data/v1_CS_output_space_use_MA.json") as f:
-        su_data = list(json.load(f).values())
-
-    for val in su_data:
-        zu = ZoneUse(**val)
-        if zu.Name in lib.SpaceUses:
-            raise ValueError(f"DUPLICATE_SPACE_USE_NAME:{zu.Name}")
-        lib.SpaceUses[zu.Name] = zu
-
-    for val in const_data:
-        ze = ZoneEnvelope(**val)
-        if ze.Name in lib.Envelopes:
-            raise ValueError(f"DUPLICATE_ENVELOPE_NAME:{ze.Name}")
-        lib.Envelopes[ze.Name] = ze
+    with open("notebooks/everett_lib.json") as f:
+        lib_data = json.load(f)
+    lib = ClimateStudioLibraryV2.model_validate(lib_data)
+    for env in lib.Envelopes.values():
+        if env.WindowDefinition is None:
+            msg = f"Envelope {env.Name} has no window definition"
+            raise ValueError(msg)
+        env.WindowDefinition.Construction = "Template_post_2003"
 
     model = Model(
         Weather=AnyUrl(

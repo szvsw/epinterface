@@ -14,8 +14,8 @@ def run():
     yr_brackets = ["pre_1975", "btw_1975_2003", "post_2003"]
     sizes = ["SF", "MF"]
     # conditioned_basement = [(False, False), (True, False), (True, True)]
-    conditioned_basement = [(True, False)]
-    num_stories = 3
+    conditioned_basement = [(False, False)]
+    num_stories = 1
     wwr = 0.15
     f2f = 3.5
     w = 10
@@ -37,6 +37,12 @@ def run():
                         msg = f"Envelope {env.Name} has no window definition"
                         raise ValueError(msg)
                     env.WindowDefinition.Construction = f"Template_{yr_bracket}"
+                # for su in lib.SpaceUses.values():
+                #     su.HotWater.FlowRatePerPerson = 0
+                # for window in lib.GlazingConstructions.values():
+                #     window.UValue = 5.894
+                #     window.SHGF = 0.905
+                #     window.TVis = 0.913
 
                 model = Model(
                     Weather=WeatherUrl(  # pyright: ignore [reportCallIssue]

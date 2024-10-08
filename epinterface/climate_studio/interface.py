@@ -16,6 +16,7 @@ from pydantic import (
     Field,
     field_serializer,
     field_validator,
+    model_validator,
     validate_call,
 )
 
@@ -33,6 +34,7 @@ from epinterface.interface import (
     People,
     SimpleGlazingMaterial,
     SizingParameters,
+    WaterUseEquipment,
     ZoneInfiltrationDesignFlowRate,
     ZoneList,
 )
@@ -1475,6 +1477,38 @@ class ZoneHotWater(
 ):
     """Zone Hot Water object."""
 
+    DomHotWaterCOP: float = Field(
+        ...,
+        title="Domestic hot water coefficient of performance",
+        ge=0,
+    )
+    WaterTemperatureInlet: float = Field(
+        ...,
+        title="Water temperature inlet [°C]",
+        ge=0,
+        le=100,
+    )
+    WaterSupplyTemperature: float = Field(
+        ...,
+        title="Water supply temperature [°C]",
+        ge=0,
+        le=100,
+    )
+    WaterSchedule: str = Field(..., title="Water schedule")
+    FlowRatePerPerson: float = Field(
+        ..., title="Flow rate per person [m3/hr/p]", ge=0, le=0.1
+    )
+    IsOn: BoolStr = Field(..., title="Is on")
+    HotWaterFuelType: FuelType = Field(..., title="Hot water fuel type")
+
+    @model_validator(mode="before")
+    def validate_supply_greater_than_inlet(cls, values: dict[str, Any]):
+        """Validate that the supply temperature is greater than the inlet temperature."""
+        if values["WaterSupplyTemperature"] <= values["WaterTemperatureInlet"]:
+            msg = "Water supply temperature must be greater than the inlet temperature."
+            raise ValueError(msg)
+        return values
+
     @property
     def schedule_names(self) -> set[str]:
         """Get the schedule names used in the object.
@@ -1482,7 +1516,71 @@ class ZoneHotWater(
         Returns:
             set[str]: The schedule names.
         """
-        return set()
+        return {self.WaterSchedule} if self.IsOn else set()
+
+    def add_water_to_idf_zone(
+        self, idf: IDF, target_zone_name: str, total_ppl: float
+    ) -> IDF:
+        """Add the hot water to an IDF zone.
+
+        Args:
+            idf (IDF): The IDF object to add the hot water to.
+            target_zone_name (str): The name of the zone to add the hot water to.
+            total_ppl (float): The total number of people in the zone.
+
+        Returns:
+            IDF: The updated IDF object.
+        """
+        if not self.IsOn:
+            return idf
+
+        total_flow_rate = self.FlowRatePerPerson * total_ppl  # m3/hr
+        total_flow_rate_per_s = total_flow_rate / 3600  # m3/s
+
+        lim = "Temperature"
+        if not idf.getobject("SCHEDULETYPELIMITS", lim):
+            lim = ScheduleTypeLimits(
+                Name="Temperature",
+                LowerLimit=-60,
+                UpperLimit=200,
+            )
+            lim.to_epbunch(idf)
+
+        target_temperature_schedule = Schedule.constant_schedule(
+            value=self.WaterSupplyTemperature,  # pyright: ignore [reportArgumentType]
+            Name=f"{target_zone_name}_{self.Name}_TargetWaterTemperatureSch",
+            Type="Temperature",
+        )
+        inlet_temperature_schedule = Schedule.constant_schedule(
+            value=self.WaterTemperatureInlet,  # pyright: ignore [reportArgumentType]
+            Name=f"{target_zone_name}_{self.Name}_InletWaterTemperatureSch",
+            Type="Temperature",
+        )
+
+        target_temperature_yr_schedule, *_ = (
+            target_temperature_schedule.to_year_week_day()
+        )
+        inlet_temperature_yr_schedule, *_ = (
+            inlet_temperature_schedule.to_year_week_day()
+        )
+
+        target_temperature_yr_schedule.to_epbunch(idf)
+        inlet_temperature_yr_schedule.to_epbunch(idf)
+
+        hot_water = WaterUseEquipment(
+            Name=f"{target_zone_name}_{self.Name}_HotWater",
+            EndUse_Subcategory="Domestic Hot Water",
+            Peak_Flow_Rate=total_flow_rate_per_s,
+            Flow_Rate_Fraction_Schedule_Name=self.WaterSchedule,
+            Zone_Name=target_zone_name,
+            Target_Temperature_Schedule_Name=target_temperature_yr_schedule.Name,
+            Hot_Water_Supply_Temperature_Schedule_Name=target_temperature_schedule.Name,
+            Cold_Water_Supply_Temperature_Schedule_Name=inlet_temperature_schedule.Name,
+            Sensible_Fraction_Schedule_Name=None,
+            Latent_Fraction_Schedule_Name=None,
+        )
+        idf = hot_water.add(idf)
+        return idf
 
 
 class ZoneUse(
@@ -1522,6 +1620,26 @@ class ZoneUse(
             IDF: The updated IDF object.
         """
         idf = self.Conditioning.add_conditioning_to_idf_zone(idf, target_zone_name)
+        return idf
+
+    def add_hot_water_to_idf_zone(
+        self, idf: IDF, target_zone_name: str, zone_area: float
+    ) -> IDF:
+        """Add the hot water to an IDF zone.
+
+        Args:
+            idf (IDF): The IDF object to add the hot water to.
+            target_zone_name (str): The name of the zone to add the hot water to.
+            zone_area (float): The area of the zone.
+
+        Returns:
+            idf (IDF): The updated IDF object.
+
+        """
+        total_people = self.Loads.PeopleDensity * zone_area
+        idf = self.HotWater.add_water_to_idf_zone(
+            idf, target_zone_name, total_ppl=total_people
+        )
         return idf
 
     def add_space_use_to_idf_zone(self, idf: IDF, target_zone: str | ZoneList) -> IDF:
