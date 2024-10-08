@@ -522,7 +522,6 @@ class Model(BaseWeather, validate_assignment=True):
         res_series_hot_water = res_df.loc["Water Systems"]
         res_series = res_df.loc["Total End Uses"] - res_series_hot_water
         res_series["Domestic Hot Water"] = res_series_hot_water.sum()
-        res_series["DHWAlt"] = self.compute_dhw()
 
         res_series.name = "kWh/m2"
 
