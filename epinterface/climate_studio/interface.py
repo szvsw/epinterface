@@ -626,7 +626,7 @@ class OpaqueConstructionLayer(MaterialWithThickness, NamedObject, extra="forbid"
         mat_def = material_defs[self.Name]
 
         material = Material(
-            Name=self.Name,
+            Name=f"{self.Name}_{self.Thickness}",
             Thickness=self.Thickness,
             Conductivity=mat_def.Conductivity,
             Density=mat_def.Density,
