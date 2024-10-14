@@ -370,3 +370,59 @@ def test_action_sequence(lib_dict: dict):
     assert lib_dict["a"]["b"]["c"] == 2
     assert lib_dict["a"]["b"]["d"][0] == 5
     assert lib_dict["f"]["g"] == "test"
+
+
+def test_priorities(lib: ClimateStudioLibraryV2):
+    """Test applying an action with priorities."""
+    # we will first set the hot water to a value of 2.0, and then test that priority high with a new val of 1.0 doesn't actually change it.
+    first_space_use_name = next(iter(lib.SpaceUses.keys()))
+    lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson = 2.0
+    pth = ParameterPath[float](
+        path=[
+            "SpaceUses",
+            first_space_use_name,
+            "HotWater",
+            "FlowRatePerPerson",
+        ]
+    )
+
+    # priority high
+    action = ReplaceWithVal[float](
+        target=pth,
+        val=-1,
+        priority="high",
+    )
+
+    action.run(lib)
+
+    assert lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson == 2.0
+
+    # priority low
+    action = ReplaceWithVal[float](
+        target=pth,
+        val=3,
+        priority="low",
+    )
+
+    action.run(lib)
+
+    assert lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson == 2.0
+
+    lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson = 2.0
+    action = ReplaceWithVal[float](
+        target=pth,
+        val=3.0,
+        priority="high",
+    )
+
+    action.run(lib)
+    assert lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson == 3.0
+
+    action = ReplaceWithVal[float](
+        target=pth,
+        val=1.0,
+        priority="low",
+    )
+
+    action.run(lib)
+    assert lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson == 1.0
