@@ -70,24 +70,24 @@ def test_set_dict_val_or_attr():
 
 def test_parameter_path_get_from_dict(lib_dict):
     """Test getting a value from a dictionary."""
-    pth = ParameterPath[float](attr_path=["a", "b", "c"])
+    pth = ParameterPath[float](path=["a", "b", "c"])
     assert pth.get_lib_val(lib_dict) == 1
-    pth = ParameterPath[float](attr_path=["a", "b"])
+    pth = ParameterPath[float](path=["a", "b"])
     assert pth.get_lib_val(lib_dict) == {"c": 1, "d": [1, {"e": 2}]}
-    pth = ParameterPath[float](attr_path=["a", "b", "d", 1, "e"])
+    pth = ParameterPath[float](path=["a", "b", "d", 1, "e"])
     assert pth.get_lib_val(lib_dict) == 2
-    pth = ParameterPath[float](attr_path=["a", "b", "d", 0])
+    pth = ParameterPath[float](path=["a", "b", "d", 0])
     assert pth.get_lib_val(lib_dict) == 1
 
 
 def test_parameter_path_fail(lib_dict):
     """Test failing to get a value from a dictionary, list, or attribute."""
     # test that we fail to get a value that doesn't exist
-    pth = ParameterPath[float](attr_path=["a", "b", "d", 2])
+    pth = ParameterPath[float](path=["a", "b", "d", 2])
     with pytest.raises(IndexError):
         pth.get_lib_val(lib_dict)
 
-    pth = ParameterPath[float](attr_path=["a", "c"])
+    pth = ParameterPath[float](path=["a", "c"])
     with pytest.raises(KeyError):
         pth.get_lib_val(lib_dict)
 
@@ -95,7 +95,7 @@ def test_parameter_path_fail(lib_dict):
         a: int = 1
 
     obj = DummyClass()
-    pth = ParameterPath[float](attr_path=["c"])
+    pth = ParameterPath[float](path=["c"])
 
     with pytest.raises(AttributeError):
         pth.get_lib_val(obj)
@@ -106,7 +106,7 @@ def test_parameter_path_with_lib(lib: ClimateStudioLibraryV2):
     first_space_use_name = next(iter(lib.SpaceUses.keys()))
     lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson = 1.2345
     pth = ParameterPath[float](
-        attr_path=["SpaceUses", first_space_use_name, "HotWater", "FlowRatePerPerson"]
+        path=["SpaceUses", first_space_use_name, "HotWater", "FlowRatePerPerson"]
     )
     assert pth.get_lib_val(lib) == 1.2345
 
@@ -115,7 +115,7 @@ def test_get_obj_from_lib(lib: ClimateStudioLibraryV2):
     """Test getting an object from a library."""
     first_space_use_name = next(iter(lib.SpaceUses.keys()))
     pth = ParameterPath[ZoneHotWater](
-        attr_path=["SpaceUses", first_space_use_name, "HotWater"]
+        path=["SpaceUses", first_space_use_name, "HotWater"]
     )
     expected = lib.SpaceUses[first_space_use_name].HotWater
     assert pth.get_lib_val(lib) == expected
@@ -123,8 +123,8 @@ def test_get_obj_from_lib(lib: ClimateStudioLibraryV2):
 
 def test_getting_referenced_object_from_dict(lib_dict: dict):
     """Test getting a referenced object from a dictionary."""
-    ref_pth = ParameterPath[str](attr_path=["f", "g"])
-    pth = ParameterPath[str](attr_path=["a", "b", ref_pth])
+    ref_pth = ParameterPath[str](path=["f", "g"])
+    pth = ParameterPath[str](path=["a", "b", ref_pth])
     assert pth.get_lib_val(lib_dict) == lib_dict["a"]["b"]["c"]
     assert pth.get_lib_val(lib_dict) == 1
 
@@ -133,7 +133,7 @@ def test_getting_referenced_object_from_lib(lib: ClimateStudioLibraryV2):
     """Test getting a referenced object from a library."""
     first_space_use_name = next(iter(lib.SpaceUses.keys()))
     ref_pth = ParameterPath[str](
-        attr_path=[
+        path=[
             "Envelopes",
             first_space_use_name,
             "Constructions",
@@ -142,7 +142,7 @@ def test_getting_referenced_object_from_lib(lib: ClimateStudioLibraryV2):
     )
     ref_name = ref_pth.get_lib_val(lib)
     expected = lib.OpaqueConstructions[ref_name]
-    pth = ParameterPath[OpaqueConstruction](attr_path=["OpaqueConstructions", ref_name])
+    pth = ParameterPath[OpaqueConstruction](path=["OpaqueConstructions", ref_name])
     assert pth.get_lib_val(lib) == expected
 
 
@@ -150,7 +150,7 @@ def test_delta_val_on_dict(lib_dict: dict):
     """Test applying a delta value to a dictionary."""
     expected = lib_dict["a"]["b"]["c"] + 1
     action = DeltaVal[float](
-        target=ParameterPath[float](attr_path=["a", "b", "c"]),
+        target=ParameterPath[float](path=["a", "b", "c"]),
         delta=1,
         op="+",
     )
@@ -158,7 +158,7 @@ def test_delta_val_on_dict(lib_dict: dict):
     assert lib_dict["a"]["b"]["c"] == expected
     expected = lib_dict["a"]["b"]["c"] - 1
     action = DeltaVal[float](
-        target=ParameterPath[float](attr_path=["a", "b", "c"]),
+        target=ParameterPath[float](path=["a", "b", "c"]),
         delta=-1,
         op="+",
     )
@@ -167,7 +167,7 @@ def test_delta_val_on_dict(lib_dict: dict):
     expected = lib_dict["a"]["b"]["c"] * 3
 
     action = DeltaVal[float](
-        target=ParameterPath[float](attr_path=["a", "b", "c"]),
+        target=ParameterPath[float](path=["a", "b", "c"]),
         delta=3,
         op="*",
     )
@@ -176,7 +176,7 @@ def test_delta_val_on_dict(lib_dict: dict):
 
     expected = lib_dict["a"]["b"]["c"] / 2
     action = DeltaVal[float](
-        target=ParameterPath[float](attr_path=["a", "b", "c"]),
+        target=ParameterPath[float](path=["a", "b", "c"]),
         delta=1 / 2,
         op="*",
     )
@@ -188,7 +188,7 @@ def test_delta_val_on_list_item():
     """Test applying a delta value to a list."""
     lib = {"a": [1, {"b": [2, 3, 4]}]}
 
-    pth = ParameterPath[float](attr_path=["a", 1, "b", 1])
+    pth = ParameterPath[float](path=["a", 1, "b", 1])
     action = DeltaVal[float](
         target=pth,
         delta=1,
@@ -206,7 +206,7 @@ def test_delta_val_on_lib(lib: ClimateStudioLibraryV2):
     expected = initial_val + 1
     action = DeltaVal[float](
         target=ParameterPath[float](
-            attr_path=[
+            path=[
                 "SpaceUses",
                 first_space_use_name,
                 "HotWater",
@@ -221,7 +221,7 @@ def test_delta_val_on_lib(lib: ClimateStudioLibraryV2):
     expected = expected - 1
     action = DeltaVal[float](
         target=ParameterPath[float](
-            attr_path=[
+            path=[
                 "SpaceUses",
                 first_space_use_name,
                 "HotWater",
@@ -236,7 +236,7 @@ def test_delta_val_on_lib(lib: ClimateStudioLibraryV2):
     expected = expected * 3
     action = DeltaVal[float](
         target=ParameterPath[float](
-            attr_path=[
+            path=[
                 "SpaceUses",
                 first_space_use_name,
                 "HotWater",
@@ -251,7 +251,7 @@ def test_delta_val_on_lib(lib: ClimateStudioLibraryV2):
     expected = expected / 2
     action = DeltaVal[float](
         target=ParameterPath[float](
-            attr_path=[
+            path=[
                 "SpaceUses",
                 first_space_use_name,
                 "HotWater",
@@ -272,7 +272,7 @@ def test_replace_with_val_on_dict(lib_dict: dict):
     """Test replacing a value in a dictionary."""
     expected = 5.0
     action = ReplaceWithVal[float](
-        target=ParameterPath[float](attr_path=["a", "b", "c"]),
+        target=ParameterPath[float](path=["a", "b", "c"]),
         val=5,
     )
     action.run(lib_dict)
@@ -280,14 +280,14 @@ def test_replace_with_val_on_dict(lib_dict: dict):
 
     expected = "test"
     action = ReplaceWithVal[str](
-        target=ParameterPath[str](attr_path=["f", "g"]),
+        target=ParameterPath[str](path=["f", "g"]),
         val="test",
     )
     action.run(lib_dict)
     assert lib_dict["f"]["g"] == expected
     expected = {"foo": "bar"}
     action = ReplaceWithVal[dict](
-        target=ParameterPath[dict](attr_path=["f"]),
+        target=ParameterPath[dict](path=["f"]),
         val={"foo": "bar"},
     )
     action.run(lib_dict)
@@ -296,8 +296,8 @@ def test_replace_with_val_on_dict(lib_dict: dict):
 
 def test_replace_with_existing_on_dict(lib_dict: dict):
     """Test replacing a value in a dictionary with the existing value."""
-    source_pth = ParameterPath[float](attr_path=["a", "b", "c"])
-    target_pth = ParameterPath[float](attr_path=["a", "b", "d", 0])
+    source_pth = ParameterPath[float](path=["a", "b", "c"])
+    target_pth = ParameterPath[float](path=["a", "b", "d", 0])
     action = ReplaceWithExisting[float](target=target_pth, source=source_pth)
     action.run(lib_dict)
     assert lib_dict["a"]["b"]["d"][0] == lib_dict["a"]["b"]["c"]
@@ -313,10 +313,10 @@ def test_replace_with_existing_on_lib(lib: ClimateStudioLibraryV2):
     lib.SpaceUses[first_space_use_name].Loads.EquipmentPowerDensity = 0.5
     lib.SpaceUses[second_space_use_name].Loads.EquipmentPowerDensity = 1.0
     source_pth = ParameterPath[bool](
-        attr_path=["SpaceUses", first_space_use_name, "Loads", "EquipmentIsOn"]
+        path=["SpaceUses", first_space_use_name, "Loads", "EquipmentIsOn"]
     )
     target_pth = ParameterPath[bool](
-        attr_path=["SpaceUses", second_space_use_name, "Loads", "EquipmentIsOn"]
+        path=["SpaceUses", second_space_use_name, "Loads", "EquipmentIsOn"]
     )
     action = ReplaceWithExisting[bool](target=target_pth, source=source_pth)
     action.run(lib)
@@ -328,10 +328,10 @@ def test_replace_with_existing_on_lib(lib: ClimateStudioLibraryV2):
     assert lib.SpaceUses[second_space_use_name].Loads.EquipmentPowerDensity == 1.0
     assert lib.SpaceUses[first_space_use_name].Loads.EquipmentPowerDensity == 0.5
     source_pth = ParameterPath[ZoneLoad](
-        attr_path=["SpaceUses", first_space_use_name, "Loads"]
+        path=["SpaceUses", first_space_use_name, "Loads"]
     )
     target_pth = ParameterPath[ZoneLoad](
-        attr_path=["SpaceUses", second_space_use_name, "Loads"]
+        path=["SpaceUses", second_space_use_name, "Loads"]
     )
     action = ReplaceWithExisting[ZoneLoad](target=target_pth, source=source_pth)
     action.run(lib)
@@ -352,16 +352,16 @@ def test_action_sequence(lib_dict: dict):
     """Test applying a sequence of actions."""
     actions = [
         DeltaVal[float](
-            target=ParameterPath[float](attr_path=["a", "b", "c"]),
+            target=ParameterPath[float](path=["a", "b", "c"]),
             delta=1,
             op="+",
         ),
         ReplaceWithVal[float](
-            target=ParameterPath[float](attr_path=["a", "b", "d", 0]),
+            target=ParameterPath[float](path=["a", "b", "d", 0]),
             val=5,
         ),
         ReplaceWithVal[str](
-            target=ParameterPath[str](attr_path=["f", "g"]),
+            target=ParameterPath[str](path=["f", "g"]),
             val="test",
         ),
     ]
