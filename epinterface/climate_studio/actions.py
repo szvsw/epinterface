@@ -103,7 +103,8 @@ class ParameterPath(BaseModel, Generic[T]):
             parent_path (ParameterPath): The parent path of the current path.
         """
         # TODO: how can we type-narrow the generic parameterpath here?
-        return ParameterPath(attr_path=self.attr_path[:-1])
+        # get the parent using the similar reduction technique as before
+        return ParameterPath[Any](attr_path=self.attr_path[:-1])
 
 
 Priority = Literal["low", "high"]
