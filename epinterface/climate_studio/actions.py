@@ -7,9 +7,10 @@ from typing import Any, Generic, Literal, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
+from epinterface.climate_studio.builder import Model
 from epinterface.climate_studio.interface import ClimateStudioLibraryV2
 
-LibT = TypeVar("LibT", dict[str, Any], ClimateStudioLibraryV2)
+LibT = TypeVar("LibT", dict[str, Any], ClimateStudioLibraryV2, Model, BaseModel)
 
 # TODO: Major!
 # allow operating on an object in conjunction with operating on a library
@@ -301,7 +302,7 @@ class ActionSequence(BaseModel):
     """A sequence of actions to perform on a library object."""
 
     name: str = Field(..., description="The name of the action sequence.")
-    actions: list[Action] = Field(
+    actions: list[DeltaVal | ReplaceWithExisting | ReplaceWithVal] = Field(
         ..., description="A sequence of actions to perform on a library object."
     )
 
@@ -428,3 +429,78 @@ if __name__ == "__main__":
     )
     ma_sf_pre_1975_ee_upgrade.run(lib)
     print(lib.Envelopes["MA_SF_pre_1975"].Infiltration.InfiltrationAch)
+
+    ma_sf_pre_1975_ee_upgrade = ActionSequence(
+        name="MA_SF_pre_1975_ee_upgrade",
+        actions=[
+            ReplaceWithVal[float](
+                target=ParameterPath[float](
+                    path=[
+                        "lib",
+                        "SpaceUses",
+                        ParameterPath[str](path=["space_use_name"]),
+                        "Loads",
+                        "EquipmentPowerDensity",
+                    ]  # TODO: ma_sf_pre_1975 should be determined from some other source, e.g. a Model
+                    # one way of achieving that would be to have the model store rich objects rather than thin ones
+                    # alternatively, run() method could be modified to accept a model object as well as the lib
+                    # and then known when to pass it down to accessors
+                ),
+                val=2.3,
+                priority="low",
+            ),
+            ReplaceWithVal[float](
+                target=ParameterPath[float](
+                    path=[
+                        "lib",
+                        "SpaceUses",
+                        ParameterPath[str](path=["space_use_name"]),
+                        "Loads",
+                        "LightingPowerDensity",
+                    ]
+                ),
+                val=2.1,
+                priority="low",
+            ),
+            ReplaceWithVal[float](
+                target=ParameterPath[float](
+                    path=[
+                        "lib",
+                        "Envelopes",
+                        ParameterPath[str](path=["envelope_name"]),
+                        "Infiltration",
+                        "InfiltrationAch",
+                    ]
+                ),
+                val=0.1,
+                priority="low",
+            ),
+        ],
+    )
+    from epinterface.climate_studio.builder import Model, ShoeboxGeometry
+
+    lib = ClimateStudioLibraryV2.model_validate(lib_data)
+    model = Model(
+        geometry=ShoeboxGeometry(
+            x=0,
+            y=0,
+            w=10,
+            d=10,
+            h=3.5,
+            num_stories=3,
+            zoning="core/perim",
+            perim_depth=3,
+            roof_height=None,
+            basement=False,
+            wwr=0.15,
+        ),
+        space_use_name="MA_SF_pre_1975",
+        envelope_name="MA_SF_pre_1975",
+        conditioned_basement=False,
+        lib=lib,
+    )
+    model = ma_sf_pre_1975_ee_upgrade.run(model)
+    print(ma_sf_pre_1975_ee_upgrade.actions[0].target.get_lib_val(model))
+    str_ac = yaml.dump(ma_sf_pre_1975_ee_upgrade.model_dump(mode="dict"))
+    action_sequence = ActionSequence.model_validate(yaml.safe_load(str_ac))
+    print(action_sequence)
