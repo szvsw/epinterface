@@ -14,6 +14,7 @@ LibT = TypeVar("LibT", dict[str, Any], ClimateStudioLibraryV2, Model, BaseModel)
 
 # TODO: Major!
 # allow operating on an object in conjunction with operating on a library
+# TODO: allow callbacks in path reduction, e.g. to compute a value like "layer with most insulation"
 
 
 def get_dict_val_or_attr(obj, key):
