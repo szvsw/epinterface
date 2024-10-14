@@ -66,7 +66,7 @@ class ParameterPath(BaseModel, Generic[T]):
     values from a given library.
     """
 
-    path: list["str | int | ParameterPath[str] | ParameterPath[int]"] = Field(
+    attr_path: list["str | int | ParameterPath[str] | ParameterPath[int]"] = Field(
         ..., description="The path to the parameter to select."
     )
 
@@ -80,7 +80,8 @@ class ParameterPath(BaseModel, Generic[T]):
             path (list[Any]): The resolved path to the parameter in the library.
         """
         return [
-            p if isinstance(p, str | int) else p.get_lib_val(lib) for p in self.path
+            p if isinstance(p, str | int) else p.get_lib_val(lib)
+            for p in self.attr_path
         ]
 
     def get_lib_val(self, lib: LibT) -> T:
@@ -102,7 +103,7 @@ class ParameterPath(BaseModel, Generic[T]):
             parent_path (ParameterPath): The parent path of the current path.
         """
         # TODO: how can we type-narrow the generic parameterpath here?
-        return ParameterPath(path=self.path[:-1])
+        return ParameterPath(attr_path=self.attr_path[:-1])
 
 
 Priority = Literal["low", "high"]
@@ -186,7 +187,7 @@ class Action(BaseModel, Generic[T]):
             key (str | int | ParameterPath): The key of the original value in the library object.
         """
         # TODO: handle cases where final key is a ParameterPath!!
-        return self.target.path[-1]
+        return self.target.attr_path[-1]
 
     def get_original_obj(self, lib: LibT):
         """Retrieve the object containing the original value in the library object.
