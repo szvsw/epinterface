@@ -9,7 +9,13 @@ copyright: Maintained by <a href="https://github.com/szvsw">Sam Wolk</a>.
 
 nav:
   - Home: index.md
-  - Modules: modules.md
+  - Modules:
+      - Geometry: modules/geometry.md
+      - Weather: modules/weather.md
+      - EnergyPlus: modules/interface.md
+      - ClimateStudio: modules/climate-studio.md
+      - Builder: modules/builder.md
+      - Actions: modules/actions.md
 plugins:
   - search
   - mkdocstrings:

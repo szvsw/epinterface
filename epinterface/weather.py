@@ -30,7 +30,7 @@ def check_path_ends_with_zip(url: AnyUrl):
         NotAZipError: If the URL does not end with a .zip extension.
 
     Returns:
-        AnyUrl: The URL.
+        url (AnyUrl): The URL.
     """
     if not url.path:
         raise NotAZipError()
