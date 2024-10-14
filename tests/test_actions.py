@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from epinterface.actions import (
+    ActionLibrary,
     ActionSequence,
     DeltaVal,
     ParameterPath,
@@ -426,3 +427,105 @@ def test_priorities(lib: ClimateStudioLibraryV2):
 
     action.run(lib)
     assert lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson == 1.0
+
+
+def test_nested_action_sequence(lib: ClimateStudioLibraryV2):
+    """Test applying a nested sequence of actions."""
+    first_space_use_name = next(iter(lib.SpaceUses.keys()))
+    lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson = 2.0
+    pth = ParameterPath[float](
+        path=[
+            "SpaceUses",
+            first_space_use_name,
+            "HotWater",
+            "FlowRatePerPerson",
+        ]
+    )
+
+    actions = [
+        DeltaVal[float](
+            target=pth,
+            delta=1,
+            op="+",
+        ),
+        ActionSequence(
+            actions=[
+                DeltaVal[float](
+                    target=pth,
+                    delta=1,
+                    op="+",
+                ),
+                ActionSequence(
+                    actions=[
+                        DeltaVal[float](
+                            target=pth,
+                            delta=1,
+                            op="+",
+                        ),
+                    ],
+                    name="nested-action-sequence",
+                ),
+            ],
+            name="nested-action-sequence",
+        ),
+    ]
+
+    action_sequence = ActionSequence(actions=actions, name="action-sequence-test")
+    action_sequence.run(lib)
+    assert lib.SpaceUses[first_space_use_name].HotWater.FlowRatePerPerson == 5.0
+
+
+def test_action_library(lib_dict: dict):
+    """Test creating a library of actions and getting an action to apply."""
+    action1 = DeltaVal[float](
+        target=ParameterPath[float](path=["a", "b", "c"]),
+        delta=1,
+        op="+",
+    )
+    action2 = ReplaceWithVal[float](
+        target=ParameterPath[float](path=["a", "b", "d", 0]),
+        val=5,
+    )
+
+    action_sequence = ActionSequence(
+        actions=[action1, action2], name="action-sequence-test"
+    )
+    lib = ActionLibrary(actions=[action_sequence], name="action-library-test")
+
+    # check that a missing key raises a keyerror
+
+    with pytest.raises(KeyError):
+        lib.get("missing-key")
+
+    action = lib.get("action-sequence-test")
+    assert action is not None
+    assert action.name == "action-sequence-test"
+
+    action.run(lib_dict)
+    assert lib_dict["a"]["b"]["c"] == 2
+    assert lib_dict["a"]["b"]["d"][0] == 5
+
+
+def test_actionlib_with_duped_names_fails():
+    """Test that an action library with duplicate names fails."""
+    action1 = DeltaVal[float](
+        target=ParameterPath[float](path=["a", "b", "c"]),
+        delta=1,
+        op="+",
+    )
+    action2 = ReplaceWithVal[float](
+        target=ParameterPath[float](path=["a", "b", "d", 0]),
+        val=5,
+    )
+
+    action_sequence_1 = ActionSequence(
+        actions=[action1, action2], name="action-sequence-test"
+    )
+    action_sequence_2 = ActionSequence(
+        actions=[action1, action2], name="action-sequence-test"
+    )
+
+    with pytest.raises(ValidationError):
+        ActionLibrary(
+            actions=[action_sequence_1, action_sequence_2], name="action-library-test"
+        )

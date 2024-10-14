@@ -5,7 +5,7 @@ from collections.abc import Callable
 from functools import reduce
 from typing import Any, Generic, Literal, TypeVar, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from epinterface.climate_studio.builder import Model
 from epinterface.climate_studio.interface import ClimateStudioLibraryV2
@@ -304,10 +304,10 @@ class ActionSequence(BaseModel):
     """A sequence of actions to perform on a library object."""
 
     name: str = Field(..., description="The name of the action sequence.")
-    actions: list["DeltaVal | ReplaceWithExisting | ReplaceWithVal"] = (
-        Field(  # TODO: should we allow nested actionsequences?
-            ..., description="A sequence of actions to perform on a library object."
-        )
+    actions: list[
+        "DeltaVal | ReplaceWithExisting | ReplaceWithVal | ActionSequence"
+    ] = Field(  # TODO: should we allow nested actionsequences?
+        ..., description="A sequence of actions to perform on a library object."
     )
 
     def run(self, lib: LibT) -> LibT:
@@ -322,3 +322,52 @@ class ActionSequence(BaseModel):
         for action in self.actions:
             lib = action.run(lib)
         return lib
+
+
+class ActionLibrary(BaseModel):
+    """A library of action sequences, e.g. to represent deep and shallow retrofits for different types of buildings."""
+
+    name: str = Field(..., description="The name of the action library.")
+    actions: list[ActionSequence] = Field(
+        ..., description="A list of action sequences to perform on a library object."
+    )
+
+    @model_validator(mode="after")
+    def check_action_names_are_unique(self):
+        """Check that the names of the action sequences in the action library are unique.
+
+        Raises:
+            ValueError: If the names of the action sequences are not unique.
+        """
+        action_names = self.action_names
+        if len(action_names) != len(set(action_names)):
+            msg = f"Action names must be unique: {', '.join(action_names)}"
+            raise ValueError(msg)
+        return self
+
+    @property
+    def action_names(self):
+        """Return the names of the action sequences in the action library.
+
+        Returns:
+            action_names (list[str]): The names of the action sequences in the action
+        """
+        return [action.name for action in self.actions]
+
+    def get(self, name: str) -> ActionSequence:
+        """Retrieve an action sequence by name.
+
+        Args:
+            name (str): The name of the action sequence to retrieve.
+
+        Returns:
+            action (ActionSequence): The action sequence with the specified name.
+
+        Raises:
+            KeyError: If the action sequence with the specified name is not found in the action library.
+        """
+        if name in self.action_names:
+            return self.actions[self.action_names.index(name)]
+        else:
+            msg = f"Action sequence not found: {name}\nAvailable action sequences: {', '.join(self.action_names)}"
+            raise KeyError(msg)

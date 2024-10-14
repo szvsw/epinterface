@@ -1,0 +1,156 @@
+name: Everett Retrofits
+actions:
+  - name: Shallow Retrofit
+    actions:
+      - target:
+          path:
+            - lib
+            - SpaceUses
+            - path:
+                - space_use_name
+            - EquipmentPowerDensity
+        priority: low
+        val: 2.3
+      - target:
+          path:
+            - lib
+            - SpaceUses
+            - path:
+                - space_use_name
+            - LightingPowerDensity
+        priority: low
+        val: 2.1
+      - target:
+          path:
+            - lib
+            - Envelopes
+            - path:
+                - envelope_name
+            - Infiltration
+            - InfiltrationAch
+        priority: low
+        val: 0.1
+  - name: Deep Retrofit SFH
+    actions:
+      - name: Shallow Retrofit
+        actions:
+          - target:
+              path:
+                - lib
+                - SpaceUses
+                - path:
+                    - space_use_name
+                - EquipmentPowerDensity
+            priority: low
+            val: 2.3
+          - target:
+              path:
+                - lib
+                - SpaceUses
+                - path:
+                    - space_use_name
+                - LightingPowerDensity
+            priority: low
+            val: 2.1
+          - target:
+              path:
+                - lib
+                - Envelopes
+                - path:
+                    - envelope_name
+                - Infiltration
+                - InfiltrationAch
+            priority: low
+            val: 0.1
+      - target:
+          path:
+            - lib
+            - Envelopes
+            - path:
+                - envelope_name
+            - WindowDefinition
+            - Construction
+        priority: null
+        val: Template_post_2003
+      - target:
+          path:
+            - lib
+            - Envelopes
+            - path:
+                - envelope_name
+            - Construction
+            - FacadeConstruction
+        priority: null
+        val: MA_SFH_post_2003_facade
+      - target:
+          path:
+            - lib
+            - Envelopes
+            - path:
+                - envelope_name
+            - Construction
+            - RoofConstruction
+        priority: null
+        val: MA_SFH_new_roof
+  - name: Deep Retrofit MFH
+    actions:
+      - name: Shallow Retrofit
+        actions:
+          - target:
+              path:
+                - lib
+                - SpaceUses
+                - path:
+                    - space_use_name
+                - EquipmentPowerDensity
+            priority: low
+            val: 2.3
+          - target:
+              path:
+                - lib
+                - SpaceUses
+                - path:
+                    - space_use_name
+                - LightingPowerDensity
+            priority: low
+            val: 2.1
+          - target:
+              path:
+                - lib
+                - Envelopes
+                - path:
+                    - envelope_name
+                - Infiltration
+                - InfiltrationAch
+            priority: low
+            val: 0.1
+      - target:
+          path:
+            - lib
+            - Envelopes
+            - path:
+                - envelope_name
+            - WindowDefinition
+            - Construction
+        priority: null
+        val: Template_post_2003
+      - target:
+          path:
+            - lib
+            - Envelopes
+            - path:
+                - envelope_name
+            - Construction
+            - FacadeConstruction
+        priority: null
+        val: MA_MFH_post_2003_facade
+      - target:
+          path:
+            - lib
+            - Envelopes
+            - path:
+                - envelope_name
+            - Construction
+            - RoofConstruction
+        priority: null
+        val: MA_MFH_roof_mid_to_new
