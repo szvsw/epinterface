@@ -14,8 +14,8 @@ def run():
     yr_brackets = ["pre_1975", "btw_1975_2003", "post_2003"]
     sizes = ["SF", "MF"]
     # conditioned_basement = [(False, False), (True, False), (True, True)]
-    conditioned_basement = [(False, False)]
-    num_stories = 1
+    basement_config = [(True, False)]
+    num_stories = 3
     wwr = 0.15
     f2f = 3.5
     w = 10
@@ -25,7 +25,7 @@ def run():
     all_results: list[pd.DataFrame] = []
     for size in sizes:
         for yr_bracket in yr_brackets:
-            for has_basement, basement_conditioned in conditioned_basement:
+            for has_basement, basement_conditioned in basement_config:
                 lib_path = "notebooks/everett_lib.json"
 
                 with open(lib_path) as f:
