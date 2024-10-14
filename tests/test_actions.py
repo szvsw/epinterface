@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from epinterface.climate_studio.actions import (
+from epinterface.actions import (
     ActionSequence,
     DeltaVal,
     ParameterPath,
