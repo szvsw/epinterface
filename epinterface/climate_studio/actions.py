@@ -302,8 +302,10 @@ class ActionSequence(BaseModel):
     """A sequence of actions to perform on a library object."""
 
     name: str = Field(..., description="The name of the action sequence.")
-    actions: list[DeltaVal | ReplaceWithExisting | ReplaceWithVal] = Field(
-        ..., description="A sequence of actions to perform on a library object."
+    actions: list["DeltaVal | ReplaceWithExisting | ReplaceWithVal"] = (
+        Field(  # TODO: should we allow nested actionsequences?
+            ..., description="A sequence of actions to perform on a library object."
+        )
     )
 
     def run(self, lib: LibT) -> LibT:
