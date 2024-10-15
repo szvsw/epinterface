@@ -8,6 +8,7 @@ actions:
             - SpaceUses
             - path:
                 - space_use_name
+            - Loads
             - EquipmentPowerDensity
         priority: low
         val: 2.3
@@ -17,6 +18,7 @@ actions:
             - SpaceUses
             - path:
                 - space_use_name
+            - Loads
             - LightingPowerDensity
         priority: low
         val: 2.1
@@ -30,7 +32,7 @@ actions:
             - InfiltrationAch
         priority: low
         val: 0.1
-  - name: Deep Retrofit SFH
+  - name: Deep Retrofit SF
     actions:
       - name: Shallow Retrofit
         actions:
@@ -40,6 +42,7 @@ actions:
                 - SpaceUses
                 - path:
                     - space_use_name
+                - Loads
                 - EquipmentPowerDensity
             priority: low
             val: 2.3
@@ -49,6 +52,7 @@ actions:
                 - SpaceUses
                 - path:
                     - space_use_name
+                - Loads
                 - LightingPowerDensity
             priority: low
             val: 2.1
@@ -78,7 +82,7 @@ actions:
             - Envelopes
             - path:
                 - envelope_name
-            - Construction
+            - Constructions
             - FacadeConstruction
         priority: null
         val: MA_SFH_post_2003_facade
@@ -88,11 +92,11 @@ actions:
             - Envelopes
             - path:
                 - envelope_name
-            - Construction
+            - Constructions
             - RoofConstruction
         priority: null
         val: MA_SFH_new_roof
-  - name: Deep Retrofit MFH
+  - name: Deep Retrofit MF
     actions:
       - name: Shallow Retrofit
         actions:
@@ -102,6 +106,7 @@ actions:
                 - SpaceUses
                 - path:
                     - space_use_name
+                - Loads
                 - EquipmentPowerDensity
             priority: low
             val: 2.3
@@ -111,6 +116,7 @@ actions:
                 - SpaceUses
                 - path:
                     - space_use_name
+                - Loads
                 - LightingPowerDensity
             priority: low
             val: 2.1
@@ -140,7 +146,7 @@ actions:
             - Envelopes
             - path:
                 - envelope_name
-            - Construction
+            - Constructions
             - FacadeConstruction
         priority: null
         val: MA_MFH_post_2003_facade
@@ -150,7 +156,7 @@ actions:
             - Envelopes
             - path:
                 - envelope_name
-            - Construction
+            - Constructions
             - RoofConstruction
         priority: null
         val: MA_MFH_roof_mid_to_new
