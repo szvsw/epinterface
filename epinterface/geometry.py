@@ -2,7 +2,6 @@
 
 from typing import Literal, cast
 
-import geopandas as gpd
 import numpy as np
 from archetypal.idfclass import IDF
 from geomeppy.geom.vectors import Vector2D
@@ -51,6 +50,21 @@ def match_idf_to_building_and_neighbors(
         (translate(n, xoff=-centroid.x, yoff=-centroid.y), h) for n, h in neighbor_geos
     ]
     idf_lengths = {(e.p1 - e.p2).length for e in idf.bounding_box().edges}
+    idf_x_coords = [e.p1.x for e in idf.bounding_box().edges]
+    x_span = max(idf_x_coords) - min(idf_x_coords)
+    idf_y_coords = [e.p1.y for e in idf.bounding_box().edges]
+    y_span = max(idf_y_coords) - min(idf_y_coords)
+    # TODO: better handling for boxes that aren't [(0,0),...]
+    if x_span < y_span:
+        raise NotImplementedError(
+            "This function assumes that the long edge is the x-axis, which is not the case."
+        )
+    x_min = min(idf_x_coords)
+    y_min = min(idf_y_coords)
+    if abs(x_min) > 1e-3 or abs(y_min) > 1e-3:
+        raise NotImplementedError(
+            "This function assumes that the building has the lowerleft corner at the origin, which is not the case."
+        )
     if len(idf_lengths) > 2:
         raise NotImplementedError(
             "The IDF model is not a rectangle, which is not yet supported."
@@ -58,103 +72,20 @@ def match_idf_to_building_and_neighbors(
 
     long_length = max(idf_lengths)
     short_length = min(idf_lengths)
+
     idf.scale(target_long_length / long_length, anchor=Vector2D(0, 0), axes="x")
     idf.scale(target_short_length / short_length, anchor=Vector2D(0, 0), axes="y")
-    idf.translate((-target_long_length / 2, -target_short_length / 2, 0))
+    idf.translate((
+        -target_long_length / 2,
+        -target_short_length / 2,
+        0,
+    ))  # This translation makes an assumption that the source building is at [(0,0),(0,w),...]
     idf.rotate(rotation_angle * 180 / np.pi)
     for i, (geom, height) in enumerate(translated_neighbors):
         if not height:
             height = 3.5 * 2
         if np.isnan(height):
             height = 3.5 * 2
-        idf.add_shading_block(
-            name=f"shading_{i}",
-            coordinates=[Vector2D(*coord) for coord in geom.exterior.coords[:-1]],
-            height=height,
-        )
-    return idf
-
-
-def match_idf_to_scene(
-    idf: IDF,
-    gdf_buildings: gpd.GeoDataFrame,
-    building_ix: int,
-    neighbor_threshold: float = 50,
-    apply_z_scale: bool = False,
-):
-    """Match an IDF model to a scene of buildings by scaling and rotating the IDF model.
-
-    Additionally adds shading blocks for neighboring buildings.
-
-    Args:
-        idf (IDF): The IDF model to match.
-        gdf_buildings (gpd.GeoDataFrame): The scene of buildings.
-        building_ix (int): The index of the building in the scene to match.
-        neighbor_threshold (float): The distance threshold for a building to be considered a neighbor.
-        apply_z_scale (bool): Whether to scale the IDF model in the z direction.
-
-
-    Returns:
-        idf (IDF): The matched IDF model.
-    """
-    # TODO: add PANDERA schema validation
-    center = gdf_buildings.iloc[building_ix].rotated_rectangle
-    is_neighbor_mask = gdf_buildings.rotated_rectangle.apply(
-        lambda x: x.distance(center) < neighbor_threshold
-    )
-    is_neighbor_mask.iloc[building_ix] = False
-    neighbor_intersects = gdf_buildings.rotated_rectangle[is_neighbor_mask].apply(
-        lambda x: x.intersects(center)
-    )
-    is_non_intersecting_neighbor = (
-        ~neighbor_intersects.reindex(gdf_buildings.index, fill_value=False)
-        & is_neighbor_mask
-    )
-    non_intersecting_neighbor_geometry = gdf_buildings.rotated_rectangle[
-        is_non_intersecting_neighbor
-    ]
-    translated_neighbors = non_intersecting_neighbor_geometry.apply(
-        lambda x: translate(x, xoff=-center.centroid.x, yoff=-center.centroid.y)
-    )
-    translated_neighbor_heights = gdf_buildings.height[is_non_intersecting_neighbor]
-
-    idf_lengths = {(e.p1 - e.p2).length for e in idf.bounding_box().edges}
-    # TODO: handle the case where the idf model building is not a rectangle
-    # TODO: errors/warnings on scaling factors being too large or aspect ratio too
-    # TODO: handle cases where the base idf building is rotated
-    # different
-    if len(idf_lengths) != 2:
-        raise NotImplementedError(
-            "The IDF model is not a rectangle, which is not yet supported."
-        )
-    short_length = min(idf_lengths)
-    long_length = max(idf_lengths)
-    z_coords = [
-        obj[f"Vertex_{i}_Zcoordinate"]
-        for obj in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
-        for i in range(1, 5)
-    ]
-    z_coords = [float(z) for z in z_coords if z]
-    model_height = max(z_coords)
-    building_short_length = gdf_buildings.iloc[building_ix].short_edge
-    building_long_length = gdf_buildings.iloc[building_ix].long_edge
-    building_height = gdf_buildings.iloc[building_ix].height
-    idf.scale(building_long_length / long_length, anchor=Vector2D(0, 0), axes="x")
-    idf.scale(building_short_length / short_length, anchor=Vector2D(0, 0), axes="y")
-    if apply_z_scale:
-        idf.scale(building_height / model_height, anchor=Vector2D(0, 0), axes="z")
-
-    idf.translate((-building_long_length / 2, -building_short_length / 2, 0))
-    rotation_angle = gdf_buildings.iloc[building_ix].long_edge_angle
-    idf.rotate(rotation_angle * 180 / np.pi)
-
-    # add the neighbors as shading blocks
-    for i, geom in enumerate(translated_neighbors):
-        height = translated_neighbor_heights.iloc[i]
-        if not height:
-            height = 3.5
-        if np.isnan(height):
-            height = 3.5
         idf.add_shading_block(
             name=f"shading_{i}",
             coordinates=[Vector2D(*coord) for coord in geom.exterior.coords[:-1]],

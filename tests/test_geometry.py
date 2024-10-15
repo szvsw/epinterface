@@ -2,11 +2,13 @@
 
 import itertools
 
+import numpy as np
 import pytest
 from archetypal.idfclass import IDF
+from shapely import Polygon
 
 from epinterface.data import DefaultEPWPath, DefaultMinimalIDFPath
-from epinterface.geometry import ShoeboxGeometry
+from epinterface.geometry import ShoeboxGeometry, match_idf_to_building_and_neighbors
 
 
 @pytest.fixture(scope="function")
@@ -34,6 +36,7 @@ parameter_combinations = list(
 )
 
 
+# @pytest.mark.skip("This test is too slow")
 @pytest.mark.parametrize(
     "floor_2_floor_height, num_floors, zoning, basement, roof_height",
     parameter_combinations,
@@ -97,6 +100,7 @@ parameter_combinations = list(
 )
 
 
+# @pytest.mark.skip("This test is too slow")
 @pytest.mark.parametrize(
     "floor_2_floor_height, num_floors, zoning, basement, roof_height",
     parameter_combinations,
@@ -140,6 +144,7 @@ parameter_combinations = list(
 )
 
 
+# @pytest.mark.skip("This test is too slow")
 @pytest.mark.parametrize(
     "floor_2_floor_height, num_floors, zoning, basement, roof_height",
     parameter_combinations,
@@ -207,6 +212,7 @@ parameter_combinations = list(
 )
 
 
+# @pytest.mark.skip("This test is too slow")
 @pytest.mark.parametrize(
     "floor_2_floor_height, num_floors, zoning, basement, roof_height",
     parameter_combinations,
@@ -258,6 +264,7 @@ parameter_combinations = list(
 )
 
 
+# @pytest.mark.skip("This test is too slow")
 @pytest.mark.parametrize(
     "floor_2_floor_height, num_floors, zoning, basement, roof_height",
     parameter_combinations,
@@ -351,6 +358,7 @@ parameter_combinations = list(
 )
 
 
+# @pytest.mark.skip("This test is too slow")
 @pytest.mark.parametrize(
     "floor_2_floor_height, num_floors, zoning, basement, roof_height",
     parameter_combinations,
@@ -427,6 +435,7 @@ parameter_combinations = list(
 )
 
 
+# @pytest.mark.skip("This test is too slow")
 @pytest.mark.parametrize(
     "floor_2_floor_height, num_floors, zoning, basement, roof_height",
     parameter_combinations,
@@ -462,3 +471,168 @@ def test_num_ceil_sfs(
     assert (
         expected_number_ceiling_srfs == n_ceiling_srfs
     ), f"Expected {expected_number_ceiling_srfs} ceiling surfaces, found {n_ceiling_srfs}."
+
+
+widths = [10, 20]
+depths = [10, 20]
+rotation_angle = [0, 37, 153, 289, 360]
+target_length = [9, 11]
+
+
+@pytest.mark.parametrize(
+    "width, depth, rotation_angle, target_length",
+    list(itertools.product(widths, depths, rotation_angle, target_length)),
+)
+def test_match_idf_to_geometry_neighbors(
+    minimal_idf, width, depth, rotation_angle, target_length
+):
+    """Test that the geometry is correctly matched to the building and neighbors."""
+    idf = minimal_idf
+    # make the shoebox geometry
+    target_short_length = target_length - 2
+    target_long_length = target_length
+    geom = ShoeboxGeometry(
+        x=0,
+        y=0,
+        w=width,
+        d=depth,
+        h=3.5,
+        num_stories=2,
+        zoning="core/perim",
+        basement=False,
+        wwr=0.15,
+        roof_height=None,
+    )
+    idf = geom.add(idf)
+
+    neighbors: list[Polygon | str | None] = [
+        Polygon(
+            [
+                (-10, -10),
+                (-15, -10),
+                (-15, -15),
+                (-10, -15),
+            ],
+        ),
+        Polygon(
+            [
+                (30, 30),
+                (35, 30),
+                (35, 35),
+                (30, 35),
+            ],
+        ),
+    ]
+    building = Polygon([
+        [7, 14],
+        [7, 5],
+        [15, 5],
+        [15, 14],
+    ])
+
+    if width < depth:
+        with pytest.raises(NotImplementedError):
+            idf = match_idf_to_building_and_neighbors(
+                idf=idf,
+                building=building,
+                neighbor_polys=neighbors,
+                neighbor_f2f_height=3.5,
+                neighbor_floors=[2, 4],
+                target_long_length=target_long_length,
+                target_short_length=target_short_length,
+                rotation_angle=rotation_angle,
+            )
+    else:
+        idf = match_idf_to_building_and_neighbors(
+            idf=idf,
+            building=building,
+            neighbor_polys=neighbors,
+            neighbor_f2f_height=3.5,
+            neighbor_floors=[2, 4],
+            target_long_length=target_long_length,
+            target_short_length=target_short_length,
+            rotation_angle=rotation_angle,
+        )
+        # get a list of the shading surfaces
+        shading_surfaces = idf.idfobjects["SHADING:SITE:DETAILED"]
+
+        assert len(shading_surfaces) == 8
+        # get the z coordinates of the surfaces
+        z_coordinates = (
+            [float(srf.Vertex_1_Zcoordinate) for srf in shading_surfaces]
+            + [float(srf.Vertex_2_Zcoordinate) for srf in shading_surfaces]
+            + [float(srf.Vertex_3_Zcoordinate) for srf in shading_surfaces]
+            + [float(srf.Vertex_4_Zcoordinate) for srf in shading_surfaces]
+        )
+        # get the unique z coordinates
+        unique_z_coordinates = set(z_coordinates)
+        unique_z = np.array(sorted(unique_z_coordinates))
+        expected_z = np.array([0, 3.5 * 2, 3.5 * 4])
+        assert np.allclose(
+            unique_z, expected_z
+        ), f"Expected: {expected_z}, found: {unique_z}"
+
+        assert len(unique_z_coordinates) == 3
+
+        building_surfaces = idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+        x_coords = (
+            [float(srf.Vertex_1_Xcoordinate) for srf in building_surfaces]
+            + [float(srf.Vertex_2_Xcoordinate) for srf in building_surfaces]
+            + [float(srf.Vertex_3_Xcoordinate) for srf in building_surfaces]
+            + [float(srf.Vertex_4_Xcoordinate) for srf in building_surfaces]
+        )
+        x_max = max(x_coords)
+        x_min = min(x_coords)
+
+        y_coords = (
+            [float(srf.Vertex_1_Ycoordinate) for srf in building_surfaces]
+            + [float(srf.Vertex_2_Ycoordinate) for srf in building_surfaces]
+            + [float(srf.Vertex_3_Ycoordinate) for srf in building_surfaces]
+            + [float(srf.Vertex_4_Ycoordinate) for srf in building_surfaces]
+        )
+        y_max = max(y_coords)
+        y_min = min(y_coords)
+        # compute where (x,y) moves to after a rotation around the origin by c degrees counterclockwise
+        lower_right_corner = np.array([
+            target_long_length / 2,
+            -target_short_length / 2,
+        ])
+        upper_right_corner = np.array([target_long_length / 2, target_short_length / 2])
+        lower_left_corner = np.array([
+            -target_long_length / 2,
+            -target_short_length / 2,
+        ])
+        upper_left_corner = np.array([-target_long_length / 2, target_short_length / 2])
+        rotation_matrix = np.array([
+            [np.cos(rotation_angle), -np.sin(rotation_angle)],
+            [np.sin(rotation_angle), np.cos(rotation_angle)],
+        ])
+        new_lower_right = np.dot(rotation_matrix, lower_right_corner)
+        new_upper_right = np.dot(rotation_matrix, upper_right_corner)
+        new_lower_left = np.dot(rotation_matrix, lower_left_corner)
+        new_upper_left = np.dot(rotation_matrix, upper_left_corner)
+        new_x_max_expected = max(
+            new_lower_right[0], new_upper_right[0], new_lower_left[0], new_upper_left[0]
+        )
+        new_x_min_expected = min(
+            new_lower_right[0], new_upper_right[0], new_lower_left[0], new_upper_left[0]
+        )
+        new_y_max_expected = max(
+            new_lower_right[1], new_upper_right[1], new_lower_left[1], new_upper_left[1]
+        )
+        new_y_min_expected = min(
+            new_lower_right[1], new_upper_right[1], new_lower_left[1], new_upper_left[1]
+        )
+
+        assert (
+            pytest.approx(new_x_max_expected, rel=1e-2) == x_max
+        ), f"Expected x_max to be {new_x_max_expected}, found {x_max}"
+        assert (
+            pytest.approx(new_x_min_expected, rel=1e-2) == x_min
+        ), f"Expected x_min to be {new_x_min_expected}, found {x_min}"
+        assert (
+            pytest.approx(new_y_max_expected, rel=1e-2) == y_max
+        ), f"Expected y_max to be {new_y_max_expected}, found {y_max}"
+        assert (
+            pytest.approx(new_y_min_expected, rel=1e-2) == y_min
+        ), f"Expected y_min to be {new_y_min_expected}, found {y_min}"
