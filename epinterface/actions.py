@@ -371,3 +371,12 @@ class ActionLibrary(BaseModel):
         else:
             msg = f"Action sequence not found: {name}\nAvailable action sequences: {', '.join(self.action_names)}"
             raise KeyError(msg)
+
+
+ParameterPath.model_rebuild()
+Action.model_rebuild()
+ReplaceWithExisting.model_rebuild()
+ReplaceWithVal.model_rebuild()
+DeltaVal.model_rebuild()
+ActionSequence.model_rebuild()
+ActionLibrary.model_rebuild()
