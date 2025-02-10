@@ -6,7 +6,7 @@ import numpy as np
 from archetypal.idfclass import IDF
 from geomeppy.geom.vectors import Vector2D
 from pydantic import BaseModel, Field
-from shapely import Polygon, from_wkt
+from shapely import LineString, Polygon, from_wkt
 from shapely.affinity import translate
 
 
@@ -92,6 +92,104 @@ def match_idf_to_building_and_neighbors(
             height=height,
         )
     return idf
+
+
+def compute_shading_mask(
+    building: Polygon | str,
+    neighbors: list[Polygon | str | None],
+    neighbor_floors: list[float | int | None],
+    neighbor_f2f_height: float,
+    azimuthal_angle: float,
+) -> np.ndarray:
+    """Compute the shading mask for the building.
+
+    This will emit a ray from the center of the building in
+    every direction according to the azimuthal angle division
+    of a circle.
+
+    It will compute the intersection of each ray with all the neighbor edges,
+    and then determine the height of the each edge that intersects the ray.
+
+    That height is then used to determine an elevation angle; the max of the elevation
+    angles for each ray is then the shading mask value for that direction.
+
+    Note that this checks all edges, so its crucial that the neighbors have
+    already been culled to the relevant building to avoid unnecessary computation.
+
+    Args:
+        building (Polygon | str): The building to compute the shading mask for.
+        neighbors (list[Polygon | str | None]): The neighbors to compute the shading mask for.
+        neighbor_floors (list[float | int | None]): The floors of the neighbors.
+        neighbor_f2f_height (float): The height of the neighbors.
+        azimuthal_angle (float): The azimuthal angle to compute the shading mask for.
+
+    Returns:
+        shading_mask (np.ndarray): The shading mask for the building.
+    """
+    building_geom = building if isinstance(building, Polygon) else from_wkt(building)
+
+    neighbor_geo_and_height = [
+        (cast(Polygon, from_wkt(n)), h * neighbor_f2f_height)
+        if isinstance(n, str)
+        else (n, h * neighbor_f2f_height)
+        for n, h in zip(neighbors, neighbor_floors, strict=True)
+        if n is not None and h is not None
+    ]
+    neighbor_geoms = [geom for geom, _ in neighbor_geo_and_height]
+    neighbor_heights = [height for _, height in neighbor_geo_and_height]
+
+    # first we compute the number of rays we need to cast
+    # along with the angles at which to cast them
+    n_rays = int(2 * np.pi / azimuthal_angle)
+    ray_angles = np.linspace(0, 2 * np.pi - azimuthal_angle, n_rays)
+    ray_distance = 9999  # an arbitrarily large distance
+
+    # extract the relevant geometry data
+    centroid = building_geom.centroid
+
+    shading_mask = np.zeros(n_rays)
+
+    for ray_angle_idx, ray_angle in enumerate(ray_angles):
+        # create the ray as a line segment
+        # using basic trig
+        x_off, y_off = (
+            ray_distance * np.cos(ray_angle),
+            ray_distance * np.sin(ray_angle),
+        )
+        centroid_moved = translate(centroid, x_off, y_off)
+        ray = LineString([centroid, centroid_moved])
+
+        # track the max elevation angle for this ray so far
+        max_elevation_angle = 0
+
+        for geom, height in zip(neighbor_geoms, neighbor_heights, strict=True):
+            # create the line segments of the boundary
+            x_coords = np.array(geom.boundary.xy[0])
+            y_coords = np.array(geom.boundary.xy[1])
+
+            for x0, y0, x1, y1 in zip(
+                x_coords[:-1],
+                y_coords[:-1],
+                x_coords[1:],
+                y_coords[1:],
+                strict=True,
+            ):
+                line = LineString([(x0, y0), (x1, y1)])
+
+                # compute the intersection and continue
+                # if there is no intersection
+                intersection = ray.intersection(line)
+                if intersection.is_empty:
+                    continue
+
+                # compute the elevation angle and store it if it
+                # is greater than the current max
+                distance = intersection.distance(centroid)
+                elevation_angle = np.arctan2(height, distance)
+                max_elevation_angle = max(max_elevation_angle, elevation_angle)
+
+        shading_mask[ray_angle_idx] = max_elevation_angle
+    return shading_mask
 
 
 ZoningType = Literal["core/perim", "by_storey"]
