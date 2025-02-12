@@ -11,8 +11,8 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
-archetypal = {git = "https://github.com/samuelduchesne/archetypal", branch = "main"}
+python = ">=3.10,<3.13"
+archetypal = "^2.18.4"
 geopandas = "^1.0.1"
 pydantic = "^2.9.2"
 pandas = "^2.2.3"
@@ -41,6 +41,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pyright]
 include = ["epinterface"]
+ignore = ["epinterface/sbem"]
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
