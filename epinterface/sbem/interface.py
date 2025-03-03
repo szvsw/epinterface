@@ -188,7 +188,7 @@ BoolStr = Annotated[bool, BeforeValidator(str_to_bool)]
 FloatListStr = Annotated[list[float], BeforeValidator(str_to_float_list)]
 
 
-# TODO: add this info to template
+# TODO: Make this at the library level not the row level?
 class SBEMTemplateBuilderMetadata(BaseModel):
     """Metadata for a SBEM template table object."""
 
@@ -260,9 +260,8 @@ class ScheduleTransferObject(BaseModel):
 
 # TODO: add schedule interface class
 
+
 # occupancy
-
-
 class SBEMTemplateBuilderOccupancy(NamedObject):
     """An occupancy object in the SBEM library."""
 
@@ -275,9 +274,7 @@ class SBEMTemplateBuilderOccupancy(NamedObject):
     )
     OccupancySchedule: str = Field(..., title="Occupancy schedule of the object")
     PeopleIsOn: BoolStr = Field(..., title="People are on")
-    MetabolicRate = physical_constants[
-        "MetabolicRate"
-    ]  # TODO: Ask Sam how we handle constants
+    MetabolicRate = physical_constants["MetabolicRate"]
 
     @property
     def MetabolicRate_met_to_W(self):
@@ -458,10 +455,12 @@ class SBEMTemplateBuilderEquipment(NamedObject):
         return idf
 
 
+# TODO: Potentially duplicative with HVACTempelateThermostat in epinterface > interface
 class SBEMTemplateBuilderThermostat(NamedObject):
     """A thermostat object in the SBEM library."""
 
     Metadata: SBEMTemplateBuilderMetadata = Field(..., title="Metadata of the object")
+    ThermostatIsOn: BoolStr = Field(..., title="Thermostat is on")
     HeatingSetpoint: float = Field(
         ...,
         title="Heating setpoint of the object",
@@ -475,23 +474,81 @@ class SBEMTemplateBuilderThermostat(NamedObject):
     )
     CoolingSchedule: str = Field(..., title="Cooling schedule of the object")
 
+    def add_thermostat_to_idf_zone(
+        self, idf: IDF, target_zone_or_zone_list_name: str
+    ) -> IDF:
+        """Add thermostat settings to an IDF zone.
 
-class ZoneSpaceUse(
-    SBEMTemplateBuilderOccupancy,
-    SBEMTemplateBuilderLighting,
-    SBEMTemplateBuilderEquipment,
-    SBEMTemplateBuilderThermostat,
-    NamedObject,
-    extra="forbid",
-):
+        Args:
+            idf (IDF): The IDF object to add the thermostat settings to.
+            target_zone_or_zone_list_name (str): The name of the zone or zone list to add the thermostat settings to.
+
+        Returns:
+            IDF: The updated IDF object.
+        """
+        if not self.ThermostatIsOn:
+            return idf
+
+        logger.warning(
+            f"Adding thermostat to zone with heating schedule {self.HeatingSchedule} and cooling schedule {self.CoolingSchedule}.  Make sure these schedules exist."
+        )
+
+        idf = idf.newidfobject("HVACTEMPLATE:THERMOSTAT", **self.model_dump())
+        return idf
+
+
+class ScheduleException(SBEMTemplateBuilderException):
+    """An error raised when a schedule cannot be parsed."""
+
+    def __init__(self, schedule_name: str):
+        """Initialize the exception with a message.
+
+        Args:
+            schedule_name (str): The day schedule
+
+        """
+        self.schedule_name = schedule_name
+        self.message = f"Failed to parse schedule {schedule_name}"
+        super().__init__(self.message)
+
+
+# TODO: Add validation when schedules are added to the objects - update this method once schedule methodoligies are confirmed
+def SBEMScheduleValidator(NamedObject, extra="forbid"):
+    """Schedule validation based on presets."""
+
+    @model_validator
+    def schedule_checker(self, schedule_day, schedule_week, schedule_year):
+        """Validates that the schedules follow the required schema."""
+        if not schedule_day:
+            raise ScheduleException
+        if not schedule_week:
+            raise ScheduleException
+        if not schedule_year:
+            raise ScheduleException
+        return schedule_day, schedule_week, schedule_year
+
+    def schedule_cross_val(self, schedule_day, schedule_week, schedule_year):
+        """Confirm that a named schedule in the schedule year exists in the schedule week and schedule day."""
+        if schedule_year.Name not in schedule_week.ScheduleNames:
+            raise ScheduleException
+        if schedule_week.Name not in schedule_day.ScheduleNames:
+            raise ScheduleException
+        return schedule_day, schedule_week, schedule_year
+
+
+class ZoneSpaceUse(NamedObject):
     """Space use object."""
+
+    # TODO
+    Occupancy: SBEMTemplateBuilderOccupancy
+    Lighting: SBEMTemplateBuilderLighting
+    Equipment: SBEMTemplateBuilderEquipment
+    Thermostat: SBEMTemplateBuilderThermostat
 
     def add_loads_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add the loads to an IDF zone.
 
         This will add the people, equipment, and lights to the zone.
-
-        nb: remember to add the schedules.
 
         Args:
             idf (IDF): The IDF object to add the loads to.
@@ -503,10 +560,10 @@ class ZoneSpaceUse(
         idf = self.add_lights_to_idf_zone(idf, target_zone_name)
         idf = self.add_people_to_idf_zone(idf, target_zone_name)
         idf = self.add_equipment_to_idf_zone(idf, target_zone_name)
+        idf = self.add_thermostat_to_idf_zone(idf, target_zone_name)
+        idf = self.add_water_flow_to_idf_zone(idf, target_zone_name)
         return idf
 
-
-# TODO: urgent - schedules validation and customization
 
 # HVAC
 FuelType = Literal[
@@ -523,7 +580,7 @@ FuelType = Literal[
 
 
 # heating/cooling
-class SBEMTemplateBuilderHVAC(NamedObject):
+class SBEMTemplateBuilderHeatingCooling(NamedObject):
     """An HVAC object in the SBEM library."""
 
     HeatingSystemType = Literal[
@@ -535,11 +592,9 @@ class SBEMTemplateBuilderHVAC(NamedObject):
     HeatingFuel: FuelType = Field(..., title="Fuel of the object")
     CoolingType: CoolingSystemType = Field(..., title="Cooling system of the object")
     CoolingFuel: FuelType = Field(..., title="Fuel of the object")
-    HeatingSchedule: str = Field(..., title="Heating schedule of the object")
-    CoolingSchedule: str = Field(..., title="Cooling schedule of the object")
     HeatingSystemCOP: float = Field(
         ..., title="System COP of the object"
-    )  # TODO: Set two COP options? This is only heating
+    )  # TODO: Add distribution + effective COPs (property that's computed)?
 
     # ADD THE DUCT METHODS
 
@@ -566,8 +621,14 @@ class SBEMTemplateBuilderVentilation(NamedObject):
 
 
 class ZoneConditioning(
-    SBEMTemplateBuilderHVAC, SBEMTemplateBuilderVentilation, NamedObject, extra="forbid"
+    NamedObject,
+    extra="forbid",
 ):
+    """Conditioning object in the SBEM library."""
+
+    HeatingCooling: SBEMTemplateBuilderHeatingCooling
+    Ventilation: SBEMTemplateBuilderVentilation
+    # TODO: change the structure like ZoneSpaceUse
     """Zone conditioning object."""
 
     def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
@@ -596,6 +657,8 @@ class ZoneDHW(
 ):
     """Domestic Hot Water object."""
 
+    DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil"]
+
     DomHotWaterCOP: float = Field(
         ...,
         title="Domestic hot water coefficient of performance",
@@ -607,6 +670,13 @@ class ZoneDHW(
         ge=0,
         le=100,
     )  # TODO:remove this or just set as constant. Leaving for flexibility here
+
+    DistributionCOP: float = Field(
+        ...,
+        title="Distribution coefficient of performance",
+        ge=0,
+        le=1,
+    )
 
     WaterSupplyTemperature: float = Field(
         ...,
@@ -766,10 +836,6 @@ class ZoneUse(
         return idf
 
 
-# infiltration
-# TODO: Add infiltration class
-
-
 # CONSTRUCTION CLASSES
 ConstructionComponents = Literal[
     "Roof",
@@ -784,15 +850,6 @@ ConstructionComponents = Literal[
     "InternalMass",
     "InteriorFloor",
 ]
-
-
-# TODO: Integrate this class into excel format?
-class ManufacturerData(BaseModel):
-    """Manufacturer data for a construction."""
-
-    Manufacturer: NanStr = Field(..., title="Manufacturer of the object")
-    ProductName: NanStr = Field(..., title="Product name of the object")
-    Appearance: NanStr = Field(..., title="Appearance of the glazing construction")
 
 
 # TODO: remove? feels redundant
@@ -832,6 +889,7 @@ class MaterialWithThickness(BaseModel, populate_by_name=True):
 class ConstructionMaterialProperties(CommonMaterialProperties, populate_by_name=True):
     """Properties of an opaque material."""
 
+    # add in the commonMaterialsPropertis
     Roughness: str = Field(..., title="Roughness of the opaque material")
     SpecificHeat: float = Field(
         ...,
@@ -929,7 +987,6 @@ class ConstructionLayer(MaterialWithThickness, NamedObject, extra="forbid"):
 class GlazingConstructionSimple(
     NamedObject,
     StandardMaterializedMetadata,
-    ManufacturerData,
     extra="forbid",
     populate_by_name=True,
 ):
@@ -975,17 +1032,6 @@ class GlazingConstructionSimple(
         return idf
 
 
-class GlazingMaterial(  # TODO: check whether can remove
-    MaterialWithThickness,
-    StandardMaterializedMetadata,
-    NamedObject,
-    extra="forbid",
-):
-    """Glazing material object."""
-
-    pass
-
-
 class WindowDefinition(NamedObject, SBEMTemplateBuilderMetadata, extra="ignore"):
     """Window definition object."""
 
@@ -999,11 +1045,6 @@ class WindowDefinition(NamedObject, SBEMTemplateBuilderMetadata, extra="ignore")
             set[str]: The schedule names.
         """
         return set()
-
-
-LayerListStr = Annotated[
-    list[ConstructionLayer], BeforeValidator(str_to_opaque_layer_list)
-]
 
 
 class ZoneInfiltration(
@@ -1096,7 +1137,9 @@ class SBEMConstruction(
 ):
     """Opaque construction object."""
 
-    Layers: LayerListStr = Field(..., title="Layers of the opaque construction")
+    Layers: list[ConstructionLayer] = Field(
+        ..., title="Layers of the opaque construction"
+    )
     VegetationLayer: NanStr = Field(
         ..., title="Vegetation layer of the opaque construction"
     )
@@ -1216,7 +1259,7 @@ class SBEMTemplateLibraryLoad(BaseModel, arbitrary_types_allowed=True):
     # WindowSettings: dict[str, WindowSettings]
     # NaturalVentilation: dict[str, NaturalVentilation] ?
     GlazingConstructionSimple: dict[str, GlazingConstructionSimple]
-    GlazingMaterials: dict[str, GlazingMaterial]
+    GlazingMaterials: dict[str, SimpleGlazingMaterial]
     ConstructionMaterials: dict[str, ConstructionMaterial]
     Constructions: dict[str, SBEMConstruction]
     ZoneConditioning: dict[str, ZoneConditioning]
@@ -1244,7 +1287,7 @@ class SBEMTemplateLibraryLoad(BaseModel, arbitrary_types_allowed=True):
 
         # TODO: UPDATE LOAD IN METHODOLOGY
         glass_consts_simple = cls.LoadObjects(base_path, GlazingConstructionSimple)
-        glazing_materials = cls.LoadObjects(base_path, GlazingMaterial)
+        glazing_materials = cls.LoadObjects(base_path, SimpleGlazingMaterial)
         construction_materials = cls.LoadObjects(base_path, ConstructionMaterial)
         constructions_agg = cls.LoadObjects(base_path, SBEMConstruction)
         zone_hvac = cls.LoadObjects(base_path, ZoneConditioning)
@@ -1293,7 +1336,7 @@ class SBEMTemplateLibraryLoad(BaseModel, arbitrary_types_allowed=True):
 
 
 class SBEMTemplateLibraryHandler(BaseModel, arbitrary_types_allowed=True):
-    """Climate Studio library object V2."""
+    """SBEM library object to handle the different components."""
 
     SpaceUses: dict[str, ZoneUse]
     Envelopes: dict[str, ZoneEnvelope]
@@ -1301,6 +1344,7 @@ class SBEMTemplateLibraryHandler(BaseModel, arbitrary_types_allowed=True):
     Constructions: dict[str, SBEMConstruction]
     OpaqueMaterials: dict[str, ConstructionMaterial]
     Schedules: dict[str, Schedule]
+    # store the different components (HVAC, Ventilation, SpaceUse)
 
     @field_validator("Schedules", mode="before")
     @classmethod

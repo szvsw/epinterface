@@ -74,7 +74,7 @@ class Model(BaseWeather, validate_assignment=True):
     geometry: ShoeboxGeometry
     attic_insulation_surface: Literal["roof", "floor"]
     conditioned_attic: bool = False
-    space_use_name: str  # change this to be
+    space_use_name: str  # change this to be the object itself
     hvac_name: str
     envelope_name: str
     conditioned_basement: bool = False
