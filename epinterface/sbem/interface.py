@@ -189,9 +189,9 @@ FloatListStr = Annotated[list[float], BeforeValidator(str_to_float_list)]
 class MetadataMixin(BaseModel):
     """Metadata for a SBEM template table object."""
 
-    Category: NanStr = Field(..., title="Category of the object")
-    Comment: NanStr = Field(..., title="Comment on the object")
-    DataSource: NanStr = Field(..., title="Data source of the object")
+    Category: NanStr | None = Field(default=None, title="Category of the object")
+    Comment: NanStr | None = Field(default=None, title="Comment on the object")
+    DataSource: NanStr | None = Field(default=None, title="Data source of the object")
     Version: NanStr | None = Field(default=None, title="Version of the object")
 
 
