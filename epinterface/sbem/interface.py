@@ -1027,7 +1027,7 @@ class GlazingConstructionSimpleComponent(
 class WindowDefinition(NamedObject, MetadataMixin, extra="ignore"):
     """Window definition object."""
 
-    Construction: str = Field(..., title="Construction object name")
+    GlazingConstruction: str = Field(..., title="Construction object name")
 
     @property
     def schedule_names(self) -> set[str]:
@@ -1560,6 +1560,6 @@ class SurfaceHandlers(BaseModel):
         )
         if window:
             idf = self.Window.assign_srfs(
-                idf=idf, lib=lib, construction_name=window.Construction
+                idf=idf, lib=lib, construction_name=window.GlazingConstruction
             )
         return idf

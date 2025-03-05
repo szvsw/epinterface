@@ -604,7 +604,7 @@ if __name__ == "__main__":
         if env.WindowDefinition is None:
             msg = f"Envelope {env.Name} has no window definition"
             raise ValueError(msg)
-        env.WindowDefinition.Construction = "Template_post_2003"
+        env.WindowDefinition.GlazingConstruction = "Template_post_2003"
 
     model = Model(
         Weather=AnyUrl(
