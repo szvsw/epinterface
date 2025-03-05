@@ -346,7 +346,7 @@ class Model(BaseWeather, validate_assignment=True):
         """
         constructions = envelope.Assemblies
         infiltration = envelope.Infiltration
-        window_def = envelope.WindowDefinition
+        window_def = envelope.Window
         # _other_settings = envelope.OtherSettings
         # _foundation_settings = envelope.Foundation
         # TODO: other settings
@@ -354,8 +354,9 @@ class Model(BaseWeather, validate_assignment=True):
         self.add_srf_constructions(idf, constructions, window_def)
         self.add_infiltration(idf, infiltration, inf_zone_list)
 
-        sch_names = self.envelope.schedule_names
-        idf = self.add_schedules_by_name(idf, sch_names)
+        # TODO: consider natvent/operable windows etc
+        # sch_names = self.envelope.schedule_names
+        # idf = self.add_schedules_by_name(idf, sch_names)
 
         return idf
 

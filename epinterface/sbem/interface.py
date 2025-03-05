@@ -1095,21 +1095,6 @@ class GlazingConstructionSimpleComponent(
         return idf
 
 
-class WindowDefinition(NamedObject, MetadataMixin, extra="ignore"):
-    """Window definition object."""
-
-    GlazingConstruction: str = Field(..., title="Construction object name")
-
-    @property
-    def schedule_names(self) -> set[str]:
-        """Get the schedule names used in the object.
-
-        Returns:
-            set[str]: The schedule names.
-        """
-        return set()
-
-
 class InfiltrationComponent(
     NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
 ):
@@ -1269,7 +1254,7 @@ class ZoneEnvelopeComponent(NamedObject, MetadataMixin, extra="forbid"):
 
     Assemblies: EnvelopeAssemblyComponent
     Infiltration: InfiltrationComponent
-    WindowDefinition: WindowDefinition | None
+    Window: GlazingConstructionSimpleComponent | None
     WWR: float | None = Field(
         default=assumed_constants["WWR"], description="Window to wall ratio", ge=0, le=1
     )
@@ -1278,18 +1263,6 @@ class ZoneEnvelopeComponent(NamedObject, MetadataMixin, extra="forbid"):
 
     # TODO: add envelope to idf zone
     # (currently in builder)
-
-    @property
-    def schedule_names(self) -> set[str]:
-        """Get the schedule names used in the object.
-
-        Returns:
-            set[str]: The schedule names.
-        """
-        win_sch = (
-            self.WindowDefinition.schedule_names if self.WindowDefinition else set()
-        )
-        return win_sch
 
 
 NamedType = TypeVar("NamedType", bound=NamedObject)
@@ -1581,7 +1554,7 @@ class SurfaceHandlers(BaseModel):
         idf: IDF,
         lib: ComponentLibrary,
         constructions: EnvelopeAssemblyComponent,
-        window: WindowDefinition | None,
+        window: GlazingConstructionSimpleComponent | None,
     ):
         """Assign the envelope to the IDF model.
 
@@ -1591,7 +1564,7 @@ class SurfaceHandlers(BaseModel):
             idf (IDF): The IDF model to add the envelope to.
             lib (ClimateStudioLibraryV2): The library of constructions.
             constructions (ZoneConstruction): The construction names for the envelope.
-            window (WindowDefinition | None): The window definition.
+            window (GlazingConstructionSimpleComponent | None): The window definition.
 
         Returns:
             idf (IDF): The updated IDF model.
@@ -1605,12 +1578,12 @@ class SurfaceHandlers(BaseModel):
             return new_const
 
         def reverse_construction(const_name: str, lib: ComponentLibrary):
-            const = lib.OpaqueConstructions[const_name]
+            const = lib.ConstructionAssembly[const_name]
             new_const = make_reversed(const)
             return new_const
 
         slab_reversed = reverse_construction(constructions.SlabAssembly, lib)
-        lib.OpaqueConstructions[slab_reversed.Name] = slab_reversed
+        lib.ConstructionAssembly[slab_reversed.Name] = slab_reversed
 
         idf = self.Roof.assign_srfs(
             idf=idf, lib=lib, construction_name=constructions.RoofAssembly
@@ -1635,6 +1608,6 @@ class SurfaceHandlers(BaseModel):
         )
         if window:
             idf = self.Window.assign_srfs(
-                idf=idf, lib=lib, construction_name=window.GlazingConstruction
+                idf=idf, lib=lib, construction_name=window.Name
             )
         return idf
