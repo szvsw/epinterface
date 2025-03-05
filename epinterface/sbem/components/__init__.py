@@ -15,6 +15,7 @@ from .space_use import (
     LightingComponent,
     OccupancyComponent,
     ThermostatComponent,
+    WaterUseComponent,
     ZoneSpaceUseComponent,
 )
 from .systems import (
@@ -40,6 +41,7 @@ __all__ = [
     "ThermalSystemComponent",
     "ThermostatComponent",
     "VentilationComponent",
+    "WaterUseComponent",
     "ZoneEnvelopeComponent",
     "ZoneHVACComponent",
     "ZoneOperationsComponent",

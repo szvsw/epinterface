@@ -240,6 +240,27 @@ class ThermostatComponent(NamedObject, MetadataMixin):
         return idf
 
 
+class WaterUseComponent(NamedObject, MetadataMixin):
+    """A water use object in the SBEM library."""
+
+    FlowRatePerPerson: float = Field(
+        ..., title="Flow rate per person [m3/day/p]", ge=0, le=0.1
+    )
+    WaterSchedule: str = Field(
+        ..., title="Water schedule"
+    )  # TODO: Define a schedule preset to import (not from template)
+
+    @property
+    def schedule_names(self) -> set[str]:
+        """Get the schedule names used in the object.
+
+        Returns:
+            set[str]: The schedule names.
+        """
+        raise NotImplementedError
+        return {self.WaterSchedule} if self.IsOn else set()
+
+
 class ZoneSpaceUseComponent(NamedObject):
     """Space use object."""
 
@@ -248,6 +269,7 @@ class ZoneSpaceUseComponent(NamedObject):
     Lighting: LightingComponent
     Equipment: EquipmentComponent
     Thermostat: ThermostatComponent
+    WaterUse: WaterUseComponent
 
     def add_loads_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add the loads to an IDF zone.
@@ -265,4 +287,5 @@ class ZoneSpaceUseComponent(NamedObject):
         idf = self.Occupancy.add_people_to_idf_zone(idf, target_zone_name)
         idf = self.Equipment.add_equipment_to_idf_zone(idf, target_zone_name)
         idf = self.Thermostat.add_thermostat_to_idf_zone(idf, target_zone_name)
+        raise NotImplementedError
         return idf

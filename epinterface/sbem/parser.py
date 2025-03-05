@@ -8,16 +8,16 @@ from archetypal.schedule import Schedule, ScheduleTypeLimits
 
 from epinterface.sbem.components import (
     ConditioningSystemsComponent,
-    ConstructionAssemblyComponent,
-    ConstructionMaterialComponent,
+    DHWComponent,
     EquipmentComponent,
-    GlazingConstructionSimpleComponent,
     LightingComponent,
     OccupancyComponent,
+    ThermalSystemComponent,
     ThermostatComponent,
     VentilationComponent,
-    ZoneEnvelopeComponent,
+    WaterUseComponent,
     ZoneHVACComponent,
+    ZoneOperationsComponent,
     ZoneSpaceUseComponent,
 )
 from epinterface.sbem.interface import ComponentLibrary, ScheduleTransferObject
@@ -57,77 +57,146 @@ def create_library(base_path: Path) -> ComponentLibrary:
     lighting_data = load_excel_to_dict(base_path, "Lighting")
     equipment_data = load_excel_to_dict(base_path, "Power")
     thermostat_data = load_excel_to_dict(base_path, "Setpoints")
-    # water_flow_data = load_excel_to_dict(base_path, "Water_flow")
+    water_use_data = load_excel_to_dict(base_path, "Water_flow")
     space_use_data = load_excel_to_dict(base_path, "Space_use_assembly")
-    heating_cooling_data = load_excel_to_dict(base_path, "Conditioning_constructor")
+
+    thermal_system_data = load_excel_to_dict(base_path, "Thermal_systems_constructor")
+    conditioning_systems_data = load_excel_to_dict(
+        base_path, "Conditioning_constructor"
+    )
     ventilation_data = load_excel_to_dict(base_path, "Ventilation_constructor")
-    # dhw_data = load_excel_to_dict(base_path, "DHW_Constructor")
-    hvac_dhw_data = load_excel_to_dict(base_path, "HVAC_DHW_assembly")
-    materials_data = load_excel_to_dict(base_path, "Materials_choices")
-    construction_data = load_excel_to_dict(base_path, "Construction_components")
-    envelope_data = load_excel_to_dict(base_path, "Envelope_assembly")
+    dhw_data = load_excel_to_dict(base_path, "DHW_Constructor")
+    hvac_data = load_excel_to_dict(base_path, "HVAC_assembly")
+    operations_data = load_excel_to_dict(base_path, "HVAC_dhw_space_use")
 
-    # check the glazing ingestion mechanism
-    glazing_construction = envelope_data[envelope_data["Envelope_type"] == "Windows"]
+    # Convert dicts to objs
+    occupancy_objs = {
+        name: OccupancyComponent.model_validate(data)
+        for name, data in occupancy_data.items()
+    }
+    lighting_objs = {
+        name: LightingComponent.model_validate(data)
+        for name, data in lighting_data.items()
+    }
+    equipment_objs = {
+        name: EquipmentComponent.model_validate(data)
+        for name, data in equipment_data.items()
+    }
+    thermostat_objs = {
+        name: ThermostatComponent.model_validate(data)
+        for name, data in thermostat_data.items()
+    }
+    water_use_objs = {
+        name: WaterUseComponent.model_validate(data)
+        for name, data in water_use_data.items()
+    }
 
-    space_uses = {
+    dhw_objs = {
+        name: DHWComponent.model_validate(data) for name, data in dhw_data.items()
+    }
+    thermal_system_objs = {
+        name: ThermalSystemComponent.model_validate(data)
+        for name, data in thermal_system_data.items()
+    }
+    ventilation_objs = {
+        name: VentilationComponent.model_validate(data)
+        for name, data in ventilation_data.items()
+    }
+
+    space_use_objs = {
         name: ZoneSpaceUseComponent(
             Name=name,
-            Occupancy=OccupancyComponent.model_validate(occupancy_data[name]),
-            Lighting=LightingComponent.model_validate(lighting_data[name]),
-            Equipment=EquipmentComponent.model_validate(equipment_data[name]),
-            Thermostat=ThermostatComponent.model_validate(thermostat_data[name]),
+            Occupancy=occupancy_objs[data["Occupancy"]],
+            Lighting=lighting_objs[data["Lighting"]],
+            Equipment=equipment_objs[data["Equipment"]],
+            Thermostat=thermostat_objs[data["Thermostat"]],
+            WaterUse=water_use_objs[data["WaterUse"]],
         )
-        for name in space_use_data
+        for name, data in space_use_data.items()
     }
 
-    conditionings = {
+    condition_systems_objs = {
+        name: ConditioningSystemsComponent(
+            Name=name,
+            Heating=thermal_system_objs[data["Heating"]],
+            Cooling=thermal_system_objs[data["Cooling"]],
+        )
+        for name, data in conditioning_systems_data.items()
+    }
+
+    hvac_objs = {
         name: ZoneHVACComponent(
             Name=name,
-            ConditioningSystems=ConditioningSystemsComponent.model_validate(
-                heating_cooling_data[name]
-            ),
-            Ventilation=VentilationComponent.model_validate(ventilation_data[name]),
+            ConditioningSystems=condition_systems_objs[data["ConditioningSystems"]],
+            Ventilation=ventilation_objs[data["Ventilation"]],
         )
-        for name in hvac_dhw_data
+        for name, data in hvac_data.items()
     }
 
-    # TODO: Discuss
-    # dhws = {name: DHWComponent.model_validate(dhw_data[name]) for name in dhw_data}
-
-    constructions = {
-        name: ConstructionAssemblyComponent.model_validate(construction_data[name])
-        for name in construction_data
-    }
-
-    materials = {
-        name: ConstructionMaterialComponent.model_validate(materials_data[name])
-        for name in materials_data
-    }
-
-    envelopes = {
-        name: ZoneEnvelopeComponent.model_validate(envelope_data[name])
-        for name in envelope_data
-    }
-
-    glazing_constructions = {
-        name: GlazingConstructionSimpleComponent.model_validate(
-            glazing_construction[name]
+    operations_objs = {
+        name: ZoneOperationsComponent(
+            Name=name,
+            SpaceUse=space_use_objs[data["SpaceUse"]],
+            HVAC=hvac_objs[data["HVAC"]],
+            DHW=dhw_objs[data["DHW"]],
         )
-        for name in glazing_construction
+        for name, data in operations_data.items()
     }
 
-    schedules = create_schedules(base_path)
+    # materials_data = load_excel_to_dict(base_path, "Materials_choices")
+    # construction_data = load_excel_to_dict(base_path, "Construction_components")
+    # envelope_data = load_excel_to_dict(base_path, "Envelope_assembly")
+
+    # # check the glazing ingestion mechanism
+    # glazing_construction = envelope_data[envelope_data["Envelope_type"] == "Windows"]
+
+    # # TODO: Discuss
+    # # dhws = {name: DHWComponent.model_validate(dhw_data[name]) for name in dhw_data}
+
+    # constructions = {
+    #     name: ConstructionAssemblyComponent.model_validate(construction_data[name])
+    #     for name in construction_data
+    # }
+
+    # materials = {
+    #     name: ConstructionMaterialComponent.model_validate(materials_data[name])
+    #     for name in materials_data
+    # }
+
+    # envelopes = {
+    #     name: ZoneEnvelopeComponent.model_validate(envelope_data[name])
+    #     for name in envelope_data
+    # }
+
+    # glazing_constructions = {
+    #     name: GlazingConstructionSimpleComponent.model_validate(
+    #         glazing_construction[name]
+    #     )
+    #     for name in glazing_construction
+    # }
+
+    # schedules = create_schedules(base_path)
 
     raise NotImplementedError
     return ComponentLibrary(
-        Operations=space_uses,
-        Envelope=envelopes,
-        GlazingConstructionSimple=glazing_constructions,
-        ConstructionAssembly=constructions,
-        ConstructionMaterial=materials,
-        Schedule=schedules,
-        HVAC=conditionings,
+        Occupancy=occupancy_objs,
+        Lighting=lighting_objs,
+        Equipment=equipment_objs,
+        Thermostat=thermostat_objs,
+        WaterUse=water_use_objs,
+        SpaceUse=space_use_objs,
+        ConditioningSystems=condition_systems_objs,
+        ThermalSystem=thermal_system_objs,
+        Ventilation=ventilation_objs,
+        DHW=dhw_objs,
+        HVAC=hvac_objs,
+        Operations=operations_objs,
+        # Envelope=envelopes,
+        # GlazingConstructionSimple=glazing_constructions,
+        # ConstructionAssembly=constructions,
+        # ConstructionMaterial=materials,
+        # Schedule=schedules,
+        # HVAC=hvac_objs,
     )
 
 

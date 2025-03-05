@@ -195,12 +195,6 @@ class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=
         ge=0,
         le=100,
     )
-    WaterSchedule: str = Field(
-        ..., title="Water schedule"
-    )  # TODO: Define a schedule preset to import (not from template)
-    FlowRatePerPerson: float = Field(
-        ..., title="Flow rate per person [m3/day/p]", ge=0, le=0.1
-    )
     IsOn: BoolStr = Field(..., title="Is on")
     HotWaterFuelType: DHWFuelType = Field(..., title="Hot water fuel type")
 
@@ -211,15 +205,6 @@ class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=
             msg = "Water supply temperature must be greater than the inlet temperature."
             raise ValueError(msg)
         return values
-
-    @property
-    def schedule_names(self) -> set[str]:
-        """Get the schedule names used in the object.
-
-        Returns:
-            set[str]: The schedule names.
-        """
-        return {self.WaterSchedule} if self.IsOn else set()
 
     def add_water_to_idf_zone(
         self, idf: IDF, target_zone_name: str, total_ppl: float
@@ -234,6 +219,7 @@ class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=
         Returns:
             IDF: The updated IDF object.
         """
+        raise NotImplementedError
         if not self.IsOn:
             return idf
 
