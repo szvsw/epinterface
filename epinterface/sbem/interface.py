@@ -567,24 +567,95 @@ FuelType = Literal[
     "CustomFuel",
 ]
 
+HeatingSystemType = Literal[
+    "ElectricResistance", "GasBoiler", "GasFurnace", "ASHP", "GSHP"
+]
+CoolingSystemType = Literal["DX", "EvapCooling"]
+DistributionType = Literal["Hydronic", "Air", "Steam"]
 
-# heating/cooling
+
+class ThermalSystemComponent(NamedObject, MetadataMixin):
+    """A thermal system object in the SBEM library."""
+
+    ConditioningType: Literal["Heating", "Cooling"]
+    Fuel: FuelType
+    SystemCOP: float = Field(
+        ...,
+        title="System COP",
+        ge=0,
+    )
+    DistributionCOP: float = Field(..., title="Distribution COP", ge=0)
+
+    @property
+    def effective_system_cop(self) -> float:
+        """Compute the effective system COP based on the system and distribution COPs.
+
+        Returns:
+            cop (float): The effective system COP.
+        """
+        return self.SystemCOP * self.DistributionCOP
+
+    @property
+    def HeatingSystemType(self) -> HeatingSystemType:
+        """Compute the heating system type based on the system COP.
+
+        Returns:
+            heating_system_type (HeatingSystemType): The heating system type.
+        """
+        if self.ConditioningType != "Heating":
+            msg = "Heating system type is only applicable to heating systems."
+            raise ValueError(msg)
+        # TODO: compute based off of CoP
+        msg = "Heating system type is not implemented."
+        raise NotImplementedError(msg)
+        return "ElectricResistance"
+
+    @property
+    def CoolingSystemType(self) -> CoolingSystemType:
+        """Compute the cooling system type based on the system COP.
+
+        Returns:
+            cooling_system_type (CoolingSystemType): The cooling system type.
+        """
+        if self.ConditioningType != "Cooling":
+            msg = "Cooling system type is only applicable to cooling systems."
+            raise ValueError(msg)
+        # TODO: compute based off of CoP
+        msg = "Cooling system type is not implemented."
+        raise NotImplementedError(msg)
+        return "DX"
+
+    @property
+    def DistributionType(self) -> DistributionType:
+        """Compute the distribution type based on the system COP.
+
+        Returns:
+            distribution_type (DistributionType): The distribution type.
+        """
+        # TODO: compute based off of CoP
+        msg = "Distribution type is not implemented."
+        raise NotImplementedError(msg)
+        return "Hydronic"
+
+
 class ConditioningSystemsComponent(NamedObject, MetadataMixin):
-    """An HVAC object in the SBEM library."""
+    """A conditioning system object in the SBEM library."""
 
-    HeatingSystemType = Literal[
-        "ElectricResistance", "GasBoiler", "GasFurnace", "ASHP", "GSHP", "Custom"
-    ]
-    CoolingSystemType = Literal["DX", "EvapCooling", "Custom"]
-    HeatingType: HeatingSystemType = Field(..., title="Heating system of the object")
-    HeatingFuel: FuelType = Field(..., title="Fuel of the object")
-    CoolingType: CoolingSystemType = Field(..., title="Cooling system of the object")
-    CoolingFuel: FuelType = Field(..., title="Fuel of the object")
-    HeatingSystemCOP: float = Field(
-        ..., title="System COP of the object"
-    )  # TODO: Add distribution + effective COPs (property that's computed)?
+    Heating: ThermalSystemComponent | None
+    Cooling: ThermalSystemComponent | None
 
-    # ADD THE DUCT METHODS
+    @model_validator(mode="after")
+    def validate_conditioning_types(self):
+        """Validate that the conditioning types are correct.
+
+        Cannot have a heating system assigned to a cooling system and vice versa.
+        """
+        if self.Heating.ConditioningType != "Heating":
+            msg = "Heating system type is only applicable to heating systems."
+            raise ValueError(msg)
+        if self.Cooling.ConditioningType != "Cooling":
+            msg = "Cooling system type is only applicable to cooling systems."
+            raise ValueError(msg)
 
 
 # ventilation
@@ -614,7 +685,7 @@ class ZoneHVACComponent(
 ):
     """Conditioning object in the SBEM library."""
 
-    HeatingCooling: ConditioningSystemsComponent
+    ConditioningSystems: ConditioningSystemsComponent
     Ventilation: VentilationComponent
     # TODO: change the structure like ZoneSpaceUse
     """Zone conditioning object."""
@@ -823,7 +894,7 @@ class ZoneOperationsComponent(
 
 
 # CONSTRUCTION CLASSES
-ConstructionComponents = Literal[
+ConstructionComponentSurfaceType = Literal[
     "Roof",
     "Facade",
     "Slab",
@@ -1135,7 +1206,9 @@ class ConstructionAssemblyComponent(
     VegetationLayer: NanStr = Field(
         ..., title="Vegetation layer of the opaque construction"
     )
-    Type: ConstructionComponents = Field(..., title="Type of the opaque construction")
+    Type: ConstructionComponentSurfaceType = Field(
+        ..., title="Type of the opaque construction"
+    )
 
     def add_to_idf(
         self, idf: IDF, material_defs: dict[str, ConstructionMaterialComponent]
@@ -1241,7 +1314,9 @@ class ComponentLibrary(BaseModel, MetadataMixin, arbitrary_types_allowed=True):
         ..., description="HVAC component gathers conditioningsystems and ventilation."
     )
     ConditioningSystems: dict[str, ConditioningSystemsComponent]
+    ThermalSystem: dict[str, ThermalSystemComponent]
     Ventilation: dict[str, VentilationComponent]
+
     DHW: dict[str, DHWComponent]
 
     Envelope: dict[str, ZoneEnvelopeComponent] = Field(

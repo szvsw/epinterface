@@ -86,7 +86,7 @@ def create_library(base_path: Path) -> ComponentLibrary:
     conditionings = {
         name: ZoneHVACComponent(
             Name=name,
-            HeatingCooling=ConditioningSystemsComponent.model_validate(
+            ConditioningSystems=ConditioningSystemsComponent.model_validate(
                 heating_cooling_data[name]
             ),
             Ventilation=VentilationComponent.model_validate(ventilation_data[name]),
