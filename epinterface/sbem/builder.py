@@ -79,9 +79,8 @@ class Model(BaseWeather, validate_assignment=True):
     attic_insulation_surface: AtticInsulationSurfaceOption
     conditioned_attic: bool
     attic_use_fraction: float | None = Field(..., ge=0, le=1)
-    space_use_name: str  # change this to be the object itself
-    hvac_name: str
-    envelope_name: str
+    operations: ZoneOperationsComponent
+    envelope: ZoneEnvelopeComponent
     basement_use_fraction: float | None = Field(..., ge=0, le=1)
     conditioned_basement: bool
     basement_insulation_surface: BasementInsulationSurfaceOption
