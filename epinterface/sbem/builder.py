@@ -72,12 +72,13 @@ class Model(BaseWeather, validate_assignment=True):
     """
 
     geometry: ShoeboxGeometry
-    attic_insulation_surface: Literal["roof", "floor"]
+    attic_insulation_surface: Literal["roof", "floor", None]
     conditioned_attic: bool = False
     space_use_name: str  # change this to be the object itself
     hvac_name: str
     envelope_name: str
     conditioned_basement: bool = False
+    basement_insulation_surface: Literal["walls", "ceiling", None]
     lib: SBEMTemplateLibraryHandler
 
     @property
@@ -128,13 +129,42 @@ class Model(BaseWeather, validate_assignment=True):
 
         # validate the attic conditioning
 
-    @model_validator
+    @model_validator(mode="after")
     def attic_check(self):
-        """Validate the attic insulation surface and geometry."""
+        """Validate the attic insulation surface and geometry.
+
+        It is impossible to have the roof insulated but on gabling (gabling is determined by the roof height).
+
+        It is imposisble to have a conditioned attic if there is no roof height/gabling.
+
+        Raises:
+            ValueError
+        """
         if (
-            self.attic_insulation_surface == "roof"
+            self.attic_insulation_surface == "roof" or self.conditioned_attic
         ) and self.geometry.roof_height is None:
-            msg = "Roof height must be defined for conditioned attic"
+            msg = "Roof height must be defined for conditioned attic or for roof-surface insulation."
+            raise ValueError(msg)
+
+    @model_validator(mode="after")
+    def basement_check(self):
+        """Validate the basement insulation surface and geometry.
+
+        It is impossible to have the basement walls insulated but have no basement.
+
+        It is impossible to have a conditioned basement if there is no basement.
+
+        Raises:
+            ValueError
+        """
+        if (self.basement_insulation_surface is not None) and (
+            not self.geometry.basement
+        ):
+            msg = "Cannot have basement walls/ceiling insulated if there is no basement"
+            raise ValueError(msg)
+
+        if (self.conditioned_basement) and (not self.geometry.basement):
+            msg = "Cannot have a conditioned basement if there is no basement"
             raise ValueError(msg)
 
     def add_zone_lists(
