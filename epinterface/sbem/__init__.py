@@ -1,5 +1,6 @@
 """Module for SBEM component library format."""
 
+from .builder import Model
 from .components import (
     ConditioningSystemsComponent,
     ConstructionAssemblyComponent,
@@ -34,6 +35,7 @@ __all__ = [
     "GlazingConstructionSimpleComponent",
     "InfiltrationComponent",
     "LightingComponent",
+    "Model",
     "OccupancyComponent",
     "ThermalSystemComponent",
     "ThermostatComponent",
