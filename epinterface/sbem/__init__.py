@@ -1,25 +1,28 @@
 """Module for SBEM component library format."""
 
-from .interface import (
-    ComponentLibrary,
-    ConditioningSystemsComponent,
+from .envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
-    ConstructionMaterialComponent,
-    DHWComponent,
     EnvelopeAssemblyComponent,
-    EquipmentComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
+    ZoneEnvelopeComponent,
+)
+from .interface import ComponentLibrary, ZoneOperationsComponent
+from .materials import ConstructionMaterialComponent
+from .space_use import (
+    EquipmentComponent,
     LightingComponent,
     OccupancyComponent,
     ThermostatComponent,
-    VentilationComponent,
-    WindowDefinition,
-    ZoneEnvelopeComponent,
-    ZoneHVACComponent,
-    ZoneOperationsComponent,
     ZoneSpaceUseComponent,
+)
+from .systems import (
+    ConditioningSystemsComponent,
+    DHWComponent,
+    ThermalSystemComponent,
+    VentilationComponent,
+    ZoneHVACComponent,
 )
 
 __all__ = [
@@ -35,9 +38,9 @@ __all__ = [
     "InfiltrationComponent",
     "LightingComponent",
     "OccupancyComponent",
+    "ThermalSystemComponent",
     "ThermostatComponent",
     "VentilationComponent",
-    "WindowDefinition",
     "ZoneEnvelopeComponent",
     "ZoneHVACComponent",
     "ZoneOperationsComponent",

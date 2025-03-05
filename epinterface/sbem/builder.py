@@ -25,31 +25,19 @@ from epinterface.interface import (
     add_default_schedules,
     add_default_sim_controls,
 )
-from epinterface.sbem.interface import (
-    ComponentLibrary,
+from epinterface.sbem.envelope import (
+    ConstructionAssemblyComponent,
     EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
-    SurfaceHandlers,
     ZoneEnvelopeComponent,
-    ZoneOperationsComponent,
 )
+from epinterface.sbem.exceptions import (
+    NotImplementedParameter,
+    SBEMBuilderNotImplementedError,
+)
+from epinterface.sbem.interface import ComponentLibrary, ZoneOperationsComponent
 from epinterface.weather import BaseWeather
-
-
-class SBEMBuilderNotImplementedError(NotImplementedError):
-    """Raised when a parameter is not yet implemented in the SBEM shoebox builder."""
-
-    def __init__(self, parameter: str):
-        """Initialize the error.
-
-        Args:
-            parameter (str): The parameter that is not yet implemented.
-        """
-        self.parameter = parameter
-        super().__init__(
-            f"Parameter {parameter} is not yet implemented in the SBEM shoebox builder."
-        )
 
 
 class SimulationPathConfig(BaseModel):
@@ -69,6 +57,260 @@ AtticInsulationSurfaceOption = Literal["roof", "floor", None]
 BasementInsulationSurfaceOption = Literal["walls", "ceiling", None]
 
 
+class SurfaceHandler(BaseModel):
+    """A handler for filtering and adding surfaces to a model."""
+
+    boundary_condition: str | None
+    original_construction_name: str | None
+    original_surface_type: str | None
+    surface_group: Literal["glazing", "opaque"]
+
+    def assign_srfs(
+        self, idf: IDF, lib: ComponentLibrary, construction_name: str
+    ) -> IDF:
+        """Adds a construction (and its materials) to an IDF and assigns it to matching surfaces.
+
+        Args:
+            idf (IDF): The IDF model to add the construction to.
+            lib (ClimateStudioLibraryV2): The library of constructions.
+            construction_name (str): The name of the construction to add.
+        """
+        srf_key = (
+            "FENESTRATIONSURFACE:DETAILED"
+            if self.surface_group == "glazing"
+            else "BUILDINGSURFACE:DETAILED"
+        )
+        if self.boundary_condition is not None and self.surface_group == "glazing":
+            raise NotImplementedParameter(
+                "BoundaryCondition", self.surface_group, "Glazing"
+            )
+
+        srfs = [srf for srf in idf.idfobjects[srf_key] if self.check_srf(srf)]
+        construction_lib = (
+            lib.OpaqueConstructions
+            if self.surface_group != "glazing"
+            else lib.GlazingConstructionSimple
+        )
+        if construction_name not in construction_lib:
+            raise KeyError(
+                f"MISSING_CONSTRUCTION:{construction_name}:TARGET={self.__repr__()}"
+            )
+        construction = construction_lib[construction_name]
+        idf = (
+            construction.add_to_idf(idf)
+            if isinstance(construction, GlazingConstructionSimpleComponent)
+            else construction.add_to_idf(idf, lib.ConstructionMaterial)
+        )
+        for srf in srfs:
+            srf.Construction_Name = construction.Name
+        return idf
+
+    def check_srf(self, srf):
+        """Check if the surface matches the filters.
+
+        Args:
+            srf (eppy.IDF.BLOCK): The surface to check.
+
+        Returns:
+            match (bool): True if the surface matches the filters.
+        """
+        return (
+            self.check_construction_type(srf)
+            and self.check_boundary(srf)
+            and self.check_construction_name(srf)
+        )
+
+    def check_construction_type(self, srf):
+        """Check if the surface matches the construction type.
+
+        Args:
+            srf (eppy.IDF.BLOCK): The surface to check.
+
+        Returns:
+            match (bool): True if the surface matches the construction type.
+        """
+        if self.surface_group == "glazing":
+            # Ignore the construction type check for windows
+            return True
+        if self.original_surface_type is None:
+            # Ignore the construction type check when filter not provided
+            return True
+        # Check the construction type
+        return self.original_surface_type.lower() == srf.Surface_Type.lower()
+
+    def check_boundary(self, srf):
+        """Check if the surface matches the boundary condition.
+
+        Args:
+            srf (eppy.IDF.BLOCK): The surface to check.
+
+        Returns:
+            match (bool): True if the surface matches the boundary condition.
+        """
+        if self.surface_group == "glazing":
+            # Ignore the bc filter check for windows
+            return True
+        if self.boundary_condition is None:
+            # Ignore the bc filter when filter not provided
+            return True
+        # Check the boundary condition
+        return srf.Outside_Boundary_Condition.lower() == self.boundary_condition.lower()
+
+    def check_construction_name(self, srf):
+        """Check if the surface matches the original construction name.
+
+        Args:
+            srf (eppy.IDF.BLOCK): The surface to check.
+
+        Returns:
+            match (bool): True if the surface matches the original construction name.
+        """
+        if self.original_construction_name is None:
+            # Ignore the original construction name check when filter not provided
+            return True
+        # Check the original construction name
+        return srf.Construction_Name.lower() == self.original_construction_name.lower()
+
+
+class SurfaceHandlers(BaseModel):
+    """A collection of surface handlers for different surface types."""
+
+    Roof: SurfaceHandler
+    Facade: SurfaceHandler
+    Slab: SurfaceHandler
+    Ceiling: SurfaceHandler
+    Partition: SurfaceHandler
+    GroundSlab: SurfaceHandler
+    GroundWall: SurfaceHandler
+    Window: SurfaceHandler
+
+    @classmethod
+    def Default(cls):
+        """Get the default surface handlers."""
+        roof_handler = SurfaceHandler(
+            boundary_condition="outdoors",
+            original_construction_name=None,
+            original_surface_type="roof",
+            surface_group="opaque",
+        )
+        facade_handler = SurfaceHandler(
+            boundary_condition="outdoors",
+            original_construction_name=None,
+            original_surface_type="wall",
+            surface_group="opaque",
+        )
+        partition_handler = SurfaceHandler(
+            boundary_condition="surface",
+            original_construction_name=None,
+            original_surface_type="wall",
+            surface_group="opaque",
+        )
+        ground_wall_handler = SurfaceHandler(
+            boundary_condition="ground",
+            original_construction_name=None,
+            original_surface_type="wall",
+            surface_group="opaque",
+        )
+        slab_handler = SurfaceHandler(
+            boundary_condition="surface",
+            original_construction_name=None,
+            original_surface_type="floor",
+            surface_group="opaque",
+        )
+        ceiling_handler = SurfaceHandler(
+            boundary_condition="surface",
+            original_construction_name=None,
+            original_surface_type="ceiling",
+            surface_group="opaque",
+        )
+        ground_slab_handler = SurfaceHandler(
+            boundary_condition="ground",
+            original_construction_name=None,
+            original_surface_type="floor",
+            surface_group="opaque",
+        )
+        window_handler = SurfaceHandler(
+            boundary_condition=None,
+            original_construction_name=None,
+            original_surface_type=None,
+            surface_group="glazing",
+        )
+
+        return cls(
+            Roof=roof_handler,
+            Facade=facade_handler,
+            Slab=slab_handler,
+            Ceiling=ceiling_handler,
+            Partition=partition_handler,
+            GroundSlab=ground_slab_handler,
+            GroundWall=ground_wall_handler,
+            Window=window_handler,
+        )
+
+    def handle_envelope(
+        self,
+        idf: IDF,
+        lib: ComponentLibrary,
+        constructions: EnvelopeAssemblyComponent,
+        window: GlazingConstructionSimpleComponent | None,
+    ):
+        """Assign the envelope to the IDF model.
+
+        Note that this will add a "reversed" construction for the floorsystem slab/ceiling
+
+        Args:
+            idf (IDF): The IDF model to add the envelope to.
+            lib (ClimateStudioLibraryV2): The library of constructions.
+            constructions (ZoneConstruction): The construction names for the envelope.
+            window (GlazingConstructionSimpleComponent | None): The window definition.
+
+        Returns:
+            idf (IDF): The updated IDF model.
+        """
+
+        # outside walls are the ones with outdoor boundary condition and vertical orientation
+        def make_reversed(const: ConstructionAssemblyComponent):
+            new_const = const.model_copy(deep=True)
+            new_const.Layers = new_const.Layers[::-1]
+            new_const.Name = f"{const.Name}_Reversed"
+            return new_const
+
+        def reverse_construction(const_name: str, lib: ComponentLibrary):
+            const = lib.ConstructionAssembly[const_name]
+            new_const = make_reversed(const)
+            return new_const
+
+        slab_reversed = reverse_construction(constructions.SlabAssembly, lib)
+        lib.ConstructionAssembly[slab_reversed.Name] = slab_reversed
+
+        idf = self.Roof.assign_srfs(
+            idf=idf, lib=lib, construction_name=constructions.RoofAssembly
+        )
+        idf = self.Facade.assign_srfs(
+            idf=idf, lib=lib, construction_name=constructions.FacadeAssembly
+        )
+        idf = self.Partition.assign_srfs(
+            idf=idf, lib=lib, construction_name=constructions.PartitionAssembly
+        )
+        idf = self.Slab.assign_srfs(
+            idf=idf, lib=lib, construction_name=slab_reversed.Name
+        )
+        idf = self.Ceiling.assign_srfs(
+            idf=idf, lib=lib, construction_name=constructions.SlabAssembly
+        )
+        idf = self.GroundSlab.assign_srfs(
+            idf=idf, lib=lib, construction_name=constructions.GroundSlabAssembly
+        )
+        idf = self.GroundWall.assign_srfs(
+            idf=idf, lib=lib, construction_name=constructions.GroundWallAssembly
+        )
+        if window:
+            idf = self.Window.assign_srfs(
+                idf=idf, lib=lib, construction_name=window.Name
+            )
+        return idf
+
+
 class Model(BaseWeather, validate_assignment=True):
     """A simple model constructor for the IDF model.
 
@@ -85,21 +327,6 @@ class Model(BaseWeather, validate_assignment=True):
     conditioned_basement: bool
     basement_insulation_surface: BasementInsulationSurfaceOption
     lib: ComponentLibrary
-
-    @property
-    def space_use(self) -> ZoneOperationsComponent:
-        """The space use definition for the model."""
-        if self.space_use_name not in self.lib.Operations:
-            raise KeyError(f"MISSING:SPACE_USE:{self.space_use_name}")
-        return self.lib.Operations[self.space_use_name]
-
-    @property
-    def envelope(self) -> ZoneEnvelopeComponent:
-        """The envelope definition for the model."""
-        if self.envelope_name not in self.lib.Envelope:
-            raise KeyError(f"MISSING:ENVELOPE:{self.envelope_name}")
-
-        return self.lib.Envelope[self.envelope_name]
 
     @property
     def total_conditioned_area(self) -> float:
