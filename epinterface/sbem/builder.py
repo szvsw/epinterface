@@ -65,6 +65,10 @@ class SimulationPathConfig(BaseModel):
     )
 
 
+AtticInsulationSurfaceOption = Literal["roof", "floor", None]
+BasementInsulationSurfaceOption = Literal["walls", "ceiling", None]
+
+
 class Model(BaseWeather, validate_assignment=True):
     """A simple model constructor for the IDF model.
 
@@ -72,15 +76,15 @@ class Model(BaseWeather, validate_assignment=True):
     """
 
     geometry: ShoeboxGeometry
-    attic_insulation_surface: Literal["roof", "floor", None]
+    attic_insulation_surface: AtticInsulationSurfaceOption
     conditioned_attic: bool
-    attic_use_fraction: float | None
+    attic_use_fraction: float | None = Field(..., ge=0, le=1)
     space_use_name: str  # change this to be the object itself
     hvac_name: str
     envelope_name: str
-    basement_use_fraction: float | None
+    basement_use_fraction: float | None = Field(..., ge=0, le=1)
     conditioned_basement: float | None
-    basement_insulation_surface: Literal["walls", "ceiling", None]
+    basement_insulation_surface: BasementInsulationSurfaceOption
     lib: ComponentLibrary
 
     @property
