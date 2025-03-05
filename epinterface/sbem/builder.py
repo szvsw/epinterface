@@ -11,11 +11,11 @@ from uuid import uuid4
 import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
-from constants.assumed_constants import assumed_constants
-from constants.physical_constants import physical_constants
 from pydantic import BaseModel, Field, model_validator
 from shapely import Polygon
 
+from epinterface.constants.assumed_constants import assumed_constants
+from epinterface.constants.physical_constants import physical_constants
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
 from epinterface.geometry import ShoeboxGeometry
@@ -28,9 +28,9 @@ from epinterface.interface import (
 from epinterface.sbem.interface import (
     ComponentLibrary,
     EnvelopeAssemblyComponent,
+    GlazingConstructionSimpleComponent,
     InfiltrationComponent,
     SurfaceHandlers,
-    WindowDefinition,
     ZoneEnvelopeComponent,
     ZoneOperationsComponent,
 )
@@ -367,7 +367,7 @@ class Model(BaseWeather, validate_assignment=True):
         self,
         idf: IDF,
         constructions: EnvelopeAssemblyComponent,
-        window_def: WindowDefinition | None,
+        window_def: GlazingConstructionSimpleComponent | None,
     ) -> IDF:
         """Assigns the constructions to the surfaces in the model.
 
