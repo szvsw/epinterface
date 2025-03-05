@@ -83,7 +83,7 @@ class Model(BaseWeather, validate_assignment=True):
     hvac_name: str
     envelope_name: str
     basement_use_fraction: float | None = Field(..., ge=0, le=1)
-    conditioned_basement: float | None
+    conditioned_basement: bool
     basement_insulation_surface: BasementInsulationSurfaceOption
     lib: ComponentLibrary
 
