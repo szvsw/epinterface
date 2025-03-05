@@ -7,22 +7,21 @@ import pandas as pd
 from archetypal.schedule import ScheduleTypeLimits
 
 from epinterface.sbem.interface import (
-    ConstructionMaterial,
-    GlazingConstructionSimple,
-    SBEMConstruction,
-    SBEMTemplateBuilderEquipment,
-    SBEMTemplateBuilderHeatingCooling,
-    SBEMTemplateBuilderLighting,
-    SBEMTemplateBuilderOccupancy,
-    SBEMTemplateBuilderThermostat,
-    SBEMTemplateBuilderVentilation,
-    SBEMTemplateLibraryHandler,
+    ComponentLibrary,
+    ConditioningSystemsComponent,
+    ConstructionAssemblyComponent,
+    ConstructionMaterialComponent,
+    EquipmentComponent,
+    GlazingConstructionSimpleComponent,
+    LightingComponent,
+    OccupancyComponent,
     Schedule,
     ScheduleTransferObject,
-    ZoneConditioning,
-    ZoneDHW,
-    ZoneEnvelope,
-    ZoneSpaceUse,
+    ThermostatComponent,
+    VentilationComponent,
+    ZoneEnvelopeComponent,
+    ZoneHVACComponent,
+    ZoneSpaceUseComponent,
 )
 
 
@@ -54,17 +53,17 @@ def create_schedules(base_path: Path) -> dict[str, Schedule]:
     return schedules
 
 
-def create_library(base_path: Path) -> SBEMTemplateLibraryHandler:
+def create_library(base_path: Path) -> ComponentLibrary:
     """Create the library from the excel file."""
     occupancy_data = load_excel_to_dict(base_path, "Occupancy")
     lighting_data = load_excel_to_dict(base_path, "Lighting")
     equipment_data = load_excel_to_dict(base_path, "Power")
     thermostat_data = load_excel_to_dict(base_path, "Setpoints")
-    water_flow_data = load_excel_to_dict(base_path, "Water_flow")
+    # water_flow_data = load_excel_to_dict(base_path, "Water_flow")
     space_use_data = load_excel_to_dict(base_path, "Space_use_assembly")
     heating_cooling_data = load_excel_to_dict(base_path, "Conditioning_constructor")
     ventilation_data = load_excel_to_dict(base_path, "Ventilation_constructor")
-    dhw_data = load_excel_to_dict(base_path, "DHW_Constructor")
+    # dhw_data = load_excel_to_dict(base_path, "DHW_Constructor")
     hvac_dhw_data = load_excel_to_dict(base_path, "HVAC_DHW_assembly")
     materials_data = load_excel_to_dict(base_path, "Materials_choices")
     construction_data = load_excel_to_dict(base_path, "Construction_components")
@@ -74,63 +73,62 @@ def create_library(base_path: Path) -> SBEMTemplateLibraryHandler:
     glazing_construction = envelope_data[envelope_data["Envelope_type"] == "Windows"]
 
     space_uses = {
-        name: ZoneSpaceUse(
+        name: ZoneSpaceUseComponent(
             Name=name,
-            Occupancy=SBEMTemplateBuilderOccupancy.model_validate(occupancy_data[name]),
-            Lighting=SBEMTemplateBuilderLighting.model_validate(lighting_data[name]),
-            Equipment=SBEMTemplateBuilderEquipment.model_validate(equipment_data[name]),
-            Thermostat=SBEMTemplateBuilderThermostat.model_validate(
-                thermostat_data[name]
-            ),
+            Occupancy=OccupancyComponent.model_validate(occupancy_data[name]),
+            Lighting=LightingComponent.model_validate(lighting_data[name]),
+            Equipment=EquipmentComponent.model_validate(equipment_data[name]),
+            Thermostat=ThermostatComponent.model_validate(thermostat_data[name]),
         )
         for name in space_use_data
     }
 
     conditionings = {
-        name: ZoneConditioning(
+        name: ZoneHVACComponent(
             Name=name,
-            HeatingCooling=SBEMTemplateBuilderHeatingCooling.model_validate(
+            HeatingCooling=ConditioningSystemsComponent.model_validate(
                 heating_cooling_data[name]
             ),
-            Ventilation=SBEMTemplateBuilderVentilation.model_validate(
-                ventilation_data[name]
-            ),
+            Ventilation=VentilationComponent.model_validate(ventilation_data[name]),
         )
         for name in hvac_dhw_data
     }
 
     # TODO: Discuss
-    dhws = {name: ZoneDHW.model_validate(dhw_data[name]) for name in dhw_data}
+    # dhws = {name: DHWComponent.model_validate(dhw_data[name]) for name in dhw_data}
 
     constructions = {
-        name: SBEMConstruction.model_validate(construction_data[name])
+        name: ConstructionAssemblyComponent.model_validate(construction_data[name])
         for name in construction_data
     }
 
     materials = {
-        name: ConstructionMaterial.model_validate(materials_data[name])
+        name: ConstructionMaterialComponent.model_validate(materials_data[name])
         for name in materials_data
     }
 
     envelopes = {
-        name: ZoneEnvelope.model_validate(envelope_data[name]) for name in envelope_data
+        name: ZoneEnvelopeComponent.model_validate(envelope_data[name])
+        for name in envelope_data
     }
 
     glazing_constructions = {
-        name: GlazingConstructionSimple.model_validate(glazing_construction[name])
+        name: GlazingConstructionSimpleComponent.model_validate(
+            glazing_construction[name]
+        )
         for name in glazing_construction
     }
 
     schedules = create_schedules(base_path)
 
-    return SBEMTemplateLibraryHandler(
-        SpaceUses=space_uses,
-        Envelopes=envelopes,
-        GlazingConstructions=glazing_constructions,
-        Constructions=constructions,
-        OpaqueMaterials=materials,
-        Schedules=schedules,
-        Conditionings=conditionings,
+    return ComponentLibrary(
+        Operations=space_uses,
+        Envelope=envelopes,
+        GlazingConstructionSimple=glazing_constructions,
+        ConstructionAssembly=constructions,
+        ConstructionMaterial=materials,
+        Schedule=schedules,
+        HVAC=conditionings,
     )
 
 

@@ -26,13 +26,13 @@ from epinterface.interface import (
     add_default_sim_controls,
 )
 from epinterface.sbem.interface import (
-    SBEMTemplateLibraryHandler,
+    ComponentLibrary,
+    EnvelopeAssemblyComponent,
+    InfiltrationComponent,
     SurfaceHandlers,
     WindowDefinition,
-    ZoneConstruction,
-    ZoneEnvelope,
-    ZoneInfiltration,
-    ZoneUse,
+    ZoneEnvelopeComponent,
+    ZoneOperationsComponent,
 )
 from epinterface.weather import BaseWeather
 
@@ -79,22 +79,22 @@ class Model(BaseWeather, validate_assignment=True):
     envelope_name: str
     conditioned_basement: bool = False
     basement_insulation_surface: Literal["walls", "ceiling", None]
-    lib: SBEMTemplateLibraryHandler
+    lib: ComponentLibrary
 
     @property
-    def space_use(self) -> ZoneUse:
+    def space_use(self) -> ZoneOperationsComponent:
         """The space use definition for the model."""
-        if self.space_use_name not in self.lib.SpaceUses:
+        if self.space_use_name not in self.lib.Operations:
             raise KeyError(f"MISSING:SPACE_USE:{self.space_use_name}")
-        return self.lib.SpaceUses[self.space_use_name]
+        return self.lib.Operations[self.space_use_name]
 
     @property
-    def envelope(self) -> ZoneEnvelope:
+    def envelope(self) -> ZoneEnvelopeComponent:
         """The envelope definition for the model."""
-        if self.envelope_name not in self.lib.Envelopes:
+        if self.envelope_name not in self.lib.Envelope:
             raise KeyError(f"MISSING:ENVELOPE:{self.envelope_name}")
 
-        return self.lib.Envelopes[self.envelope_name]
+        return self.lib.Envelope[self.envelope_name]
 
     @property
     def total_conditioned_area(self) -> float:
@@ -247,7 +247,7 @@ class Model(BaseWeather, validate_assignment=True):
         return total_energy_kWh_per_m2
 
     def add_hot_water_to_zone(
-        self, idf: IDF, space_use: ZoneUse, zone_name: str
+        self, idf: IDF, space_use: ZoneOperationsComponent, zone_name: str
     ) -> IDF:
         """Add the hot water to the zone.
 
@@ -279,7 +279,7 @@ class Model(BaseWeather, validate_assignment=True):
         return idf
 
     def add_hot_water_to_zone_list(
-        self, idf: IDF, space_use: ZoneUse, zone_list: ZoneList
+        self, idf: IDF, space_use: ZoneOperationsComponent, zone_list: ZoneList
     ) -> IDF:
         """Add the hot water to the zone list.
 
@@ -295,7 +295,9 @@ class Model(BaseWeather, validate_assignment=True):
             idf = self.add_hot_water_to_zone(idf, space_use, zone_name)
         return idf
 
-    def add_space_use(self, idf: IDF, space_use: ZoneUse, zone_list: ZoneList) -> IDF:
+    def add_space_use(
+        self, idf: IDF, space_use: ZoneOperationsComponent, zone_list: ZoneList
+    ) -> IDF:
         """Add the space use to the IDF model.
 
         Args:
@@ -314,7 +316,7 @@ class Model(BaseWeather, validate_assignment=True):
         return idf
 
     def add_envelope(
-        self, idf: IDF, envelope: ZoneEnvelope, inf_zone_list: ZoneList
+        self, idf: IDF, envelope: ZoneEnvelopeComponent, inf_zone_list: ZoneList
     ) -> IDF:
         """Add the envelope to the IDF model.
 
@@ -329,7 +331,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The IDF model with the added envelope.
         """
-        constructions = envelope.Constructions
+        constructions = envelope.Assemblies
         infiltration = envelope.Infiltration
         window_def = envelope.WindowDefinition
         # _other_settings = envelope.OtherSettings
@@ -347,7 +349,7 @@ class Model(BaseWeather, validate_assignment=True):
     def add_srf_constructions(
         self,
         idf: IDF,
-        constructions: ZoneConstruction,
+        constructions: EnvelopeAssemblyComponent,
         window_def: WindowDefinition | None,
     ) -> IDF:
         """Assigns the constructions to the surfaces in the model.
@@ -381,7 +383,7 @@ class Model(BaseWeather, validate_assignment=True):
         return idf
 
     def add_infiltration(
-        self, idf: IDF, infiltration: ZoneInfiltration, zone_list: ZoneList
+        self, idf: IDF, infiltration: InfiltrationComponent, zone_list: ZoneList
     ):
         """Add the infiltration to the IDF model.
 
@@ -436,7 +438,7 @@ class Model(BaseWeather, validate_assignment=True):
 
         idf = add_default_sim_controls(idf)
         idf, scheds = add_default_schedules(idf)
-        self.lib.Schedules.update(scheds)
+        self.lib.Schedule.update(scheds)
 
         idf = SiteGroundTemperature.FromValues(
             assumed_constants["SiteGroundTemperature"]
@@ -597,8 +599,8 @@ if __name__ == "__main__":
 
     with open("notebooks/everett_lib.json") as f:
         lib_data = json.load(f)
-    lib = SBEMTemplateLibraryHandler.model_validate(lib_data)
-    for env in lib.Envelopes.values():
+    lib = ComponentLibrary.model_validate(lib_data)
+    for env in lib.Envelope.values():
         if env.WindowDefinition is None:
             msg = f"Envelope {env.Name} has no window definition"
             raise ValueError(msg)
@@ -609,8 +611,8 @@ if __name__ == "__main__":
             "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
         ),
         lib=lib,
-        space_use_name=next(iter(lib.SpaceUses)),
-        envelope_name=next(iter(lib.Envelopes)),
+        space_use_name=next(iter(lib.Operations)),
+        envelope_name=next(iter(lib.Envelope)),
         geometry=ShoeboxGeometry(
             x=0,
             y=0,

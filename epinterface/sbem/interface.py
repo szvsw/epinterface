@@ -2,11 +2,9 @@
 
 import logging
 import re
-from pathlib import Path
 from typing import Annotated, Any, Literal, TypeVar, cast
 
 import numpy as np
-import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 from constants.assumed_constants import assumed_constants
@@ -19,7 +17,6 @@ from pydantic import (
     field_serializer,
     field_validator,
     model_validator,
-    validate_call,
 )
 
 from epinterface.interface import (
@@ -47,7 +44,7 @@ class SBEMTemplateBuilderException(Exception):
         super().__init__(self.message)
 
 
-class SBEMTemplateBuilderDuplicatesFound(SBEMTemplateBuilderException):
+class DuplicatesFound(SBEMTemplateBuilderException):
     """An error raised when duplicates are found in a SBEM template library."""
 
     def __init__(self, duplicate_field: str):
@@ -61,7 +58,7 @@ class SBEMTemplateBuilderDuplicatesFound(SBEMTemplateBuilderException):
         super().__init__(self.message)
 
 
-class SBEMTemplateBuilderValueNotFound(SBEMTemplateBuilderException):
+class ValueNotFound(SBEMTemplateBuilderException):
     """An error raised when a value is not found in a SBEM template library."""
 
     def __init__(self, obj_type: str, value: str):
@@ -77,7 +74,7 @@ class SBEMTemplateBuilderValueNotFound(SBEMTemplateBuilderException):
         super().__init__(self.message)
 
 
-class NotImplementedSBEMTemplateBuilderParameter(SBEMTemplateBuilderException):
+class NotImplementedParameter(SBEMTemplateBuilderException):
     """An error raised when a template parameter is not implemented."""
 
     def __init__(self, parameter_name: str, obj_name: str, obj_type: str):
@@ -171,7 +168,7 @@ def str_to_opaque_layer_list(v: str | list):
     names = list_content[::2]
     thicknesses = list(map(float, list_content[1::2]))
     return [
-        ConstructionLayer(Name=name, Thickness=thickness)
+        ConstructionLayerComponent(Name=name, Thickness=thickness)
         for name, thickness in zip(names, thicknesses, strict=False)
     ]
 
@@ -189,17 +186,17 @@ FloatListStr = Annotated[list[float], BeforeValidator(str_to_float_list)]
 
 
 # TODO: Make this at the library level not the row level?
-class SBEMTemplateBuilderMetadata(BaseModel):
+class MetadataMixin(BaseModel):
     """Metadata for a SBEM template table object."""
 
-    Category: str = Field(..., title="Category of the object")
+    Category: NanStr = Field(..., title="Category of the object")
     Comment: NanStr = Field(..., title="Comment on the object")
     DataSource: NanStr = Field(..., title="Data source of the object")
     Version: NanStr | None = Field(default=None, title="Version of the object")
 
 
 # TODO: Add this to the template format? Leaving here for flexibility for now
-class SBEMEnvironmentalAddedData(BaseModel):
+class EnvironmentalMixin(BaseModel):
     """Environmental data for a SBEM template table object."""
 
     Cost: float = Field(
@@ -240,9 +237,7 @@ class SBEMEnvironmentalAddedData(BaseModel):
     )
 
 
-class StandardMaterializedMetadata(
-    SBEMEnvironmentalAddedData, SBEMTemplateBuilderMetadata
-):
+class StandardMaterializedMetadata(EnvironmentalMixin, MetadataMixin):
     """Standard metadata for a SBEM data."""
 
     pass
@@ -262,10 +257,9 @@ class ScheduleTransferObject(BaseModel):
 
 
 # occupancy
-class SBEMTemplateBuilderOccupancy(NamedObject):
+class OccupancyComponent(NamedObject, MetadataMixin):
     """An occupancy object in the SBEM library."""
 
-    Metadata: SBEMTemplateBuilderMetadata = Field(..., title="Metadata of the object")
     OccupancyDensity: float = Field(
         ...,
         title="Occupancy density of the object",
@@ -343,10 +337,9 @@ class SBEMTemplateBuilderOccupancy(NamedObject):
 # lighting
 
 
-class SBEMTemplateBuilderLighting(NamedObject):
+class LightingComponent(NamedObject, MetadataMixin):
     """A lighting object in the SBEM library."""
 
-    Metadata: SBEMTemplateBuilderMetadata = Field(..., title="Metadata of the object")
     LightingPowerDensity: float = Field(
         ...,
         title="Lighting density of the object",
@@ -380,9 +373,7 @@ class SBEMTemplateBuilderLighting(NamedObject):
             return idf
 
         if self.DimmingType != "Off":
-            raise NotImplementedSBEMTemplateBuilderParameter(
-                "DimmingType:On", self.Name, "Lights"
-            )
+            raise NotImplementedParameter("DimmingType:On", self.Name, "Lights")
 
         logger.warning(
             f"Adding lights to zone with schedule {self.LightingSchedule}.  Make sure this schedule exists."
@@ -412,10 +403,9 @@ class SBEMTemplateBuilderLighting(NamedObject):
 # equipment
 
 
-class SBEMTemplateBuilderEquipment(NamedObject):
+class EquipmentComponent(NamedObject, MetadataMixin):
     """An equipment object in the SBEM library."""
 
-    Metadata: SBEMTemplateBuilderMetadata = Field(..., title="Metadata of the object")
     EquipmentDensity: float = Field(..., title="Equipment density of the object")
     EquipmentSchedule: str = Field(..., title="Equipment schedule of the object")
     EquipmentIsOn: BoolStr = Field(..., title="Equipment is on")
@@ -456,10 +446,9 @@ class SBEMTemplateBuilderEquipment(NamedObject):
 
 
 # TODO: Potentially duplicative with HVACTempelateThermostat in epinterface > interface
-class SBEMTemplateBuilderThermostat(NamedObject):
+class ThermostatComponent(NamedObject, MetadataMixin):
     """A thermostat object in the SBEM library."""
 
-    Metadata: SBEMTemplateBuilderMetadata = Field(..., title="Metadata of the object")
     ThermostatIsOn: BoolStr = Field(..., title="Thermostat is on")
     HeatingSetpoint: float = Field(
         ...,
@@ -536,14 +525,14 @@ def SBEMScheduleValidator(NamedObject, extra="forbid"):
         return schedule_day, schedule_week, schedule_year
 
 
-class ZoneSpaceUse(NamedObject):
+class ZoneSpaceUseComponent(NamedObject):
     """Space use object."""
 
     # TODO
-    Occupancy: SBEMTemplateBuilderOccupancy
-    Lighting: SBEMTemplateBuilderLighting
-    Equipment: SBEMTemplateBuilderEquipment
-    Thermostat: SBEMTemplateBuilderThermostat
+    Occupancy: OccupancyComponent
+    Lighting: LightingComponent
+    Equipment: EquipmentComponent
+    Thermostat: ThermostatComponent
 
     def add_loads_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add the loads to an IDF zone.
@@ -580,14 +569,13 @@ FuelType = Literal[
 
 
 # heating/cooling
-class SBEMTemplateBuilderHeatingCooling(NamedObject):
+class ConditioningSystemsComponent(NamedObject, MetadataMixin):
     """An HVAC object in the SBEM library."""
 
     HeatingSystemType = Literal[
         "ElectricResistance", "GasBoiler", "GasFurnace", "ASHP", "GSHP", "Custom"
     ]
     CoolingSystemType = Literal["DX", "EvapCooling", "Custom"]
-    Metadata: SBEMTemplateBuilderMetadata = Field(..., title="Metadata of the object")
     HeatingType: HeatingSystemType = Field(..., title="Heating system of the object")
     HeatingFuel: FuelType = Field(..., title="Fuel of the object")
     CoolingType: CoolingSystemType = Field(..., title="Cooling system of the object")
@@ -600,10 +588,9 @@ class SBEMTemplateBuilderHeatingCooling(NamedObject):
 
 
 # ventilation
-class SBEMTemplateBuilderVentilation(NamedObject):
+class VentilationComponent(NamedObject, MetadataMixin):
     """A ventilation object in the SBEM library."""
 
-    Metadata: SBEMTemplateBuilderMetadata = Field(..., title="Metadata of the object")
     VentilationRate: float = Field(..., title="Ventilation rate of the object")
     MinFreshAir: float = Field(
         ...,
@@ -620,14 +607,15 @@ class SBEMTemplateBuilderVentilation(NamedObject):
     )  # TODO: Discuss this, could use it for natural ventilation
 
 
-class ZoneConditioning(
+class ZoneHVACComponent(
     NamedObject,
+    MetadataMixin,
     extra="forbid",
 ):
     """Conditioning object in the SBEM library."""
 
-    HeatingCooling: SBEMTemplateBuilderHeatingCooling
-    Ventilation: SBEMTemplateBuilderVentilation
+    HeatingCooling: ConditioningSystemsComponent
+    Ventilation: VentilationComponent
     # TODO: change the structure like ZoneSpaceUse
     """Zone conditioning object."""
 
@@ -652,9 +640,7 @@ class ZoneConditioning(
 
 
 # hot water
-class ZoneDHW(
-    NamedObject, SBEMTemplateBuilderMetadata, extra="ignore", populate_by_name=True
-):
+class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=True):
     """Domestic Hot Water object."""
 
     DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil"]
@@ -776,14 +762,14 @@ class ZoneDHW(
         return idf
 
 
-class ZoneUse(
-    NamedObject, SBEMTemplateBuilderMetadata, extra="forbid", populate_by_name=True
+class ZoneOperationsComponent(
+    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
 ):
     """Zone use consolidation across space use, HVAC, DHW."""
 
-    SpaceUse: ZoneSpaceUse
-    HVAC: ZoneConditioning
-    DHW: ZoneDHW
+    SpaceUse: ZoneSpaceUseComponent
+    HVAC: ZoneHVACComponent
+    DHW: DHWComponent
 
     def add_space_use_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add the loads to an IDF zone.
@@ -853,7 +839,7 @@ ConstructionComponents = Literal[
 
 
 # TODO: remove? feels redundant
-class CommonMaterialProperties(BaseModel):
+class CommonMaterialPropertiesMixin(BaseModel):
     """Common material properties for glazing and opaque materials."""
 
     Conductivity: float = Field(
@@ -886,7 +872,9 @@ class MaterialWithThickness(BaseModel, populate_by_name=True):
 
 
 # Opaque materials
-class ConstructionMaterialProperties(CommonMaterialProperties, populate_by_name=True):
+class ConstructionMaterialProperties(
+    CommonMaterialPropertiesMixin, populate_by_name=True
+):
     """Properties of an opaque material."""
 
     # add in the commonMaterialsPropertis
@@ -940,10 +928,11 @@ class ConstructionMaterialProperties(CommonMaterialProperties, populate_by_name=
     )
 
 
-class ConstructionMaterial(
+class ConstructionMaterialComponent(
     ConstructionMaterialProperties,
     StandardMaterializedMetadata,
     NamedObject,
+    MetadataMixin,
     extra="forbid",
 ):
     """Construction material object."""
@@ -951,11 +940,13 @@ class ConstructionMaterial(
     pass
 
 
-class ConstructionLayer(MaterialWithThickness, NamedObject, extra="forbid"):
+class ConstructionLayerComponent(
+    MaterialWithThickness, MetadataMixin, NamedObject, extra="forbid"
+):
     """Layer of an opaque construction."""
 
     def dereference_to_material(
-        self, material_defs: dict[str, ConstructionMaterial]
+        self, material_defs: dict[str, ConstructionMaterialComponent]
     ) -> Material:
         """Converts a referenced material into a direct EP material object.
 
@@ -966,7 +957,7 @@ class ConstructionLayer(MaterialWithThickness, NamedObject, extra="forbid"):
             Material: The material object.
         """
         if self.Name not in material_defs:
-            raise SBEMTemplateBuilderValueNotFound("Material", self.Name)
+            raise ValueNotFound("Material", self.Name)
 
         mat_def = material_defs[self.Name]
 
@@ -984,9 +975,10 @@ class ConstructionLayer(MaterialWithThickness, NamedObject, extra="forbid"):
 
 
 # windows definitions
-class GlazingConstructionSimple(
+class GlazingConstructionSimpleComponent(
     NamedObject,
     StandardMaterializedMetadata,
+    MetadataMixin,
     extra="forbid",
     populate_by_name=True,
 ):
@@ -1032,7 +1024,7 @@ class GlazingConstructionSimple(
         return idf
 
 
-class WindowDefinition(NamedObject, SBEMTemplateBuilderMetadata, extra="ignore"):
+class WindowDefinition(NamedObject, MetadataMixin, extra="ignore"):
     """Window definition object."""
 
     Construction: str = Field(..., title="Construction object name")
@@ -1047,8 +1039,8 @@ class WindowDefinition(NamedObject, SBEMTemplateBuilderMetadata, extra="ignore")
         return set()
 
 
-class ZoneInfiltration(
-    NamedObject, SBEMTemplateBuilderMetadata, extra="forbid", populate_by_name=True
+class InfiltrationComponent(
+    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
 ):
     """Zone infiltration object."""
 
@@ -1132,12 +1124,12 @@ class ZoneInfiltration(
         return idf
 
 
-class SBEMConstruction(
-    NamedObject, SBEMTemplateBuilderMetadata, extra="forbid", populate_by_name=True
+class ConstructionAssemblyComponent(
+    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
 ):
     """Opaque construction object."""
 
-    Layers: list[ConstructionLayer] = Field(
+    Layers: list[ConstructionLayerComponent] = Field(
         ..., title="Layers of the opaque construction"
     )
     VegetationLayer: NanStr = Field(
@@ -1146,7 +1138,7 @@ class SBEMConstruction(
     Type: ConstructionComponents = Field(..., title="Type of the opaque construction")
 
     def add_to_idf(
-        self, idf: IDF, material_defs: dict[str, ConstructionMaterial]
+        self, idf: IDF, material_defs: dict[str, ConstructionMaterialComponent]
     ) -> IDF:
         """Adds an opaque construction to an IDF object.
 
@@ -1169,25 +1161,21 @@ class SBEMConstruction(
         return idf
 
 
-class ZoneConstruction(
-    NamedObject, SBEMTemplateBuilderMetadata, extra="forbid", populate_by_name=True
+class EnvelopeAssemblyComponent(
+    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
 ):
     """Zone construction object."""
 
-    RoofConstruction: str = Field(..., title="Roof construction object name")
-    FacadeConstruction: str = Field(..., title="Facade construction object name")
-    SlabConstruction: str = Field(..., title="Slab construction object name")
-    PartitionConstruction: str = Field(..., title="Partition construction object name")
-    ExternalFloorConstruction: str = Field(
+    RoofAssembly: str = Field(..., title="Roof construction object name")
+    FacadeAssembly: str = Field(..., title="Facade construction object name")
+    SlabAssembly: str = Field(..., title="Slab construction object name")
+    PartitionAssembly: str = Field(..., title="Partition construction object name")
+    ExternalFloorAssembly: str = Field(
         ..., title="External floor construction object name"
     )
-    GroundSlabConstruction: str = Field(
-        ..., title="Ground slab construction object name"
-    )
-    GroundWallConstruction: str = Field(
-        ..., title="Ground wall construction object name"
-    )
-    InternalMassConstruction: str = Field(
+    GroundSlabAssembly: str = Field(..., title="Ground slab construction object name")
+    GroundWallAssembly: str = Field(..., title="Ground wall construction object name")
+    InternalMassAssembly: str = Field(
         ..., title="Internal mass construction object name"
     )
     InternalMassIsOn: BoolStr = Field(..., title="Internal mass is on")
@@ -1203,18 +1191,17 @@ class ZoneConstruction(
     PartitionIsAdiabatic: BoolStr = Field(..., title="Partition is adiabatic")
 
 
-class ZoneEnvelope(NamedObject, SBEMTemplateBuilderMetadata, extra="forbid"):
+class ZoneEnvelopeComponent(NamedObject, MetadataMixin, extra="forbid"):
     """Zone envelope object."""
 
-    Constructions: ZoneConstruction
-    Infiltration: ZoneInfiltration
+    Assemblies: EnvelopeAssemblyComponent
+    Infiltration: InfiltrationComponent
     WindowDefinition: WindowDefinition | None
     WWR: float | None = Field(
         default=assumed_constants["WWR"], description="Window to wall ratio", ge=0, le=1
     )
     # Foundation: Foundation | None
     # OtherSettings: OtherSettings | None
-    BuildingType: str | int = Field(..., title="Building type")
 
     # TODO: add envelope to idf zone
     # (currently in builder)
@@ -1232,120 +1219,46 @@ class ZoneEnvelope(NamedObject, SBEMTemplateBuilderMetadata, extra="forbid"):
         return win_sch
 
 
-class SBEMZone(NamedObject, SBEMTemplateBuilderMetadata, extra="forbid"):
-    """Zone object in the SBEM library."""
-
-    # TODO: Update namings here
-    Loads: str = Field(..., title="Loads object name")
-    Conditioning: str = Field(..., title="Conditioning object name")
-    NaturalVentilation: str = Field(..., title="Natural ventilation object name")
-    Constructions: str = Field(..., title="Construction object name")
-    HotWater: str = Field(..., title="Hot water object name")
-    Infiltration: str = Field(..., title="Infiltration object name")
-    DataSource: NanStr = Field(
-        ..., title="Data source of the object", validation_alias="Data Source"
-    )
-
-
 NamedType = TypeVar("NamedType", bound=NamedObject)
 
 
-# TODO: Remove this library and only use V2
-class SBEMTemplateLibraryLoad(BaseModel, arbitrary_types_allowed=True):
-    """Climate Studio library object V1."""
-
-    # DaySchedules: dict[str, DaySchedule]
-    # DomHotWater: dict[str, DomHotWater]
-    # WindowSettings: dict[str, WindowSettings]
-    # NaturalVentilation: dict[str, NaturalVentilation] ?
-    GlazingConstructionSimple: dict[str, GlazingConstructionSimple]
-    GlazingMaterials: dict[str, SimpleGlazingMaterial]
-    ConstructionMaterials: dict[str, ConstructionMaterial]
-    Constructions: dict[str, SBEMConstruction]
-    ZoneConditioning: dict[str, ZoneConditioning]
-    ZoneConstruction: dict[str, ZoneConstruction]
-    ZoneDefinition: dict[str, SBEMZone]
-    ZoneInfiltration: dict[str, ZoneInfiltration]
-    ZoneLoad: dict[str, ZoneSpaceUse]
-    Schedules: dict[str, Schedule]
-
-    @classmethod
-    @validate_call
-    def Load(cls, base_path: Path):  # TODO: update the loading method
-        """Load a SBEM template library from a directory.
-
-        The directory should have all the necessary named files.
-
-        Args:
-            base_path (Path): The base path to the library directory.
-
-        Returns:
-            lib (SBEMTemplateLibrary): The SBEM Template library object.
-        """
-        if isinstance(base_path, str):
-            base_path = Path(base_path)
-
-        # TODO: UPDATE LOAD IN METHODOLOGY
-        glass_consts_simple = cls.LoadObjects(base_path, GlazingConstructionSimple)
-        glazing_materials = cls.LoadObjects(base_path, SimpleGlazingMaterial)
-        construction_materials = cls.LoadObjects(base_path, ConstructionMaterial)
-        constructions_agg = cls.LoadObjects(base_path, SBEMConstruction)
-        zone_hvac = cls.LoadObjects(base_path, ZoneConditioning)
-        zone_constructions = cls.LoadObjects(base_path, ZoneConstruction)
-        zone_definitions = cls.LoadObjects(base_path, SBEMZone)
-        zone_infiltrations = cls.LoadObjects(base_path, ZoneInfiltration)
-        zone_loads = cls.LoadObjects(base_path, ZoneSpaceUse)
-        schedules = cls.LoadObjects(base_path, Schedule)  # TODO: Update schedule naming
-
-        return cls(
-            GlazingConstructionSimple=glass_consts_simple,
-            GlazingMaterials=glazing_materials,
-            ConstructionMaterials=construction_materials,
-            Constructions=constructions_agg,
-            ZoneConditioning=zone_hvac,
-            ZoneConstruction=zone_constructions,
-            ZoneDefinition=zone_definitions,
-            ZoneInfiltration=zone_infiltrations,
-            ZoneLoad=zone_loads,
-            Schedules=schedules,
-        )
-
-    @classmethod
-    def LoadObjects(
-        cls, base_path: Path, obj_class: type[NamedType], pluralize: bool = False
-    ) -> dict[str, NamedType]:
-        """Handles deserializing a ClimateStudio CSV to the appropriate class.
-
-        Args:
-            base_path (Path): The base path to the library directory.
-            obj_class (Type[NamedObject]): The class to deserialize to.
-            pluralize (bool, optional): Whether to pluralize the filename. Defaults to False.
-
-        Returns:
-            dict[str, NamedObject]: The deserialized objects.
-        """
-        df = pd.read_excel(base_path, sheet_name=obj_class.__name__, engine="openpyxl")
-        # remove the first row (instructions)
-        df = df.iloc[1:]
-        data = df.to_dict(orient="records")
-        obj_list = [obj_class.model_validate(d) for d in data]
-        obj_dict = {obj.Name: obj for obj in obj_list}
-        if len(obj_dict) != len(obj_list):
-            raise SBEMTemplateBuilderDuplicatesFound(obj_class.__name__)
-        return obj_dict
-
-
-class SBEMTemplateLibraryHandler(BaseModel, arbitrary_types_allowed=True):
+class ComponentLibrary(BaseModel, MetadataMixin, arbitrary_types_allowed=True):
     """SBEM library object to handle the different components."""
 
-    SpaceUses: dict[str, ZoneUse]
-    Envelopes: dict[str, ZoneEnvelope]
-    GlazingConstructions: dict[str, GlazingConstructionSimple]
-    Constructions: dict[str, SBEMConstruction]
-    OpaqueMaterials: dict[str, ConstructionMaterial]
-    Schedules: dict[str, Schedule]
-    Conditionings: dict[str, ZoneConditioning]
-    # store the different components (HVAC, Ventilation, SpaceUse)
+    Operations: dict[str, ZoneOperationsComponent] = Field(
+        ..., description="Operations component gathers HVAC and DHW and Space Use."
+    )
+    SpaceUse: dict[str, ZoneSpaceUseComponent] = Field(
+        ...,
+        description="Space use component gathers occupancy, lighting, equipment, and thermostats.",
+    )
+    Occupancy: dict[str, OccupancyComponent]
+    Lighting: dict[str, LightingComponent]
+    Equipment: dict[str, EquipmentComponent]
+    Thermostat: dict[str, ThermostatComponent]
+
+    HVAC: dict[str, ZoneHVACComponent] = Field(
+        ..., description="HVAC component gathers conditioningsystems and ventilation."
+    )
+    ConditioningSystems: dict[str, ConditioningSystemsComponent]
+    Ventilation: dict[str, VentilationComponent]
+    DHW: dict[str, DHWComponent]
+
+    Envelope: dict[str, ZoneEnvelopeComponent] = Field(
+        ...,
+        description="Envelope component gathers envelope assemblies, infiltration, and window definition.",
+    )
+    GlazingConstructionSimple: dict[str, GlazingConstructionSimpleComponent]
+    Infiltration: dict[str, InfiltrationComponent]
+    EnvelopeAssembly: dict[str, EnvelopeAssemblyComponent] = Field(
+        ...,
+        description="Envelope assembly component gathers roof, facade, slab, partition, external floor, ground slab, ground wall, and internal mass assemblies.",
+    )
+    ConstructionAssembly: dict[str, ConstructionAssemblyComponent]
+    ConstructionMaterialLayer: dict[str, ConstructionLayerComponent]
+    ConstructionMaterial: dict[str, ConstructionMaterialComponent]
+
+    Schedule: dict[str, Schedule]
 
     @field_validator("Schedules", mode="before")
     @classmethod
@@ -1406,7 +1319,7 @@ class SurfaceHandler(BaseModel):
     surface_group: Literal["glazing", "opaque"]
 
     def assign_srfs(
-        self, idf: IDF, lib: SBEMTemplateLibraryHandler, construction_name: str
+        self, idf: IDF, lib: ComponentLibrary, construction_name: str
     ) -> IDF:
         """Adds a construction (and its materials) to an IDF and assigns it to matching surfaces.
 
@@ -1421,7 +1334,7 @@ class SurfaceHandler(BaseModel):
             else "BUILDINGSURFACE:DETAILED"
         )
         if self.boundary_condition is not None and self.surface_group == "glazing":
-            raise NotImplementedSBEMTemplateBuilderParameter(
+            raise NotImplementedParameter(
                 "BoundaryCondition", self.surface_group, "Glazing"
             )
 
@@ -1429,7 +1342,7 @@ class SurfaceHandler(BaseModel):
         construction_lib = (
             lib.OpaqueConstructions
             if self.surface_group != "glazing"
-            else lib.GlazingConstructions
+            else lib.GlazingConstructionSimple
         )
         if construction_name not in construction_lib:
             raise KeyError(
@@ -1438,8 +1351,8 @@ class SurfaceHandler(BaseModel):
         construction = construction_lib[construction_name]
         idf = (
             construction.add_to_idf(idf)
-            if isinstance(construction, GlazingConstructionSimple)
-            else construction.add_to_idf(idf, lib.OpaqueMaterials)
+            if isinstance(construction, GlazingConstructionSimpleComponent)
+            else construction.add_to_idf(idf, lib.ConstructionMaterial)
         )
         for srf in srfs:
             srf.Construction_Name = construction.Name
@@ -1591,8 +1504,8 @@ class SurfaceHandlers(BaseModel):
     def handle_envelope(
         self,
         idf: IDF,
-        lib: SBEMTemplateLibraryHandler,
-        constructions: ZoneConstruction,
+        lib: ComponentLibrary,
+        constructions: EnvelopeAssemblyComponent,
         window: WindowDefinition | None,
     ):
         """Assign the envelope to the IDF model.
@@ -1610,40 +1523,40 @@ class SurfaceHandlers(BaseModel):
         """
 
         # outside walls are the ones with outdoor boundary condition and vertical orientation
-        def make_reversed(const: SBEMConstruction):
+        def make_reversed(const: ConstructionAssemblyComponent):
             new_const = const.model_copy(deep=True)
             new_const.Layers = new_const.Layers[::-1]
             new_const.Name = f"{const.Name}_Reversed"
             return new_const
 
-        def reverse_construction(const_name: str, lib: SBEMTemplateLibraryHandler):
+        def reverse_construction(const_name: str, lib: ComponentLibrary):
             const = lib.OpaqueConstructions[const_name]
             new_const = make_reversed(const)
             return new_const
 
-        slab_reversed = reverse_construction(constructions.SlabConstruction, lib)
+        slab_reversed = reverse_construction(constructions.SlabAssembly, lib)
         lib.OpaqueConstructions[slab_reversed.Name] = slab_reversed
 
         idf = self.Roof.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.RoofConstruction
+            idf=idf, lib=lib, construction_name=constructions.RoofAssembly
         )
         idf = self.Facade.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.FacadeConstruction
+            idf=idf, lib=lib, construction_name=constructions.FacadeAssembly
         )
         idf = self.Partition.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.PartitionConstruction
+            idf=idf, lib=lib, construction_name=constructions.PartitionAssembly
         )
         idf = self.Slab.assign_srfs(
             idf=idf, lib=lib, construction_name=slab_reversed.Name
         )
         idf = self.Ceiling.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.SlabConstruction
+            idf=idf, lib=lib, construction_name=constructions.SlabAssembly
         )
         idf = self.GroundSlab.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.GroundSlabConstruction
+            idf=idf, lib=lib, construction_name=constructions.GroundSlabAssembly
         )
         idf = self.GroundWall.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.GroundWallConstruction
+            idf=idf, lib=lib, construction_name=constructions.GroundWallAssembly
         )
         if window:
             idf = self.Window.assign_srfs(
