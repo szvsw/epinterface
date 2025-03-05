@@ -15,13 +15,13 @@ from epinterface.interface import (
     ZoneInfiltrationDesignFlowRate,
 )
 from epinterface.sbem.common import BoolStr, MetadataMixin, NamedObject, NanStr
-from epinterface.sbem.exceptions import ValueNotFound
-from epinterface.sbem.materials import (
+from epinterface.sbem.components.materials import (
     ConstructionComponentSurfaceType,
     ConstructionMaterialComponent,
     MaterialWithThickness,
     StandardMaterialMetadataMixin,
 )
+from epinterface.sbem.exceptions import ValueNotFound
 
 # CONSTRUCTION CLASSES
 

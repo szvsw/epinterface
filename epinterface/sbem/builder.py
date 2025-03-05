@@ -25,18 +25,19 @@ from epinterface.interface import (
     add_default_schedules,
     add_default_sim_controls,
 )
-from epinterface.sbem.envelope import (
+from epinterface.sbem.components import (
     ConstructionAssemblyComponent,
     EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
     ZoneEnvelopeComponent,
+    ZoneOperationsComponent,
 )
 from epinterface.sbem.exceptions import (
     NotImplementedParameter,
     SBEMBuilderNotImplementedError,
 )
-from epinterface.sbem.interface import ComponentLibrary, ZoneOperationsComponent
+from epinterface.sbem.interface import ComponentLibrary
 from epinterface.weather import BaseWeather
 
 

@@ -6,28 +6,24 @@ from typing import Any
 import pandas as pd
 from archetypal.schedule import ScheduleTypeLimits
 
-from epinterface.sbem.envelope import (
+from epinterface.sbem.components import (
+    ConditioningSystemsComponent,
     ConstructionAssemblyComponent,
+    ConstructionMaterialComponent,
+    EquipmentComponent,
     GlazingConstructionSimpleComponent,
+    LightingComponent,
+    OccupancyComponent,
+    ThermostatComponent,
+    VentilationComponent,
     ZoneEnvelopeComponent,
+    ZoneHVACComponent,
+    ZoneSpaceUseComponent,
 )
 from epinterface.sbem.interface import (
     ComponentLibrary,
     Schedule,
     ScheduleTransferObject,
-)
-from epinterface.sbem.materials import ConstructionMaterialComponent
-from epinterface.sbem.space_use import (
-    EquipmentComponent,
-    LightingComponent,
-    OccupancyComponent,
-    ThermostatComponent,
-    ZoneSpaceUseComponent,
-)
-from epinterface.sbem.systems import (
-    ConditioningSystemsComponent,
-    VentilationComponent,
-    ZoneHVACComponent,
 )
 
 
