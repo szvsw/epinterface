@@ -9,6 +9,7 @@ ZoneSpaceUse -> Occupancy (deep object)
 ZoneSpaceUse -> Lighting (deep object)
 ZoneSpaceUse -> Equipment (deep object)
 ZoneSpaceUse -> Thermostat (deep object)
+ZoneSpaceUse -> WaterUse (deep object)
 
 ConditioningSystems -> ThermalSystem (deep object)
 ZoneHVAC -> ConditioningSystems (deep object)
