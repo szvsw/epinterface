@@ -41,7 +41,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pyright]
 include = ["epinterface"]
-ignore = ["epinterface/sbem"]
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"

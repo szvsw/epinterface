@@ -7,8 +7,7 @@ from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 from pydantic import Field
 
-from epinterface.constants.assumed_constants import assumed_constants
-from epinterface.constants.physical_constants import physical_constants
+from epinterface.constants import assumed_constants, physical_constants
 from epinterface.interface import ElectricEquipment, Lights, People
 from epinterface.sbem.common import BoolStr, MetadataMixin, NamedObject
 from epinterface.sbem.exceptions import NotImplementedParameter
@@ -27,13 +26,14 @@ class OccupancyComponent(NamedObject, MetadataMixin):
     )
     OccupancySchedule: str = Field(..., title="Occupancy schedule of the object")
     PeopleIsOn: BoolStr = Field(..., title="People are on")
-    MetabolicRate = physical_constants["MetabolicRate"]
+    MetabolicRate: float = assumed_constants.MetabolicRate_met
 
     @property
     def MetabolicRate_met_to_W(self):
         """Get the metabolic rate in Watts."""
-        avg_human_weight_kg = physical_constants["avg_human_weight_kg"]
-        conversion_factor = physical_constants["conversion_factor"]  # W/kg
+        avg_human_weight_kg = assumed_constants.AvgHumanWeight_kg
+        conversion_factor = physical_constants.ConversionFactor_W_per_kg
+        # mets * kg * W/kg = W
         return self.MetabolicRate * avg_human_weight_kg * conversion_factor
 
     def add_people_to_idf_zone(
@@ -84,7 +84,7 @@ class OccupancyComponent(NamedObject, MetadataMixin):
             Number_of_People=None,
             Floor_Area_per_Person=None,
             People_per_Floor_Area=self.OccupancyDensity,
-            Fraction_Radiant=assumed_constants["Fraction_Radiant"],
+            Fraction_Radiant=assumed_constants.FractionRadiantPeople,
             Sensible_Heat_Fraction="autocalculate",
             Activity_Level_Schedule_Name=activity_sch_year.Name,
         )
@@ -146,10 +146,10 @@ class LightingComponent(NamedObject, MetadataMixin):
             Watts_per_Zone_Floor_Area=self.LightingPowerDensity,
             Watts_per_Person=None,
             Lighting_Level=None,
-            Return_Air_Fraction=0,
-            Fraction_Radiant=0.42,
-            Fraction_Visible=0.18,
-            Fraction_Replaceable=1,
+            Return_Air_Fraction=assumed_constants.ReturnAirFractionLights,
+            Fraction_Radiant=assumed_constants.FractionRadiantLights,
+            Fraction_Visible=assumed_constants.FractionVisibleLights,
+            Fraction_Replaceable=assumed_constants.FractionReplaceableLights,
             EndUse_Subcategory=None,
         )
         idf = lights.add(idf)
@@ -189,9 +189,9 @@ class EquipmentComponent(NamedObject, MetadataMixin):
             Design_Level_Calculation_Method="Watts/Area",
             Watts_per_Zone_Floor_Area=self.EquipmentDensity,
             Watts_per_Person=None,
-            Fraction_Latent=assumed_constants["Fraction_Latent_Equipment"],
-            Fraction_Radiant=assumed_constants["Fraction_Radiant_Equipment"],
-            Fraction_Lost=assumed_constants["Fraction_Lost_Equipment"],
+            Fraction_Latent=assumed_constants.FractionLatentEquipment,
+            Fraction_Radiant=assumed_constants.FractionRadiantEquipment,
+            Fraction_Lost=assumed_constants.FractionLostEquipment,
             EndUse_Subcategory=None,
         )
         idf = equipment.add(idf)
@@ -235,6 +235,7 @@ class ThermostatComponent(NamedObject, MetadataMixin):
             f"Adding thermostat to zone with heating schedule {self.HeatingSchedule} and cooling schedule {self.CoolingSchedule}.  Make sure these schedules exist."
         )
 
+        raise NotImplementedError
         idf = idf.newidfobject("HVACTEMPLATE:THERMOSTAT", **self.model_dump())
         return idf
 
@@ -260,9 +261,8 @@ class ZoneSpaceUseComponent(NamedObject):
         Returns:
             IDF: The updated IDF object.
         """
-        idf = self.add_lights_to_idf_zone(idf, target_zone_name)
-        idf = self.add_people_to_idf_zone(idf, target_zone_name)
-        idf = self.add_equipment_to_idf_zone(idf, target_zone_name)
-        idf = self.add_thermostat_to_idf_zone(idf, target_zone_name)
-        idf = self.add_water_flow_to_idf_zone(idf, target_zone_name)
+        idf = self.Lighting.add_lights_to_idf_zone(idf, target_zone_name)
+        idf = self.Occupancy.add_people_to_idf_zone(idf, target_zone_name)
+        idf = self.Equipment.add_equipment_to_idf_zone(idf, target_zone_name)
+        idf = self.Thermostat.add_thermostat_to_idf_zone(idf, target_zone_name)
         return idf

@@ -4,14 +4,9 @@ import logging
 from typing import Any, cast
 
 import numpy as np
-from archetypal.schedule import Schedule, ScheduleTypeLimits
-from pydantic import (
-    BaseModel,
-    Field,
-    field_serializer,
-    field_validator,
-    model_validator,
-)
+from archetypal.schedule import Schedule as ArchetypalSchedule
+from archetypal.schedule import ScheduleTypeLimits
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from epinterface.sbem.common import MetadataMixin
 from epinterface.sbem.components import (
@@ -34,7 +29,6 @@ from epinterface.sbem.components import (
     ZoneSpaceUseComponent,
 )
 from epinterface.sbem.components.operations import ZoneOperationsComponent
-from epinterface.sbem.exceptions import ScheduleException
 
 logger = logging.getLogger(__name__)
 
@@ -53,30 +47,31 @@ class ScheduleTransferObject(BaseModel):
 
 
 # TODO: Add validation when schedules are added to the objects - update this method once schedule methodoligies are confirmed
-def SBEMScheduleValidator(NamedObject, extra="forbid"):
-    """Schedule validation based on presets."""
+# from epinterface.sbem.exceptions import ScheduleException
+# class SBEMScheduleValidator(NamedObject, extra="forbid"):
+#     """Schedule validation based on presets."""
 
-    @model_validator
-    def schedule_checker(self, schedule_day, schedule_week, schedule_year):
-        """Validates that the schedules follow the required schema."""
-        if not schedule_day:
-            raise ScheduleException
-        if not schedule_week:
-            raise ScheduleException
-        if not schedule_year:
-            raise ScheduleException
-        return schedule_day, schedule_week, schedule_year
+#     @model_validator
+#     def schedule_checker(self, schedule_day, schedule_week, schedule_year):
+#         """Validates that the schedules follow the required schema."""
+#         if not schedule_day:
+#             raise ScheduleException
+#         if not schedule_week:
+#             raise ScheduleException
+#         if not schedule_year:
+#             raise ScheduleException
+#         return schedule_day, schedule_week, schedule_year
 
-    def schedule_cross_val(self, schedule_day, schedule_week, schedule_year):
-        """Confirm that a named schedule in the schedule year exists in the schedule week and schedule day."""
-        if schedule_year.Name not in schedule_week.ScheduleNames:
-            raise ScheduleException
-        if schedule_week.Name not in schedule_day.ScheduleNames:
-            raise ScheduleException
-        return schedule_day, schedule_week, schedule_year
+#     def schedule_cross_val(self, schedule_day, schedule_week, schedule_year):
+#         """Confirm that a named schedule in the schedule year exists in the schedule week and schedule day."""
+#         if schedule_year.Name not in schedule_week.ScheduleNames:
+#             raise ScheduleException
+#         if schedule_week.Name not in schedule_day.ScheduleNames:
+#             raise ScheduleException
+#         return schedule_day, schedule_week, schedule_year
 
 
-class ComponentLibrary(BaseModel, MetadataMixin, arbitrary_types_allowed=True):
+class ComponentLibrary(MetadataMixin, arbitrary_types_allowed=True):
     """SBEM library object to handle the different components."""
 
     Operations: dict[str, ZoneOperationsComponent] = Field(
@@ -114,7 +109,7 @@ class ComponentLibrary(BaseModel, MetadataMixin, arbitrary_types_allowed=True):
     ConstructionMaterialLayer: dict[str, ConstructionLayerComponent]
     ConstructionMaterial: dict[str, ConstructionMaterialComponent]
 
-    Schedule: dict[str, Schedule]
+    Schedule: dict[str, ArchetypalSchedule]
 
     @field_validator("Schedules", mode="before")
     @classmethod
@@ -124,19 +119,19 @@ class ComponentLibrary(BaseModel, MetadataMixin, arbitrary_types_allowed=True):
             if isinstance(val, dict):
                 transfer = ScheduleTransferObject.model_validate(val)
                 limit_type = ScheduleTypeLimits.from_dict(transfer.Type)
-                value[key] = Schedule.from_values(
+                value[key] = ArchetypalSchedule.from_values(
                     Name=transfer.Name,
                     Type=limit_type,  # pyright: ignore [reportArgumentType]
                     Values=transfer.Values,
                 )
             elif isinstance(val, ScheduleTransferObject):
                 limit_type = ScheduleTypeLimits.from_dict(val.Type)
-                value[key] = Schedule.from_values(
+                value[key] = ArchetypalSchedule.from_values(
                     Name=val.Name,
                     Type=limit_type,  # pyright: ignore [reportArgumentType]
                     Values=val.Values,
                 )
-            elif not isinstance(val, Schedule):
+            elif not isinstance(val, ArchetypalSchedule):
                 raise TypeError(f"SCHEDULE_LOAD_ERROR:{type(val)}")
             else:
                 continue
@@ -144,7 +139,7 @@ class ComponentLibrary(BaseModel, MetadataMixin, arbitrary_types_allowed=True):
 
     @field_serializer("Schedules")
     def serialize_schedules(
-        self, schedules: dict[str, Schedule]
+        self, schedules: dict[str, ArchetypalSchedule]
     ) -> dict[str, "ScheduleTransferObject"]:
         """Serialize the schedules to a dataframe.
 
@@ -163,7 +158,3 @@ class ComponentLibrary(BaseModel, MetadataMixin, arbitrary_types_allowed=True):
             )
 
         return out_result
-
-
-# TODO: update this class
-# TODO: update this class

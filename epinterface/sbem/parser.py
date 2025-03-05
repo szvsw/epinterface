@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from archetypal.schedule import ScheduleTypeLimits
+from archetypal.schedule import Schedule, ScheduleTypeLimits
 
 from epinterface.sbem.components import (
     ConditioningSystemsComponent,
@@ -20,11 +20,7 @@ from epinterface.sbem.components import (
     ZoneHVACComponent,
     ZoneSpaceUseComponent,
 )
-from epinterface.sbem.interface import (
-    ComponentLibrary,
-    Schedule,
-    ScheduleTransferObject,
-)
+from epinterface.sbem.interface import ComponentLibrary, ScheduleTransferObject
 
 
 def load_excel_to_dict(base_path: Path, sheet_name: str) -> dict[str, Any]:
@@ -123,6 +119,7 @@ def create_library(base_path: Path) -> ComponentLibrary:
 
     schedules = create_schedules(base_path)
 
+    raise NotImplementedError
     return ComponentLibrary(
         Operations=space_uses,
         Envelope=envelopes,

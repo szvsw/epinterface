@@ -14,8 +14,7 @@ from archetypal.idfclass.sql import Sql
 from pydantic import BaseModel, Field, model_validator
 from shapely import Polygon
 
-from epinterface.constants.assumed_constants import assumed_constants
-from epinterface.constants.physical_constants import physical_constants
+from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
 from epinterface.geometry import ShoeboxGeometry
@@ -76,6 +75,7 @@ class SurfaceHandler(BaseModel):
             lib (ClimateStudioLibraryV2): The library of constructions.
             construction_name (str): The name of the construction to add.
         """
+        raise NotImplementedError
         srf_key = (
             "FENESTRATIONSURFACE:DETAILED"
             if self.surface_group == "glazing"
@@ -352,8 +352,8 @@ class Model(BaseWeather, validate_assignment=True):
 
         """
         ppl_per_m2 = (
-            self.space_use.SpaceUse.OccupancyDensity
-            if self.space_use.SpaceUse.PeopleIsOn
+            self.operations.SpaceUse.Occupancy.OccupancyDensity
+            if self.operations.SpaceUse.Occupancy.PeopleIsOn
             else 0
         )
         total_area = self.total_conditioned_area
@@ -387,6 +387,7 @@ class Model(BaseWeather, validate_assignment=True):
         if self.attic_use_fraction and self.geometry.roof_height is None:
             msg = "Cannot have an occupied attic if there is no roof height."
             raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def basement_check(self):
@@ -411,6 +412,8 @@ class Model(BaseWeather, validate_assignment=True):
             msg = "Cannot have an occupied basement if there is no basement in self.geometry."
             raise ValueError(msg)
 
+        return self
+
     def add_zone_lists(
         self,
         idf: IDF,
@@ -429,6 +432,7 @@ class Model(BaseWeather, validate_assignment=True):
             conditioned_zone_list (ZoneList): The list of conditioned zones
             all_zones_list (ZoneList): The list of all zones
         """
+        raise NotImplementedError
         all_zone_names = [zone.Name for zone in idf.idfobjects["ZONE"]]
         all_zones_list = ZoneList(Name="All_Zones", Names=all_zone_names)
         conditioned_zone_names = [
@@ -445,11 +449,7 @@ class Model(BaseWeather, validate_assignment=True):
         conditioned_storey_count = self.geometry.num_stories + (
             1 if self.conditioned_basement else 0
         )
-        zones_per_storey = (
-            assumed_constants["zones_per_storey"]
-            if self.geometry.zoning == "by_storey"
-            else assumed_constants["default_geometry_zoning"]
-        )
+        zones_per_storey = self.geometry.zones_per_storey
         expected_zone_count = conditioned_storey_count * zones_per_storey
         if len(conditioned_zone_names) != expected_zone_count:
             msg = f"Expected {expected_zone_count} zones, but found {len(conditioned_zone_names)}."
@@ -469,6 +469,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             energy (float): The domestic hot water energy demand (kWh/m2)
         """
+        raise NotImplementedError
         # TODO: this should be computed from the DHW schedule
         if not self.space_use.DHW.IsOn:
             return 0
@@ -503,6 +504,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             idf (IDF): The IDF model with the added hot water.
         """
+        raise NotImplementedError
         zone = next((x for x in idf.idfobjects["ZONE"] if x.Name == zone_name), None)
         if zone is None:
             raise ValueError(f"NO_ZONE:{zone_name}")
@@ -552,6 +554,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The IDF model with the added space use.
         """
+        raise NotImplementedError
         idf = space_use.add_space_use_to_idf_zone(idf, zone_list)
         idf = self.add_hot_water_to_zone_list(idf, space_use, zone_list)
         idf = self.add_schedules_by_name(
@@ -653,6 +656,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The built energy model.
         """
+        raise NotImplementedError
         if (not self.geometry.basement) and self.conditioned_basement:
             raise ValueError("CONDITIONEDBASEMENT:TRUE:BASEMENT:FALSE")
 
@@ -686,7 +690,7 @@ class Model(BaseWeather, validate_assignment=True):
         self.lib.Schedule.update(scheds)
 
         idf = SiteGroundTemperature.FromValues(
-            assumed_constants["SiteGroundTemperature"]
+            assumed_constants.SiteGroundTemperature_degC
         ).add(idf)
 
         idf = self.geometry.add(idf)
@@ -771,22 +775,27 @@ class Model(BaseWeather, validate_assignment=True):
         res_series.name = "kWh/m2"
 
         if move_energy:
-            heat_cop = self.space_use.Conditioning.HeatingCOP
-            cool_cop = self.space_use.Conditioning.CoolingCOP
-            dhw_cop = self.space_use.HotWater.DomHotWaterCOP
-            heat_fuel = self.space_use.Conditioning.HeatingFuelType
+            if self.operations.HVAC.ConditioningSystems.Heating is not None:
+                heat_cop = self.operations.HVAC.ConditioningSystems.Heating.effective_system_cop
+                heat_fuel = self.operations.HVAC.ConditioningSystems.Heating.Fuel
+                heat_energy = res_series["District Heating"] / heat_cop
+                if heat_fuel not in res_series.index:
+                    res_series[heat_fuel] = 0
+                res_series[heat_fuel] += heat_energy
+
+            raise NotImplementedError
+            cool_cop = (
+                self.operations.HVAC.ConditioningSystems.Cooling.effective_system_cop
+            )
+            dhw_cop = self.operations.DHW.SystemCOP
             cool_fuel = self.space_use.Conditioning.CoolingFuelType
             dhw_fuel = self.space_use.HotWater.HotWaterFuelType
-            heat_energy = res_series["District Heating"] / heat_cop
             cool_energy = res_series["District Cooling"] / cool_cop
             dhw_energy = res_series["Domestic Hot Water"] / dhw_cop
-            if heat_fuel not in res_series.index:
-                res_series[heat_fuel] = 0
             if cool_fuel not in res_series.index:
                 res_series[cool_fuel] = 0
             if dhw_fuel not in res_series.index:
                 res_series[dhw_fuel] = 0
-            res_series[heat_fuel] += heat_energy
             res_series[cool_fuel] += cool_energy
             res_series[dhw_fuel] += dhw_energy
             res_series = res_series.drop([
@@ -842,6 +851,7 @@ if __name__ == "__main__":
     # import tempfile
     from pydantic import AnyUrl
 
+    raise NotImplementedError
     with open("notebooks/everett_lib.json") as f:
         lib_data = json.load(f)
     lib = ComponentLibrary.model_validate(lib_data)

@@ -184,6 +184,14 @@ class ShoeboxGeometry(BaseModel):
             raise ValueError(msg)
         return "Storey 0" if self.zoning == "core/perim" else "Storey -1"
 
+    @property
+    def zones_per_storey(self) -> int:
+        """Return the number of zones per storey."""
+        if self.zoning == "core/perim":
+            return 5
+        else:
+            return 1
+
     def add(self, idf: IDF) -> IDF:
         """Constructs a simple shoebox geometry in the IDF model.
 

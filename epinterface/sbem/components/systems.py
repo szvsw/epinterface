@@ -103,12 +103,14 @@ class ConditioningSystemsComponent(NamedObject, MetadataMixin):
 
         Cannot have a heating system assigned to a cooling system and vice versa.
         """
-        if self.Heating.ConditioningType != "Heating":
+        if self.Heating and self.Heating.ConditioningType != "Heating":
             msg = "Heating system type is only applicable to heating systems."
             raise ValueError(msg)
-        if self.Cooling.ConditioningType != "Cooling":
+        if self.Cooling and self.Cooling.ConditioningType != "Cooling":
             msg = "Cooling system type is only applicable to cooling systems."
             raise ValueError(msg)
+
+        return self
 
 
 class VentilationComponent(NamedObject, MetadataMixin):
@@ -162,12 +164,13 @@ class ZoneHVACComponent(
         return idf
 
 
+DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil"]
+
+
 class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=True):
     """Domestic Hot Water object."""
 
-    DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil"]
-
-    DomHotWaterCOP: float = Field(
+    SystemCOP: float = Field(
         ...,
         title="Domestic hot water coefficient of performance",
         ge=0,
@@ -199,7 +202,7 @@ class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=
         ..., title="Flow rate per person [m3/day/p]", ge=0, le=0.1
     )
     IsOn: BoolStr = Field(..., title="Is on")
-    HotWaterFuelType: FuelType = Field(..., title="Hot water fuel type")
+    HotWaterFuelType: DHWFuelType = Field(..., title="Hot water fuel type")
 
     @model_validator(mode="before")
     def validate_supply_greater_than_inlet(cls, values: dict[str, Any]):
@@ -282,3 +285,12 @@ class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=
         )
         idf = hot_water.add(idf)
         return idf
+
+    @property
+    def effective_system_cop(self) -> float:
+        """Compute the effective system COP based on the system and distribution COPs.
+
+        Returns:
+            cop (float): The effective system COP.
+        """
+        return self.SystemCOP * self.DistributionCOP

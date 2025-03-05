@@ -6,7 +6,6 @@ from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule
 from pydantic import AliasChoices, Field
 
-from epinterface.constants.assumed_constants import assumed_constants
 from epinterface.interface import (
     Construction,
     InfDesignFlowRateCalculationMethodType,
@@ -286,9 +285,6 @@ class ZoneEnvelopeComponent(NamedObject, MetadataMixin, extra="forbid"):
     Assemblies: EnvelopeAssemblyComponent
     Infiltration: InfiltrationComponent
     Window: GlazingConstructionSimpleComponent | None
-    WWR: float | None = Field(
-        default=assumed_constants["WWR"], description="Window to wall ratio", ge=0, le=1
-    )
 
     # Foundation: Foundation | None
     # OtherSettings: OtherSettings | None
