@@ -237,7 +237,7 @@ class EnvironmentalMixin(BaseModel):
     )
 
 
-class StandardMaterializedMetadata(EnvironmentalMixin, MetadataMixin):
+class StandardMaterialMetadataMixin(EnvironmentalMixin, MetadataMixin):
     """Standard metadata for a SBEM data."""
 
     pass
@@ -930,7 +930,7 @@ class ConstructionMaterialProperties(
 
 class ConstructionMaterialComponent(
     ConstructionMaterialProperties,
-    StandardMaterializedMetadata,
+    StandardMaterialMetadataMixin,
     NamedObject,
     MetadataMixin,
     extra="forbid",
@@ -977,7 +977,7 @@ class ConstructionLayerComponent(
 # windows definitions
 class GlazingConstructionSimpleComponent(
     NamedObject,
-    StandardMaterializedMetadata,
+    StandardMaterialMetadataMixin,
     MetadataMixin,
     extra="forbid",
     populate_by_name=True,
