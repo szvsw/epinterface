@@ -2,6 +2,8 @@
 
 ### Current Behavior
 
+(all schedules are passed by reference)
+
 ```
 ZoneSpaceUse -> Occupancy (deep object)
 ZoneSpaceUse -> Lighting (deep object)
@@ -18,7 +20,7 @@ ZoneOperations -> DHW (deep object)
 
 ConstructionLayer -> ConstructionMaterial (referenced)
 ConstructionAssembly -> ConstructionLayer (deep object)
-EnvelopeAssembly -> ConstructionAssembly (referenced)
+EnvelopeAssembly -> ConstructionAssembly (deep object)
 ZoneEnvelope -> EnvelopeAssembly (deep object)
 ZoneEnvelope -> Infiltration (deep object)
 ZoneEnvelope -> GlazingConstructionSimple (deep object)

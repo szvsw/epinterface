@@ -276,6 +276,8 @@ class SurfaceHandlers(BaseModel):
             new_const.Name = f"{const.Name}_Reversed"
             return new_const
 
+        raise NotImplementedError
+
         def reverse_construction(const_name: str, lib: ComponentLibrary):
             const = lib.ConstructionAssembly[const_name]
             new_const = make_reversed(const)

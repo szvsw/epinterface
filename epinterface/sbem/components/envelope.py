@@ -254,16 +254,28 @@ class EnvelopeAssemblyComponent(
 ):
     """Zone construction object."""
 
-    RoofAssembly: str = Field(..., title="Roof construction object name")
-    FacadeAssembly: str = Field(..., title="Facade construction object name")
-    SlabAssembly: str = Field(..., title="Slab construction object name")
-    PartitionAssembly: str = Field(..., title="Partition construction object name")
-    ExternalFloorAssembly: str = Field(
+    RoofAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Roof construction object name"
+    )
+    FacadeAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Facade construction object name"
+    )
+    SlabAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Slab construction object name"
+    )
+    PartitionAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Partition construction object name"
+    )
+    ExternalFloorAssembly: ConstructionAssemblyComponent = Field(
         ..., title="External floor construction object name"
     )
-    GroundSlabAssembly: str = Field(..., title="Ground slab construction object name")
-    GroundWallAssembly: str = Field(..., title="Ground wall construction object name")
-    InternalMassAssembly: str = Field(
+    GroundSlabAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Ground slab construction object name"
+    )
+    GroundWallAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Ground wall construction object name"
+    )
+    InternalMassAssembly: ConstructionAssemblyComponent = Field(
         ..., title="Internal mass construction object name"
     )
     InternalMassIsOn: BoolStr = Field(..., title="Internal mass is on")
