@@ -1344,6 +1344,7 @@ class SBEMTemplateLibraryHandler(BaseModel, arbitrary_types_allowed=True):
     Constructions: dict[str, SBEMConstruction]
     OpaqueMaterials: dict[str, ConstructionMaterial]
     Schedules: dict[str, Schedule]
+    Conditionings: dict[str, ZoneConditioning]
     # store the different components (HVAC, Ventilation, SpaceUse)
 
     @field_validator("Schedules", mode="before")
