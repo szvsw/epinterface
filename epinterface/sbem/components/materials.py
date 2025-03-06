@@ -11,41 +11,18 @@ from epinterface.sbem.common import MetadataMixin, NamedObject
 class EnvironmentalMixin(BaseModel):
     """Environmental data for a SBEM template table object."""
 
-    Cost: float = Field(
-        ...,
-        title="Cost [$/unit]",
-        # a superscript 3 looks like this:
-        validation_alias=AliasChoices(
-            "Cost [$/m³]",
-            "Cost [$/m3]",
-            "Cost [$/m²]",
-            "Cost [$/m2]",
-            "Cost [$/m]",
-            "Cost [$/kg]",
-            "Cost [$/mÂ²]",
-            "Cost [$/mÃ]",
-        ),
-        ge=0,
+    Cost: float | None = Field(
+        default=None, title="Cost", ge=0, description="Cost of the material/unit"
     )
-    Life: float = Field(
-        ...,
-        title="Life [years]",
-        validation_alias="Life [yr]",
-        ge=0,
+    RateUnit: Literal["m3", "m2", "m", "kg"] | None = Field(
+        default=None,
+        description="The base unit for cost and embodied carbon, i.e. $/unit",
     )
-    EmbodiedCarbon: float = Field(
-        ...,
-        title="Embodied carbon [kgCO2e/unit]",
-        # a superscript 3 looks like this:
-        validation_alias=AliasChoices(
-            "Embodied carbon [kgCO2e/m³]",
-            "Embodied carbon [kgCO2e/m3]",
-            "Embodied carbon [kgCO2e/m²]",
-            "Embodied carbon [kgCO2e/m2]",
-            "Embodied carbon [kgCO2e/m]",
-            "Embodied carbon [kgCO2e/kg]",
-        ),
-        ge=0,
+    Life: float | None = Field(
+        default=None, title="Life [years]", ge=0, description="Life of the material"
+    )
+    EmbodiedCarbon: float | None = Field(
+        default=None, title="Embodied carbon [kgCO2e/unit]", ge=0
     )
 
 
