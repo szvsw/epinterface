@@ -76,6 +76,9 @@ class ConstructionLayerComponent(
         return material
 
 
+WindowType = Literal["Single", "Double", "Triple"]
+
+
 class GlazingConstructionSimpleComponent(
     NamedObject,
     StandardMaterialMetadataMixin,
@@ -85,7 +88,6 @@ class GlazingConstructionSimpleComponent(
 ):
     """Glazing construction object."""
 
-    WindowType = Literal["Single", "Double", "Triple"]
     SHGF: float = Field(..., title="Solar heat gain factor", ge=0, le=1)
     UValue: float = Field(
         ...,
