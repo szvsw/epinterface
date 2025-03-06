@@ -121,7 +121,7 @@ def create_schedules(base_path: Path) -> dict[str, Schedule]:
         pd.read_excel(base_path, sheet_name="Yearly_Schedules"), weekly_schedules
     )
     raise NotImplementedError
-    # schedules_obj = {}
+    schedules_obj = {}
     # for schedules in yearly_schedules:
     #     schedules_obj[schedules.Name] = schedules
     return schedules_obj
