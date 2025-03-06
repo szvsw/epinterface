@@ -3,11 +3,8 @@
 from archetypal.idfclass import IDF
 
 from epinterface.sbem.common import MetadataMixin, NamedObject
-from epinterface.sbem.components import (
-    DHWComponent,
-    ZoneHVACComponent,
-    ZoneSpaceUseComponent,
-)
+from epinterface.sbem.components.space_use import ZoneSpaceUseComponent
+from epinterface.sbem.components.systems import DHWComponent, ZoneHVACComponent
 
 
 class ZoneOperationsComponent(

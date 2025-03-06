@@ -6,25 +6,30 @@ from typing import Any
 import pandas as pd
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 
-from epinterface.sbem.components import (
-    ConditioningSystemsComponent,
+from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
-    ConstructionMaterialComponent,
-    DHWComponent,
+    ConstructionLayerComponent,
     EnvelopeAssemblyComponent,
-    EquipmentComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
+    ZoneEnvelopeComponent,
+)
+from epinterface.sbem.components.materials import ConstructionMaterialComponent
+from epinterface.sbem.components.operations import ZoneOperationsComponent
+from epinterface.sbem.components.space_use import (
+    EquipmentComponent,
     LightingComponent,
     OccupancyComponent,
-    ThermalSystemComponent,
     ThermostatComponent,
-    VentilationComponent,
     WaterUseComponent,
-    ZoneEnvelopeComponent,
-    ZoneHVACComponent,
-    ZoneOperationsComponent,
     ZoneSpaceUseComponent,
+)
+from epinterface.sbem.components.systems import (
+    ConditioningSystemsComponent,
+    DHWComponent,
+    ThermalSystemComponent,
+    VentilationComponent,
+    ZoneHVACComponent,
 )
 from epinterface.sbem.interface import ComponentLibrary, ScheduleTransferObject
 
@@ -127,6 +132,11 @@ def create_library(base_path: Path) -> ComponentLibrary:
         for name, data in construction_data.items()
     }
 
+    const_layers: dict[str, ConstructionLayerComponent] = {}
+    for construction_obj in construction_objs.values():
+        for layer in construction_obj.Layers:
+            const_layers[layer.Name] = layer
+
     window_objs = {
         name: GlazingConstructionSimpleComponent.model_validate(data)
         for name, data in window_data.items()
@@ -226,7 +236,6 @@ def create_library(base_path: Path) -> ComponentLibrary:
 
     # schedules = create_schedules(base_path)
 
-    raise NotImplementedError
     return ComponentLibrary(
         Occupancy=occupancy_objs,
         Lighting=lighting_objs,
@@ -245,13 +254,9 @@ def create_library(base_path: Path) -> ComponentLibrary:
         Infiltration=infiltration_objs,
         EnvelopeAssembly=envelope_assembly_objs,
         ConstructionAssembly=construction_objs,
+        ConstructionMaterialLayer=const_layers,
         ConstructionMaterial=materials_objs,
-        # Envelope=envelopes,
-        # GlazingConstructionSimple=glazing_constructions,
-        # ConstructionAssembly=constructions,
-        # ConstructionMaterial=materials,
-        # Schedule=schedules,
-        # HVAC=hvac_objs,
+        Schedule={},
     )
 
 

@@ -24,14 +24,14 @@ from epinterface.interface import (
     add_default_schedules,
     add_default_sim_controls,
 )
-from epinterface.sbem.components import (
+from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
     ZoneEnvelopeComponent,
-    ZoneOperationsComponent,
 )
+from epinterface.sbem.components.operations import ZoneOperationsComponent
 from epinterface.sbem.exceptions import (
     NotImplementedParameter,
     SBEMBuilderNotImplementedError,

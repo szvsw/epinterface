@@ -9,27 +9,31 @@ from archetypal.schedule import ScheduleTypeLimits
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from epinterface.sbem.common import MetadataMixin
-from epinterface.sbem.components import (
-    ConditioningSystemsComponent,
+from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
-    ConstructionMaterialComponent,
-    DHWComponent,
     EnvelopeAssemblyComponent,
-    EquipmentComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
+    ZoneEnvelopeComponent,
+)
+from epinterface.sbem.components.materials import ConstructionMaterialComponent
+from epinterface.sbem.components.operations import ZoneOperationsComponent
+from epinterface.sbem.components.space_use import (
+    EquipmentComponent,
     LightingComponent,
     OccupancyComponent,
-    ThermalSystemComponent,
     ThermostatComponent,
-    VentilationComponent,
     WaterUseComponent,
-    ZoneEnvelopeComponent,
-    ZoneHVACComponent,
     ZoneSpaceUseComponent,
 )
-from epinterface.sbem.components.operations import ZoneOperationsComponent
+from epinterface.sbem.components.systems import (
+    ConditioningSystemsComponent,
+    DHWComponent,
+    ThermalSystemComponent,
+    VentilationComponent,
+    ZoneHVACComponent,
+)
 
 logger = logging.getLogger(__name__)
 
