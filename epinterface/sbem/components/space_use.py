@@ -93,6 +93,9 @@ class OccupancyComponent(NamedObject, MetadataMixin):
         return idf
 
 
+DimmingTypeType = Literal["Off", "Stepped", "Continuous"]
+
+
 class LightingComponent(NamedObject, MetadataMixin):
     """A lighting object in the SBEM library."""
 
@@ -102,7 +105,6 @@ class LightingComponent(NamedObject, MetadataMixin):
         ge=0,
         validation_alias="LightingDensity [W/m²]",
     )
-    DimmingTypeType = Literal["Off", "Stepped", "Continuous"]
 
     DimmingType: DimmingTypeType = Field(
         ...,
