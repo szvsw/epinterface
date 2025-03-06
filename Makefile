@@ -51,6 +51,17 @@ docs: ## Build and serve the documentation
 docs-deploy: ## Build and serve the documentation
 	@poetry run mkdocs gh-deploy
 
+.PHONY: prisma-push
+prisma-push: ## Push the prisma schema to the database
+	@poetry run prisma db push --schema=epinterface/sbem/prisma/schema.prisma
+
+.PHONY: prisma-generate
+prisma-generate: ## Generate the prisma client
+	@poetry run prisma generate --schema=epinterface/sbem/prisma/schema.prisma
+
+.PHONY: prisma-migrate
+prisma-migrate: ## Migrate the prisma database
+	@poetry run prisma migrate dev --schema=epinterface/sbem/prisma/schema.prisma
 
 .PHONY: help
 help:

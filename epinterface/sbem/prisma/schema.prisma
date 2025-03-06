@@ -1,0 +1,512 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = -1
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:database.db"
+}
+
+// TODO: add some enums
+
+// Base metadata fields that many models share
+model Metadata {
+  id          String  @id @default(uuid())
+  description String?
+  source      String?
+  reference   String?
+  comments    String?
+  tags        String?
+
+  // Referenced by
+  Occupancies            Occupancy[]
+  Lightings              Lighting[]
+  Equipments             Equipment[]
+  Thermostats            Thermostat[]
+  WaterUses              WaterUse[]
+  ThermalSystems         ThermalSystem[]
+  ConditioningSystems    ConditioningSystems[]
+  Ventilations           Ventilation[]
+  HVACs                  HVAC[]
+  DHWs                   DHW[]
+  Operations             Operations[]
+  Glazings               GlazingConstructionSimple[]
+  Infiltrations          Infiltration[]
+  ConstructionMaterials  ConstructionMaterial[]
+  ConstructionAssemblies ConstructionAssembly[]
+  EnvelopeAssemblies     EnvelopeAssembly[]
+  Envelopes              Envelope[]
+}
+
+// Environmental data shared by many components
+model EnvironmentalData {
+  id             String  @id @default(uuid())
+  Cost           Float?
+  RateUnit       String?
+  Life           Float?
+  EmbodiedCarbon Float?
+
+  // Relations
+  Glazings              GlazingConstructionSimple[]
+  ConstructionMaterials ConstructionMaterial[]
+}
+
+// Space Use Components
+model Occupancy {
+  id            String  @id @default(uuid())
+  Name          String  @unique
+  PeopleDensity Float
+  IsOn          Boolean
+  MetabolicRate Float
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  ScheduleId String
+  Schedule   Year   @relation("OccupancySchedule", fields: [ScheduleId], references: [id])
+
+  // Referenced by
+  SpaceUses SpaceUse[]
+}
+
+model Lighting {
+  id           String  @id @default(uuid())
+  Name         String  @unique
+  PowerDensity Float
+  DimmingType  String
+  IsOn         Boolean
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+  ScheduleId String
+  Schedule   Year      @relation("LightingSchedule", fields: [ScheduleId], references: [id])
+
+  // Referenced by
+  SpaceUses SpaceUse[]
+}
+
+model Equipment {
+  id           String  @id @default(uuid())
+  Name         String  @unique
+  PowerDensity Float
+  IsOn         Boolean
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+  ScheduleId String
+  Schedule   Year      @relation("EquipmentSchedule", fields: [ScheduleId], references: [id])
+
+  // Referenced by
+  SpaceUses SpaceUse[]
+}
+
+model Thermostat {
+  id              String  @id @default(uuid())
+  Name            String  @unique
+  IsOn            Boolean
+  HeatingSetpoint Float
+  CoolingSetpoint Float
+
+  // Relations
+  MetadataId        String?
+  Metadata          Metadata? @relation(fields: [MetadataId], references: [id])
+  HeatingScheduleId String
+  HeatingSchedule   Year      @relation("HeatingSchedule", fields: [HeatingScheduleId], references: [id])
+  CoolingScheduleId String
+  CoolingSchedule   Year      @relation("CoolingSchedule", fields: [CoolingScheduleId], references: [id])
+
+  // Referenced by
+  SpaceUses SpaceUse[]
+}
+
+model WaterUse {
+  id                String @id @default(uuid())
+  Name              String @unique
+  FlowRatePerPerson Float
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+  ScheduleId String
+  Schedule   Year      @relation("WaterSchedule", fields: [ScheduleId], references: [id])
+
+  // Referenced by
+  SpaceUses SpaceUse[]
+}
+
+model SpaceUse {
+  id   String @id @default(uuid())
+  Name String @unique
+
+  // Relations
+  OccupancyId  String
+  Occupancy    Occupancy  @relation(fields: [OccupancyId], references: [id])
+  LightingId   String
+  Lighting     Lighting   @relation(fields: [LightingId], references: [id])
+  EquipmentId  String
+  Equipment    Equipment  @relation(fields: [EquipmentId], references: [id])
+  ThermostatId String
+  Thermostat   Thermostat @relation(fields: [ThermostatId], references: [id])
+  WaterUseId   String
+  WaterUse     WaterUse   @relation(fields: [WaterUseId], references: [id])
+
+  // Referenced by
+  Operations Operations[]
+}
+
+// HVAC Components
+model ThermalSystem {
+  id               String @id @default(uuid())
+  Name             String @unique
+  ConditioningType String // "Heating" or "Cooling"
+  Fuel             String
+  SystemCOP        Float
+  DistributionCOP  Float
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  // Referenced by
+  HeatingForSystems ConditioningSystems[] @relation("HeatingSystem")
+  CoolingForSystems ConditioningSystems[] @relation("CoolingSystem")
+}
+
+model ConditioningSystems {
+  id   String @id @default(uuid())
+  Name String @unique
+
+  // Relations - special case with two relations to the same model type
+  HeatingId  String?
+  Heating    ThermalSystem? @relation("HeatingSystem", fields: [HeatingId], references: [id])
+  CoolingId  String?
+  Cooling    ThermalSystem? @relation("CoolingSystem", fields: [CoolingId], references: [id])
+  MetadataId String?
+  Metadata   Metadata?      @relation(fields: [MetadataId], references: [id])
+
+  // Referenced by
+  HVACs HVAC[]
+}
+
+model Ventilation {
+  id          String @id @default(uuid())
+  Name        String @unique
+  Rate        Float
+  MinFreshAir Float
+  Type        String // "Natural", "Mechanical", "Hybrid"
+  TechType    String // "ERV", "HRV", "DCV", "None", "Custom"
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+  ScheduleId String
+  Schedule   Year      @relation("VentilationSchedule", fields: [ScheduleId], references: [id])
+
+  // Referenced by
+  HVACs HVAC[]
+}
+
+model HVAC {
+  id   String @id @default(uuid())
+  Name String @unique
+
+  // Relations
+  ConditioningSystemsId String
+  ConditioningSystems   ConditioningSystems @relation(fields: [ConditioningSystemsId], references: [id])
+  VentilationId         String
+  Ventilation           Ventilation         @relation(fields: [VentilationId], references: [id])
+  MetadataId            String?
+  Metadata              Metadata?           @relation(fields: [MetadataId], references: [id])
+
+  // Referenced by
+  Operations Operations[]
+}
+
+// DHW Components
+model DHW {
+  id                     String  @id @default(uuid())
+  Name                   String  @unique
+  SystemCOP              Float
+  WaterTemperatureInlet  Float
+  DistributionCOP        Float
+  WaterSupplyTemperature Float
+  IsOn                   Boolean
+  FuelType               String
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  // Referenced by
+  Operations Operations[]
+}
+
+// Operations Component
+model Operations {
+  id   String @id @default(uuid())
+  Name String @unique
+
+  // Relations
+  SpaceUseId String
+  SpaceUse   SpaceUse  @relation(fields: [SpaceUseId], references: [id])
+  HVACId     String
+  HVAC       HVAC      @relation(fields: [HVACId], references: [id])
+  DHWId      String
+  DHW        DHW       @relation(fields: [DHWId], references: [id])
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+}
+
+// Envelope Components
+model ConstructionMaterial {
+  id                                        String @id @default(uuid())
+  Name                                      String @unique
+  Conductivity                              Float
+  Density                                   Float
+  Roughness                                 String
+  SpecificHeat                              Float
+  ThermalAbsorptance                        Float
+  SolarAbsorptance                          Float
+  TemperatureCoefficientThermalConductivity Float
+  VisibleAbsorptance                        Float
+  Type                                      String
+
+  // Relations
+  MetadataId          String?
+  Metadata            Metadata?          @relation(fields: [MetadataId], references: [id])
+  EnvironmentalDataId String?
+  EnvironmentalData   EnvironmentalData? @relation(fields: [EnvironmentalDataId], references: [id])
+
+  // Referenced by
+  ConstructionAssemblyLayers ConstructionAssemblyLayer[]
+}
+
+// Junction table for many-to-many relation between construction assemblies and layers
+model ConstructionAssemblyLayer {
+  id                     String               @id @default(uuid())
+  LayerOrder             Int // To maintain the order of layers in the assembly
+  Thickness              Float
+  ConstructionAssemblyId String
+  ConstructionAssembly   ConstructionAssembly @relation(fields: [ConstructionAssemblyId], references: [id])
+  ConstructionMaterialId String
+  ConstructionMaterial   ConstructionMaterial @relation(fields: [ConstructionMaterialId], references: [id])
+
+  @@unique([ConstructionAssemblyId, LayerOrder])
+}
+
+model ConstructionAssembly {
+  id              String  @id @default(uuid())
+  Name            String  @unique
+  Type            String
+  VegetationLayer String?
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  // Many-to-many relation with layers
+  Layers ConstructionAssemblyLayer[]
+
+  // Referenced by
+  RoofAssemblies          EnvelopeAssembly[] @relation("RoofAssembly")
+  FacadeAssemblies        EnvelopeAssembly[] @relation("FacadeAssembly")
+  SlabAssemblies          EnvelopeAssembly[] @relation("SlabAssembly")
+  PartitionAssemblies     EnvelopeAssembly[] @relation("PartitionAssembly")
+  ExternalFloorAssemblies EnvelopeAssembly[] @relation("ExternalFloorAssembly")
+  GroundSlabAssemblies    EnvelopeAssembly[] @relation("GroundSlabAssembly")
+  GroundWallAssemblies    EnvelopeAssembly[] @relation("GroundWallAssembly")
+  InternalMassAssemblies  EnvelopeAssembly[] @relation("InternalMassAssembly")
+}
+
+model EnvelopeAssembly {
+  id                             String  @id @default(uuid())
+  Name                           String  @unique
+  InternalMassExposedAreaPerArea Float?
+  GroundIsAdiabatic              Boolean
+  RoofIsAdiabatic                Boolean
+  FacadeIsAdiabatic              Boolean
+  SlabIsAdiabatic                Boolean
+  PartitionIsAdiabatic           Boolean
+
+  // Relations - special case with multiple relations to the same model type
+  RoofAssemblyId String
+  RoofAssembly   ConstructionAssembly @relation("RoofAssembly", fields: [RoofAssemblyId], references: [id])
+
+  FacadeAssemblyId String
+  FacadeAssembly   ConstructionAssembly @relation("FacadeAssembly", fields: [FacadeAssemblyId], references: [id])
+
+  SlabAssemblyId String
+  SlabAssembly   ConstructionAssembly @relation("SlabAssembly", fields: [SlabAssemblyId], references: [id])
+
+  PartitionAssemblyId String
+  PartitionAssembly   ConstructionAssembly @relation("PartitionAssembly", fields: [PartitionAssemblyId], references: [id])
+
+  ExternalFloorAssemblyId String
+  ExternalFloorAssembly   ConstructionAssembly @relation("ExternalFloorAssembly", fields: [ExternalFloorAssemblyId], references: [id])
+
+  GroundSlabAssemblyId String
+  GroundSlabAssembly   ConstructionAssembly @relation("GroundSlabAssembly", fields: [GroundSlabAssemblyId], references: [id])
+
+  GroundWallAssemblyId String
+  GroundWallAssembly   ConstructionAssembly @relation("GroundWallAssembly", fields: [GroundWallAssemblyId], references: [id])
+
+  InternalMassAssemblyId String?
+  InternalMassAssembly   ConstructionAssembly? @relation("InternalMassAssembly", fields: [InternalMassAssemblyId], references: [id])
+
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  Envelopes Envelope[]
+}
+
+model GlazingConstructionSimple {
+  id     String @id @default(uuid())
+  Name   String @unique
+  SHGF   Float
+  UValue Float
+  TVis   Float
+  Type   String // "Single", "Double", "Triple"
+
+  // Relations
+  MetadataId          String?
+  Metadata            Metadata?          @relation(fields: [MetadataId], references: [id])
+  EnvironmentalDataId String?
+  EnvironmentalData   EnvironmentalData? @relation(fields: [EnvironmentalDataId], references: [id])
+
+  // Referenced by
+  Envelopes Envelope[]
+}
+
+model Infiltration {
+  id                             String  @id @default(uuid())
+  Name                           String  @unique
+  IsOn                           Boolean
+  ConstantCoefficient            Float
+  TemperatureCoefficient         Float
+  WindVelocityCoefficient        Float
+  WindVelocitySquaredCoefficient Float
+  AFNAirMassFlowCoefficientCrack Float
+  AirChangesPerHour              Float
+  FlowPerExteriorSurfaceArea     Float
+  CalculationMethod              String
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  Envelopes Envelope[]
+}
+
+model Envelope {
+  id   String @id @default(uuid())
+  Name String @unique
+
+  // Relations
+  AssembliesId String
+  Assemblies   EnvelopeAssembly @relation(fields: [AssembliesId], references: [id])
+
+  InfiltrationId String
+  Infiltration   Infiltration @relation(fields: [InfiltrationId], references: [id])
+
+  WindowId String?
+  Window   GlazingConstructionSimple? @relation(fields: [WindowId], references: [id])
+
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+}
+
+model Day {
+  id      String @id @default(uuid())
+  Name    String @unique
+  Type    String
+  Hour_00 Float
+  Hour_01 Float
+  Hour_02 Float
+  Hour_03 Float
+  Hour_04 Float
+  Hour_05 Float
+  Hour_06 Float
+  Hour_07 Float
+  Hour_08 Float
+  Hour_09 Float
+  Hour_10 Float
+  Hour_11 Float
+  Hour_12 Float
+  Hour_13 Float
+  Hour_14 Float
+  Hour_15 Float
+  Hour_16 Float
+  Hour_17 Float
+  Hour_18 Float
+  Hour_19 Float
+  Hour_20 Float
+  Hour_21 Float
+  Hour_22 Float
+  Hour_23 Float
+
+  MondayForWeek    Week[] @relation("Monday")
+  TuesdayForWeek   Week[] @relation("Tuesday")
+  WednesdayForWeek Week[] @relation("Wednesday")
+  ThursdayForWeek  Week[] @relation("Thursday")
+  FridayForWeek    Week[] @relation("Friday")
+  SaturdayForWeek  Week[] @relation("Saturday")
+  SundayForWeek    Week[] @relation("Sunday")
+}
+
+model Week {
+  id          String @id @default(uuid())
+  Name        String @unique
+  MondayId    String
+  Monday      Day    @relation("Monday", fields: [MondayId], references: [id])
+  TuesdayId   String
+  Tuesday     Day    @relation("Tuesday", fields: [TuesdayId], references: [id])
+  WednesdayId String
+  Wednesday   Day    @relation("Wednesday", fields: [WednesdayId], references: [id])
+  ThursdayId  String
+  Thursday    Day    @relation("Thursday", fields: [ThursdayId], references: [id])
+  FridayId    String
+  Friday      Day    @relation("Friday", fields: [FridayId], references: [id])
+  SaturdayId  String
+  Saturday    Day    @relation("Saturday", fields: [SaturdayId], references: [id])
+  SundayId    String
+  Sunday      Day    @relation("Sunday", fields: [SundayId], references: [id])
+
+  RepeatedWeeks RepeatedWeek[]
+}
+
+model RepeatedWeek {
+  id         String @id @default(uuid())
+  StartDay   Int
+  StartMonth Int
+  EndDay     Int
+  EndMonth   Int
+
+  WeekId String
+  Week   Week   @relation(fields: [WeekId], references: [id])
+  YearId String
+  Year   Year   @relation(fields: [YearId], references: [id])
+}
+
+model Year {
+  id   String @id @default(uuid())
+  Name String @unique
+  Type String
+
+  Weeks RepeatedWeek[]
+
+  Occupancies        Occupancy[]   @relation("OccupancySchedule")
+  Lightings          Lighting[]    @relation("LightingSchedule")
+  Equipments         Equipment[]   @relation("EquipmentSchedule")
+  HeatingThermostats Thermostat[]  @relation("HeatingSchedule")
+  CoolingThermostats Thermostat[]  @relation("CoolingSchedule")
+  WaterUses          WaterUse[]    @relation("WaterSchedule")
+  Ventilations       Ventilation[] @relation("VentilationSchedule")
+}
