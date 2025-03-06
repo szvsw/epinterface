@@ -624,8 +624,8 @@ class Model(BaseWeather, validate_assignment=True):
         ):
             raise SBEMBuilderNotImplementedError("_IsAdiabatic")
 
-        if constructions.InternalMassIsOn:
-            raise SBEMBuilderNotImplementedError("InternalMassIsOn")
+        if constructions.InternalMassAssembly is not None:
+            raise SBEMBuilderNotImplementedError("InternalMassAssembly")
 
         handlers = SurfaceHandlers.Default()
         idf = handlers.handle_envelope(idf, self.lib, constructions, window_def)
