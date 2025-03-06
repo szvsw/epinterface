@@ -132,20 +132,20 @@ class InfiltrationComponent(
 ):
     """Zone infiltration object."""
 
-    InfiltrationIsOn: BoolStr = Field(..., title="Infiltration is on")
-    InfiltrationConstantCoefficient: float = Field(
+    IsOn: BoolStr = Field(..., title="Infiltration is on")
+    ConstantCoefficient: float = Field(
         ...,
         title="Infiltration constant coefficient",
     )
-    InfiltrationTemperatureCoefficient: float = Field(
+    TemperatureCoefficient: float = Field(
         ...,
         title="Infiltration temperature coefficient",
     )
-    InfiltrationWindVelocityCoefficient: float = Field(
+    WindVelocityCoefficient: float = Field(
         ...,
         title="Infiltration wind velocity coefficient",
     )
-    InfiltrationWindVelocitySquaredCoefficient: float = Field(
+    WindVelocitySquaredcoefficient: float = Field(
         ...,
         title="Infiltration wind velocity squared coefficient",
     )
@@ -154,17 +154,15 @@ class InfiltrationComponent(
         title="AFN air mass flow coefficient crack",
     )
 
-    InfiltrationAch: float = Field(
+    AirChangesPerHour: float = Field(
         ...,
         title="Infiltration air changes per hour",
         ge=0,
-        validation_alias="InfiltrationAch [ACH]",
     )
-    InfiltrationFlowPerExteriorSurfaceArea: float = Field(
+    FlowPerExteriorSurfaceArea: float = Field(
         ...,
-        title="Infiltration flow per exterior surface area",
+        title="Infiltration flow per exterior surface area [m3/s/m2]",
         ge=0,
-        validation_alias="InfiltrationFlowPerExteriorSurfaceArea [m3/s/m2]",
     )
     CalculationMethod: InfDesignFlowRateCalculationMethodType = Field(
         ...,
@@ -183,7 +181,7 @@ class InfiltrationComponent(
         Returns:
             idf (IDF): The updated IDF object.
         """
-        if not self.InfiltrationIsOn:
+        if not self.IsOn:
             return idf
 
         infiltration_schedule_name = (
@@ -199,14 +197,14 @@ class InfiltrationComponent(
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
             Schedule_Name=inf_schedule.Name,
             Design_Flow_Rate_Calculation_Method=self.CalculationMethod,
-            Flow_Rate_per_Exterior_Surface_Area=self.InfiltrationFlowPerExteriorSurfaceArea,
-            Air_Changes_per_Hour=self.InfiltrationAch,
+            Flow_Rate_per_Exterior_Surface_Area=self.FlowPerExteriorSurfaceArea,
+            Air_Changes_per_Hour=self.AirChangesPerHour,
             Flow_Rate_per_Floor_Area=None,
             Design_Flow_Rate=None,
-            Constant_Term_Coefficient=self.InfiltrationConstantCoefficient,
-            Temperature_Term_Coefficient=self.InfiltrationTemperatureCoefficient,
-            Velocity_Term_Coefficient=self.InfiltrationWindVelocityCoefficient,
-            Velocity_Squared_Term_Coefficient=self.InfiltrationWindVelocitySquaredCoefficient,
+            Constant_Term_Coefficient=self.ConstantCoefficient,
+            Temperature_Term_Coefficient=self.TemperatureCoefficient,
+            Velocity_Term_Coefficient=self.WindVelocityCoefficient,
+            Velocity_Squared_Term_Coefficient=self.WindVelocitySquaredcoefficient,
         )
         idf = inf.add(idf)
         return idf
