@@ -177,24 +177,12 @@ def create_library(base_path: Path) -> ComponentLibrary:
         for name, data in operations_data.items()
     }
 
-    envelope_assembly_objs = {
-        name: EnvelopeAssemblyComponent(
-            Name=name,
-            Layers=[
-                construction_objs[layer]
-                for layer in data["Layers"].split(", ")
-                if layer
-            ],
-        )
-        for name, data in envelope_data.items()
-    }
-
     envelope_objs = {
         name: ZoneEnvelopeComponent(
             Name=name,
-            Assemblies=envelope_assembly_objs[data["Assemblies"]],
+            Assemblies=envelope_objs[data["Assemblies"]],
             Infiltration=infiltration_objs[data["Infiltration"]],
-            Windows=window_objs[data["Windows"]],
+            Window=window_objs[data["Windows"]],
         )
         for name, data in envelope_data.items()
     }
