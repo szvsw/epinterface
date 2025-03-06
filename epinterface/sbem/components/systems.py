@@ -1,6 +1,6 @@
 """Systems components for the SBEM library."""
 
-from typing import Any, Literal
+from typing import Literal
 
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
@@ -113,23 +113,22 @@ class ConditioningSystemsComponent(NamedObject, MetadataMixin):
         return self
 
 
+VentilationType = Literal["Natural", "Mechanical", "Hybrid"]
+VentilationTechType = Literal["ERV", "HRV", "DCV", "None", "Custom"]
+
+
 class VentilationComponent(NamedObject, MetadataMixin):
     """A ventilation object in the SBEM library."""
 
-    VentilationRate: float = Field(..., title="Ventilation rate of the object")
+    # TODO: add unit notes in field descriptions
+    Rate: float = Field(..., title="Ventilation rate of the object")
     MinFreshAir: float = Field(
         ...,
-        title="Minimum fresh air of the object",
-        validation_alias="MinFreshAir [m³/s]",
+        title="Minimum fresh air of the object [m³/s]",
     )
-    VentilationSchedule: str = Field(..., title="Ventilation schedule of the object")
-    VentilationType = Literal["Natural", "Mechanical", "Hybrid"]
-    VentilationTechType = Literal["ERV", "HRV", "DCV", "None", "Custom"]
+    Schedule: str = Field(..., title="Ventilation schedule of the object")
     Type: VentilationType = Field(..., title="Type of the object")
     TechType: VentilationTechType = Field(..., title="Technology type of the object")
-    VentilationSchedule: str = Field(
-        ..., title="Ventilation schedule of the object"
-    )  # TODO: Discuss this, could use it for natural ventilation
 
 
 class ZoneHVACComponent(
@@ -196,15 +195,15 @@ class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=
         le=100,
     )
     IsOn: BoolStr = Field(..., title="Is on")
-    HotWaterFuelType: DHWFuelType = Field(..., title="Hot water fuel type")
+    FuelType: DHWFuelType = Field(..., title="Hot water fuel type")
 
-    @model_validator(mode="before")
-    def validate_supply_greater_than_inlet(cls, values: dict[str, Any]):
+    @model_validator(mode="after")
+    def validate_supply_greater_than_inlet(self):
         """Validate that the supply temperature is greater than the inlet temperature."""
-        if values["WaterSupplyTemperature"] <= values["WaterTemperatureInlet"]:
+        if self.WaterSupplyTemperature <= self.WaterTemperatureInlet:
             msg = "Water supply temperature must be greater than the inlet temperature."
             raise ValueError(msg)
-        return values
+        return self
 
     def add_water_to_idf_zone(
         self, idf: IDF, target_zone_name: str, total_ppl: float
