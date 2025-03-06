@@ -24,6 +24,7 @@ from epinterface.sbem.components import (
     ThermalSystemComponent,
     ThermostatComponent,
     VentilationComponent,
+    WaterUseComponent,
     ZoneEnvelopeComponent,
     ZoneHVACComponent,
     ZoneSpaceUseComponent,
@@ -85,6 +86,7 @@ class ComponentLibrary(MetadataMixin, arbitrary_types_allowed=True):
     Lighting: dict[str, LightingComponent]
     Equipment: dict[str, EquipmentComponent]
     Thermostat: dict[str, ThermostatComponent]
+    WaterUse: dict[str, WaterUseComponent]
 
     HVAC: dict[str, ZoneHVACComponent] = Field(
         ..., description="HVAC component gathers conditioningsystems and ventilation."
