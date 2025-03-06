@@ -8,14 +8,20 @@ from archetypal.schedule import Schedule, ScheduleTypeLimits
 
 from epinterface.sbem.components import (
     ConditioningSystemsComponent,
+    ConstructionAssemblyComponent,
+    ConstructionMaterialComponent,
     DHWComponent,
+    EnvelopeAssemblyComponent,
     EquipmentComponent,
+    GlazingConstructionSimpleComponent,
+    InfiltrationComponent,
     LightingComponent,
     OccupancyComponent,
     ThermalSystemComponent,
     ThermostatComponent,
     VentilationComponent,
     WaterUseComponent,
+    ZoneEnvelopeComponent,
     ZoneHVACComponent,
     ZoneOperationsComponent,
     ZoneSpaceUseComponent,
@@ -69,6 +75,12 @@ def create_library(base_path: Path) -> ComponentLibrary:
     hvac_data = load_excel_to_dict(base_path, "HVAC_assembly")
     operations_data = load_excel_to_dict(base_path, "HVAC_dhw_space_use")
 
+    materials_data = load_excel_to_dict(base_path, "Materials_choices")
+    construction_data = load_excel_to_dict(base_path, "Construction_components")
+    envelope_data = load_excel_to_dict(base_path, "Envelope_assembly")
+    window_data = construction_data[construction_data["Type"] == "Windows"]
+    infiltration_data = construction_data[construction_data["Type"] == "Infiltation"]
+
     # Convert dicts to objs
     occupancy_objs = {
         name: OccupancyComponent.model_validate(data)
@@ -101,6 +113,28 @@ def create_library(base_path: Path) -> ComponentLibrary:
     ventilation_objs = {
         name: VentilationComponent.model_validate(data)
         for name, data in ventilation_data.items()
+    }
+
+    materials_objs = {
+        name: ConstructionMaterialComponent.model_validate(data)
+        for name, data in materials_data.items()
+    }
+    construction_objs = {
+        name: ConstructionAssemblyComponent.model_validate(data)
+        for name, data in construction_data.items()
+    }
+    envelope_objs = {
+        name: EnvelopeAssemblyComponent.model_validate(data)
+        for name, data in envelope_data.items()
+    }
+
+    window_objs = {
+        name: GlazingConstructionSimpleComponent.model_validate(data)
+        for name, data in window_data.items()
+    }
+    infiltration_objs = {
+        name: InfiltrationComponent.model_validate(data)
+        for name, data in infiltration_data.items()
     }
 
     space_use_objs = {
@@ -141,6 +175,28 @@ def create_library(base_path: Path) -> ComponentLibrary:
             DHW=dhw_objs[data["DHW"]],
         )
         for name, data in operations_data.items()
+    }
+
+    envelope_assembly_objs = {
+        name: EnvelopeAssemblyComponent(
+            Name=name,
+            Layers=[
+                construction_objs[layer]
+                for layer in data["Layers"].split(", ")
+                if layer
+            ],
+        )
+        for name, data in envelope_data.items()
+    }
+
+    envelope_objs = {
+        name: ZoneEnvelopeComponent(
+            Name=name,
+            Assemblies=envelope_assembly_objs[data["Assemblies"]],
+            Infiltration=infiltration_objs[data["Infiltration"]],
+            Windows=window_objs[data["Windows"]],
+        )
+        for name, data in envelope_data.items()
     }
 
     # materials_data = load_excel_to_dict(base_path, "Materials_choices")
@@ -191,6 +247,12 @@ def create_library(base_path: Path) -> ComponentLibrary:
         DHW=dhw_objs,
         HVAC=hvac_objs,
         Operations=operations_objs,
+        Envelope=envelope_objs,
+        GlazingConstructionSimple=window_objs,
+        Infiltration=infiltration_objs,
+        EnvelopeAssembly=envelope_assembly_objs,
+        ConstructionAssembly=construction_objs,
+        ConstructionMaterial=materials_objs,
         # Envelope=envelopes,
         # GlazingConstructionSimple=glazing_constructions,
         # ConstructionAssembly=constructions,
