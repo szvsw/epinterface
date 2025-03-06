@@ -4,7 +4,10 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from archetypal.schedule import Schedule, ScheduleTypeLimits
+from archetypal.idfclass import IDF
+from archetypal.schedule import (
+    Schedule,
+)
 
 from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
@@ -31,9 +34,10 @@ from epinterface.sbem.components.systems import (
     VentilationComponent,
     ZoneHVACComponent,
 )
-from epinterface.sbem.interface import ComponentLibrary, ScheduleTransferObject
+from epinterface.sbem.interface import ComponentLibrary
 
 
+# helper functions
 def load_excel_to_dict(base_path: Path, sheet_name: str) -> dict[str, Any]:
     """Load the excel file into a dictionary."""
     df = pd.read_excel(base_path, sheet_name=sheet_name, engine="openpyxl")
@@ -43,23 +47,84 @@ def load_excel_to_dict(base_path: Path, sheet_name: str) -> dict[str, Any]:
     return {d["Name"]: d for d in data}
 
 
+def add_schedules_by_name(self, idf: IDF, schedule_names: set[str]) -> IDF:
+    """Add schedules to the IDF model by name.
+
+    Args:
+        idf (IDF): The IDF model to add the schedules to.
+        schedule_names (set[str]): The names of the schedules to add.
+
+    Returns:
+        IDF: The IDF model with the added schedules.
+    """
+    schedules = [self.lib.Schedules[s] for s in schedule_names]
+    for schedule in schedules:
+        yr_sch, *_ = schedule.to_year_week_day()
+        yr_sch.to_epbunch(idf)
+    return idf
+
+
+def daily_schedule_handling(daily_schedule_df) -> dict[str, Schedule]:
+    """Create the schedules from the excel file."""
+    daily_schedules = {}
+    for index, row in daily_schedule_df.iterrows():
+        name = row["Name"]
+        hours = row[[f"Hour_{i}" for i in range(24)]].tolist()
+        daily_schedules[name] = hours
+    return daily_schedules
+
+
+def weekly_schedule_handling(
+    weekly_schedule_df, daily_schedule_df
+) -> dict[str, Schedule]:
+    weekly_schedules = {}
+    for index, row in weekly_schedule_df.iterrows():
+        name = row["Name"]
+        days = [
+            daily_schedule_df[row[day]]
+            for day in [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ]
+        ]
+        weekly_schedules[name] = days
+    return weekly_schedules
+
+
+def yearly_schedule_handling(
+    yearly_schedule_df, weekly_schedule_df
+) -> dict[str, Schedule]:
+    """Create the yearly schedules from the monthly and daily schedule objects."""
+    yearly_schedules = {}
+    for index, row in yearly_schedule_df.iterrows():
+        start_day = row["Start_Day"]
+        week_schedule = weekly_schedule_df[row["Week_Schedule_Name"]]
+        schedule = Schedule(Name=row["Name"], start_day=start_day, Values=week_schedule)
+        yearly_schedules[schedule.Name] = schedule
+    return yearly_schedules
+
+
 def create_schedules(base_path: Path) -> dict[str, Schedule]:
     """Create the schedules from the excel file."""
-    # TODO: UPDATE SCHEDULES
-    # day_schedules = load_excel_to_dict(base_path, "Day_schedules")
-    # week_schedules = load_excel_to_dict(base_path, "Week_schedules")
-    year_schedules = load_excel_to_dict(base_path, "Year_schedules")
-
-    schedules = {}
-    for name, data in year_schedules.items():
-        transfer = ScheduleTransferObject.model_validate(data)
-        limit_type = ScheduleTypeLimits.from_dict(transfer.Type)
-        schedules[name] = Schedule.from_values(
-            Name=transfer.Name,
-            Type=limit_type,  # pyright: ignore [reportArgumentType]
-            Values=transfer.Values,
-        )
-    return schedules
+    daily_schedules = daily_schedule_handling(
+        pd.read_excel(base_path, sheet_name="Daily_Schedules")
+    )
+    weekly_schedules = weekly_schedule_handling(
+        pd.read_excel(base_path, sheet_name="Weekly_Schedules"), daily_schedules
+    )
+    yearly_schedules = yearly_schedule_handling(
+        pd.read_excel(base_path, sheet_name="Yearly_Schedules"), weekly_schedules
+    )
+    raise NotImplementedError
+    # schedules_obj = {}
+    # for schedules in yearly_schedules:
+    #     schedules_obj[schedules.Name] = schedules
+    return schedules_obj
 
 
 def create_library(base_path: Path) -> ComponentLibrary:
