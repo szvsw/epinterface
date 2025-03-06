@@ -10,6 +10,7 @@ from pydantic import Field
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.interface import ElectricEquipment, Lights, People
 from epinterface.sbem.common import BoolStr, MetadataMixin, NamedObject
+from epinterface.sbem.components.schedules import YearComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,9 @@ class OccupancyComponent(NamedObject, MetadataMixin):
         title="Occupancy density of the object [ppl/m2]",
         ge=0,
     )
-    Schedule: str = Field(..., title="Occupancy schedule of the object [frac]")
+    Schedule: YearComponent = Field(
+        ..., title="Occupancy schedule of the object [frac]"
+    )
     IsOn: BoolStr = Field(..., title="People are on")
     MetabolicRate: float = assumed_constants.MetabolicRate_met
 
@@ -75,10 +78,13 @@ class OccupancyComponent(NamedObject, MetadataMixin):
         logger.warning(
             f"Ignoring AirspeedSchedule for zone(s) {target_zone_or_zone_list_name}."
         )
+        raise NotImplementedError
+        # TODO: add schedule to idf
+
         people = People(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_People",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Number_of_People_Schedule_Name=self.Schedule,
+            Number_of_People_Schedule_Name=self.Schedule.Name,
             Number_of_People_Calculation_Method="People/Area",
             Number_of_People=None,
             Floor_Area_per_Person=None,
@@ -108,7 +114,7 @@ class LightingComponent(NamedObject, MetadataMixin):
         ...,
         title="Dimming type",
     )
-    Schedule: str = Field(..., title="Lighting schedule of the object [frac]")
+    Schedule: YearComponent = Field(..., title="Lighting schedule of the object [frac]")
     IsOn: BoolStr = Field(..., title="Lights are on")
 
     def add_lights_to_idf_zone(
@@ -138,10 +144,12 @@ class LightingComponent(NamedObject, MetadataMixin):
         logger.warning(
             f"Ignoring IlluminanceTarget for zone(s) {target_zone_or_zone_list_name}."
         )
+        raise NotImplementedError
+        # TODO: add schedule to idf
         lights = Lights(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_Lights",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Schedule_Name=self.Schedule,
+            Schedule_Name=self.Schedule.Name,
             Design_Level_Calculation_Method="Watts/Area",
             Watts_per_Zone_Floor_Area=self.PowerDensity,
             Watts_per_Person=None,
@@ -160,7 +168,9 @@ class EquipmentComponent(NamedObject, MetadataMixin):
     """An equipment object in the SBEM library."""
 
     PowerDensity: float = Field(..., title="Equipment density of the object [W/m2]")
-    Schedule: str = Field(..., title="Equipment schedule of the object [frac]")
+    Schedule: YearComponent = Field(
+        ..., title="Equipment schedule of the object [frac]"
+    )
     IsOn: BoolStr = Field(..., title="Equipment is on")
 
     def add_equipment_to_idf_zone(
@@ -182,10 +192,12 @@ class EquipmentComponent(NamedObject, MetadataMixin):
             f"Adding equipment to zone with schedule {self.Schedule}.  Make sure this schedule exists."
         )
 
+        raise NotImplementedError
+        # TODO: add schedule to idf
         equipment = ElectricEquipment(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_Equipment",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Schedule_Name=self.Schedule,
+            Schedule_Name=self.Schedule.Name,
             Design_Level_Calculation_Method="Watts/Area",
             Watts_per_Zone_Floor_Area=self.PowerDensity,
             Watts_per_Person=None,
@@ -207,12 +219,12 @@ class ThermostatComponent(NamedObject, MetadataMixin):
         ...,
         title="Heating setpoint of the object",
     )
-    HeatingSchedule: str = Field(..., title="Heating schedule of the object")
+    HeatingSchedule: YearComponent = Field(..., title="Heating schedule of the object")
     CoolingSetpoint: float = Field(
         ...,
         title="Cooling setpoint of the object",
     )
-    CoolingSchedule: str = Field(..., title="Cooling schedule of the object")
+    CoolingSchedule: YearComponent = Field(..., title="Cooling schedule of the object")
 
     def add_thermostat_to_idf_zone(
         self, idf: IDF, target_zone_or_zone_list_name: str
@@ -244,9 +256,7 @@ class WaterUseComponent(NamedObject, MetadataMixin):
     FlowRatePerPerson: float = Field(
         ..., title="Flow rate per person [m3/day/p]", ge=0, le=0.1
     )
-    Schedule: str = Field(
-        ..., title="Water schedule"
-    )  # TODO: Define a schedule preset to import (not from template)
+    Schedule: YearComponent = Field(..., title="Water schedule")
 
     @property
     def schedule_names(self) -> set[str]:

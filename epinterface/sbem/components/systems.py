@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 
 from epinterface.interface import WaterUseEquipment
 from epinterface.sbem.common import BoolStr, MetadataMixin, NamedObject
+from epinterface.sbem.components.schedules import YearComponent
 
 FuelType = Literal[
     "Electricity",
@@ -126,7 +127,7 @@ class VentilationComponent(NamedObject, MetadataMixin):
         ...,
         title="Minimum fresh air of the object [m³/s]",
     )
-    Schedule: str = Field(..., title="Ventilation schedule of the object")
+    Schedule: YearComponent = Field(..., title="Ventilation schedule of the object")
     Type: VentilationType = Field(..., title="Type of the object")
     TechType: VentilationTechType = Field(..., title="Technology type of the object")
 

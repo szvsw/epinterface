@@ -4,7 +4,7 @@ from typing import Literal
 
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 from epinterface.interface import (
     Construction,
@@ -17,63 +17,13 @@ from epinterface.sbem.common import BoolStr, MetadataMixin, NamedObject, NanStr
 from epinterface.sbem.components.materials import (
     ConstructionComponentSurfaceType,
     ConstructionMaterialComponent,
-    MaterialWithThickness,
     StandardMaterialMetadataMixin,
 )
-from epinterface.sbem.exceptions import ValueNotFound
 
 # CONSTRUCTION CLASSES
 
 
-# construction helper function
-def str_to_opaque_layer_list(v: str | list):
-    """Converts a string to a list of opaque construction layers."""
-    if isinstance(v, list):
-        return v
-    if v == "[]":
-        return []
-    list_content = v[1:-1].split(", ")
-    names = list_content[::2]
-    thicknesses = list(map(float, list_content[1::2]))
-    return [
-        ConstructionLayerComponent(Name=name, Thickness=thickness)
-        for name, thickness in zip(names, thicknesses, strict=False)
-    ]
-
-
 # TODO: why is this a class? shouldn't thickness just be an attribute in the material consutruction class?
-class ConstructionLayerComponent(
-    MaterialWithThickness, MetadataMixin, NamedObject, extra="forbid"
-):
-    """Layer of an opaque construction."""
-
-    def dereference_to_material(
-        self, material_defs: dict[str, ConstructionMaterialComponent]
-    ) -> Material:
-        """Converts a referenced material into a direct EP material object.
-
-        Args:
-            material_defs (list[OpaqueMaterial]): List of opaque material definitions.
-
-        Returns:
-            Material: The material object.
-        """
-        if self.Name not in material_defs:
-            raise ValueNotFound("Material", self.Name)
-
-        mat_def = material_defs[self.Name]
-
-        material = Material(
-            Name=f"{self.Name}_{self.Thickness}",
-            Thickness=self.Thickness,
-            Conductivity=mat_def.Conductivity,
-            Density=mat_def.Density,
-            Specific_Heat=mat_def.SpecificHeat,
-            Thermal_Absorptance=mat_def.ThermalAbsorptance,
-            Solar_Absorptance=mat_def.SolarAbsorptance,
-            Roughness=mat_def.Roughness,
-        )
-        return material
 
 
 WindowType = Literal["Single", "Double", "Triple"]
@@ -211,6 +161,34 @@ class InfiltrationComponent(
         return idf
 
 
+class ConstructionLayerComponent(BaseModel):
+    """Layer of an opaque construction."""
+
+    Thickness: float = Field(..., title="Thickness of the layer [m]")
+    LayerOrder: int
+    ConstructionMaterial: ConstructionMaterialComponent
+
+    @property
+    def name(self):
+        """Return the name of the layer."""
+        return f"{self.LayerOrder}_{self.ConstructionMaterial.Name}_{self.Thickness}m"
+
+    @property
+    def ep_material(self):
+        """Return the EP material for the layer."""
+        return Material(
+            Name=self.name,
+            Thickness=self.Thickness,
+            Conductivity=self.ConstructionMaterial.Conductivity,
+            Density=self.ConstructionMaterial.Density,
+            Specific_Heat=self.ConstructionMaterial.SpecificHeat,
+            Thermal_Absorptance=self.ConstructionMaterial.ThermalAbsorptance,
+            Solar_Absorptance=self.ConstructionMaterial.SolarAbsorptance,
+            Roughness=self.ConstructionMaterial.Roughness,
+            Visible_Absorptance=self.ConstructionMaterial.VisibleAbsorptance,
+        )
+
+
 class ConstructionAssemblyComponent(
     NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
 ):
@@ -226,6 +204,19 @@ class ConstructionAssemblyComponent(
         ..., title="Type of the opaque construction"
     )
 
+    @field_validator("Layers", mode="after")
+    def validate_layers(cls, v: list[ConstructionLayerComponent]):
+        """Validate the layers of the construction."""
+        if len(v) == 0:
+            msg = "At least one layer is required"
+            raise ValueError(msg)
+        layer_orders = [layer.LayerOrder for layer in v]
+        if set(layer_orders) != set(range(0, len(v))):
+            msg = "Layer orders must be consecutive integers starting from 0"
+            raise ValueError(msg)
+        v = sorted(v, key=lambda x: x.LayerOrder)
+        return v
+
     def add_to_idf(
         self, idf: IDF, material_defs: dict[str, ConstructionMaterialComponent]
     ) -> IDF:
@@ -240,7 +231,7 @@ class ConstructionAssemblyComponent(
         Returns:
             IDF: The updated IDF object.
         """
-        layers = [layer.dereference_to_material(material_defs) for layer in self.Layers]
+        layers = [layer.ep_material for layer in self.Layers]
 
         construction = Construction(
             name=self.Name,
@@ -276,20 +267,34 @@ class EnvelopeAssemblyComponent(
     GroundWallAssembly: ConstructionAssemblyComponent = Field(
         ..., title="Ground wall construction object name"
     )
-    InternalMassAssembly: ConstructionAssemblyComponent = Field(
+    InternalMassAssembly: ConstructionAssemblyComponent | None = Field(
         ..., title="Internal mass construction object name"
     )
-    InternalMassIsOn: BoolStr = Field(..., title="Internal mass is on")
-    InternalMassExposedAreaPerArea: float = Field(
+    InternalMassExposedAreaPerArea: float | None = Field(
         ...,
         title="Internal mass exposed area per area [m²/m²]",
         validation_alias="InternalMassExposedAreaPerArea [area / floor (m2/m2)]",
+        ge=0,
     )
     GroundIsAdiabatic: BoolStr = Field(..., title="Ground is adiabatic")
     RoofIsAdiabatic: BoolStr = Field(..., title="Roof is adiabatic")
     FacadeIsAdiabatic: BoolStr = Field(..., title="Facade is adiabatic")
     SlabIsAdiabatic: BoolStr = Field(..., title="Slab is adiabatic")
     PartitionIsAdiabatic: BoolStr = Field(..., title="Partition is adiabatic")
+
+    @model_validator(mode="after")
+    def validate_internal_mass_exposed_area_per_area(self):
+        """Validate that either both internal mass assembly and internal mass exposed area are provided, or neither."""
+        if self.InternalMassAssembly and self.InternalMassExposedAreaPerArea is None:
+            msg = "Internal mass assembly must be provided if internal mass exposed area per area is provided"
+            raise ValueError(msg)
+        if (
+            self.InternalMassExposedAreaPerArea is not None
+            and self.InternalMassAssembly is None
+        ):
+            msg = "Internal mass exposed area per area must be provided if internal mass assembly is provided"
+            raise ValueError(msg)
+        return self
 
 
 class ZoneEnvelopeComponent(NamedObject, MetadataMixin, extra="forbid"):

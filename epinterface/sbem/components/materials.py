@@ -68,17 +68,6 @@ ConstructionComponentSurfaceType = Literal[
 ]
 
 
-class MaterialWithThickness(BaseModel, populate_by_name=True):
-    """Material with a thickness."""
-
-    Thickness: float = Field(
-        ...,
-        title="Thickness of the material [m]",
-        validation_alias="Thickness [m]",
-        ge=0,
-    )
-
-
 ConstructionMaterialType = Literal[
     "Concrete",
     "Timber",
@@ -121,6 +110,13 @@ class ConstructionMaterialProperties(
         ge=0,
         le=1,
         validation_alias="SolarAbsorptance [0-1]",
+    )
+    VisibleAbsorptance: float = Field(
+        ...,
+        title="Visible absorptance",
+        ge=0,
+        le=1,
+        validation_alias="VisibleAbsorptance [0-1]",
     )
 
     TemperatureCoefficientThermalConductivity: float = Field(
