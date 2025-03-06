@@ -146,7 +146,7 @@ class InfiltrationComponent(
         ...,
         title="Infiltration wind velocity coefficient",
     )
-    WindVelocitySquaredcoefficient: float = Field(
+    WindVelocitySquaredCoefficient: float = Field(
         ...,
         title="Infiltration wind velocity squared coefficient",
     )
@@ -205,7 +205,7 @@ class InfiltrationComponent(
             Constant_Term_Coefficient=self.ConstantCoefficient,
             Temperature_Term_Coefficient=self.TemperatureCoefficient,
             Velocity_Term_Coefficient=self.WindVelocityCoefficient,
-            Velocity_Squared_Term_Coefficient=self.WindVelocitySquaredcoefficient,
+            Velocity_Squared_Term_Coefficient=self.WindVelocitySquaredCoefficient,
         )
         idf = inf.add(idf)
         return idf
