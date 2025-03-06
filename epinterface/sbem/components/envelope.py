@@ -132,6 +132,7 @@ class InfiltrationComponent(
 ):
     """Zone infiltration object."""
 
+    # TODO: add assumed_constants
     IsOn: BoolStr = Field(..., title="Infiltration is on")
     ConstantCoefficient: float = Field(
         ...,
@@ -149,14 +150,14 @@ class InfiltrationComponent(
         ...,
         title="Infiltration wind velocity squared coefficient",
     )
-    AFN_AirMassFlowCoefficient_Crack: float = Field(
+    AFNAirMassFlowCoefficientCrack: float = Field(
         ...,
         title="AFN air mass flow coefficient crack",
     )
 
     AirChangesPerHour: float = Field(
         ...,
-        title="Infiltration air changes per hour",
+        title="Infiltration air changes per hour [ACH]",
         ge=0,
     )
     FlowPerExteriorSurfaceArea: float = Field(
