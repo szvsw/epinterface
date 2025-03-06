@@ -77,6 +77,7 @@ def create_library(base_path: Path) -> ComponentLibrary:
 
     materials_data = load_excel_to_dict(base_path, "Materials_choices")
     construction_data = load_excel_to_dict(base_path, "Construction_components")
+    envelope_assembly_data = load_excel_to_dict(base_path, "Envelope_components")
     envelope_data = load_excel_to_dict(base_path, "Envelope_assembly")
     window_data = construction_data[construction_data["Type"] == "Windows"]
     infiltration_data = construction_data[construction_data["Type"] == "Infiltation"]
@@ -119,13 +120,11 @@ def create_library(base_path: Path) -> ComponentLibrary:
         name: ConstructionMaterialComponent.model_validate(data)
         for name, data in materials_data.items()
     }
+
+    # TODO: Obj creation should reference to materials_objs
     construction_objs = {
         name: ConstructionAssemblyComponent.model_validate(data)
         for name, data in construction_data.items()
-    }
-    envelope_objs = {
-        name: EnvelopeAssemblyComponent.model_validate(data)
-        for name, data in envelope_data.items()
     }
 
     window_objs = {
@@ -135,6 +134,12 @@ def create_library(base_path: Path) -> ComponentLibrary:
     infiltration_objs = {
         name: InfiltrationComponent.model_validate(data)
         for name, data in infiltration_data.items()
+    }
+
+    # TODO: Obj creation should reference to construction_objs
+    envelope_assembly_objs = {
+        name: EnvelopeAssemblyComponent.model_validate(data)
+        for name, data in envelope_assembly_data.items()
     }
 
     space_use_objs = {
@@ -180,7 +185,7 @@ def create_library(base_path: Path) -> ComponentLibrary:
     envelope_objs = {
         name: ZoneEnvelopeComponent(
             Name=name,
-            Assemblies=envelope_objs[data["Assemblies"]],
+            Assemblies=envelope_assembly_objs[data["Assemblies"]],
             Infiltration=infiltration_objs[data["Infiltration"]],
             Window=window_objs[data["Windows"]],
         )
