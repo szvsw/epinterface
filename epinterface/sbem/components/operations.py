@@ -34,6 +34,6 @@ class ZoneOperationsComponent(
         # TODO: remember to add schedules!
         self.SpaceUse.add_loads_to_idf_zone(idf, target_zone_name)
         self.HVAC.add_conditioning_to_idf_zone(idf, target_zone_name)
-        total_people = self.SpaceUse.Occupancy.OccupancyDensity * zone_area
+        total_people = self.SpaceUse.Occupancy.PeopleDensity * zone_area
         self.DHW.add_water_to_idf_zone(idf, target_zone_name, total_ppl=total_people)
         return idf

@@ -354,8 +354,8 @@ class Model(BaseWeather, validate_assignment=True):
 
         """
         ppl_per_m2 = (
-            self.operations.SpaceUse.Occupancy.OccupancyDensity
-            if self.operations.SpaceUse.Occupancy.PeopleIsOn
+            self.operations.SpaceUse.Occupancy.PeopleDensity
+            if self.operations.SpaceUse.Occupancy.IsOn
             else 0
         )
         total_area = self.total_conditioned_area

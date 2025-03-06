@@ -18,14 +18,13 @@ logger = logging.getLogger(__name__)
 class OccupancyComponent(NamedObject, MetadataMixin):
     """An occupancy object in the SBEM library."""
 
-    OccupancyDensity: float = Field(
+    PeopleDensity: float = Field(
         ...,
-        title="Occupancy density of the object",
+        title="Occupancy density of the object [ppl/m2]",
         ge=0,
-        validation_alias="OccupancyDensity [m²/person]",
     )
-    OccupancySchedule: str = Field(..., title="Occupancy schedule of the object")
-    PeopleIsOn: BoolStr = Field(..., title="People are on")
+    Schedule: str = Field(..., title="Occupancy schedule of the object [frac]")
+    IsOn: BoolStr = Field(..., title="People are on")
     MetabolicRate: float = assumed_constants.MetabolicRate_met
 
     @property
@@ -48,7 +47,7 @@ class OccupancyComponent(NamedObject, MetadataMixin):
         Returns:
             IDF: The updated IDF object.
         """
-        if not self.PeopleIsOn:
+        if not self.IsOn:
             return idf
 
         activity_sch_name = (
@@ -71,7 +70,7 @@ class OccupancyComponent(NamedObject, MetadataMixin):
         activity_sch_year.to_epbunch(idf)
 
         logger.warning(
-            f"Adding people to zone with schedule {self.OccupancySchedule}.  Make sure this schedule exists."
+            f"Adding people to zone with schedule {self.Schedule}.  Make sure this schedule exists."
         )
         logger.warning(
             f"Ignoring AirspeedSchedule for zone(s) {target_zone_or_zone_list_name}."
@@ -79,11 +78,11 @@ class OccupancyComponent(NamedObject, MetadataMixin):
         people = People(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_People",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Number_of_People_Schedule_Name=self.OccupancySchedule,
+            Number_of_People_Schedule_Name=self.Schedule,
             Number_of_People_Calculation_Method="People/Area",
             Number_of_People=None,
             Floor_Area_per_Person=None,
-            People_per_Floor_Area=self.OccupancyDensity,
+            People_per_Floor_Area=self.PeopleDensity,
             Fraction_Radiant=assumed_constants.FractionRadiantPeople,
             Sensible_Heat_Fraction="autocalculate",
             Activity_Level_Schedule_Name=activity_sch_year.Name,
@@ -99,19 +98,18 @@ DimmingTypeType = Literal["Off", "Stepped", "Continuous"]
 class LightingComponent(NamedObject, MetadataMixin):
     """A lighting object in the SBEM library."""
 
-    LightingPowerDensity: float = Field(
+    PowerDensity: float = Field(
         ...,
-        title="Lighting density of the object",
+        title="Lighting density of the object [W/m2]",
         ge=0,
-        validation_alias="LightingDensity [W/m²]",
     )
 
     DimmingType: DimmingTypeType = Field(
         ...,
         title="Dimming type",
     )
-    LightingSchedule: str = Field(..., title="Lighting schedule of the object")
-    LightsIsOn: BoolStr = Field(..., title="Lights are on")
+    Schedule: str = Field(..., title="Lighting schedule of the object [frac]")
+    IsOn: BoolStr = Field(..., title="Lights are on")
 
     def add_lights_to_idf_zone(
         self, idf: IDF, target_zone_or_zone_list_name: str
@@ -127,14 +125,14 @@ class LightingComponent(NamedObject, MetadataMixin):
         Returns:
             IDF: The updated IDF object.
         """
-        if not self.LightsIsOn:
+        if not self.IsOn:
             return idf
 
         if self.DimmingType != "Off":
             raise NotImplementedParameter("DimmingType:On", self.Name, "Lights")
 
         logger.warning(
-            f"Adding lights to zone with schedule {self.LightingSchedule}.  Make sure this schedule exists."
+            f"Adding lights to zone with schedule {self.Schedule}.  Make sure this schedule exists."
         )
 
         logger.warning(
@@ -143,9 +141,9 @@ class LightingComponent(NamedObject, MetadataMixin):
         lights = Lights(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_Lights",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Schedule_Name=self.LightingSchedule,
+            Schedule_Name=self.Schedule,
             Design_Level_Calculation_Method="Watts/Area",
-            Watts_per_Zone_Floor_Area=self.LightingPowerDensity,
+            Watts_per_Zone_Floor_Area=self.PowerDensity,
             Watts_per_Person=None,
             Lighting_Level=None,
             Return_Air_Fraction=assumed_constants.ReturnAirFractionLights,
@@ -161,9 +159,9 @@ class LightingComponent(NamedObject, MetadataMixin):
 class EquipmentComponent(NamedObject, MetadataMixin):
     """An equipment object in the SBEM library."""
 
-    EquipmentDensity: float = Field(..., title="Equipment density of the object")
-    EquipmentSchedule: str = Field(..., title="Equipment schedule of the object")
-    EquipmentIsOn: BoolStr = Field(..., title="Equipment is on")
+    PowerDensity: float = Field(..., title="Equipment density of the object [W/m2]")
+    Schedule: str = Field(..., title="Equipment schedule of the object [frac]")
+    IsOn: BoolStr = Field(..., title="Equipment is on")
 
     def add_equipment_to_idf_zone(
         self, idf: IDF, target_zone_or_zone_list_name: str
@@ -177,19 +175,19 @@ class EquipmentComponent(NamedObject, MetadataMixin):
         Returns:
             IDF: The updated IDF object.
         """
-        if not self.EquipmentIsOn:
+        if not self.IsOn:
             return idf
 
         logger.warning(
-            f"Adding equipment to zone with schedule {self.EquipmentSchedule}.  Make sure this schedule exists."
+            f"Adding equipment to zone with schedule {self.Schedule}.  Make sure this schedule exists."
         )
 
         equipment = ElectricEquipment(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_Equipment",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Schedule_Name=self.EquipmentSchedule,
+            Schedule_Name=self.Schedule,
             Design_Level_Calculation_Method="Watts/Area",
-            Watts_per_Zone_Floor_Area=self.EquipmentDensity,
+            Watts_per_Zone_Floor_Area=self.PowerDensity,
             Watts_per_Person=None,
             Fraction_Latent=assumed_constants.FractionLatentEquipment,
             Fraction_Radiant=assumed_constants.FractionRadiantEquipment,
@@ -204,17 +202,15 @@ class EquipmentComponent(NamedObject, MetadataMixin):
 class ThermostatComponent(NamedObject, MetadataMixin):
     """A thermostat object in the SBEM library."""
 
-    ThermostatIsOn: BoolStr = Field(..., title="Thermostat is on")
+    IsOn: BoolStr = Field(..., title="Thermostat is on")
     HeatingSetpoint: float = Field(
         ...,
         title="Heating setpoint of the object",
-        validation_alias="HeatingSetpoint [°C]",
     )
     HeatingSchedule: str = Field(..., title="Heating schedule of the object")
     CoolingSetpoint: float = Field(
         ...,
         title="Cooling setpoint of the object",
-        validation_alias="CoolingSetpoint [°C]",
     )
     CoolingSchedule: str = Field(..., title="Cooling schedule of the object")
 
@@ -230,7 +226,7 @@ class ThermostatComponent(NamedObject, MetadataMixin):
         Returns:
             IDF: The updated IDF object.
         """
-        if not self.ThermostatIsOn:
+        if not self.IsOn:
             return idf
 
         logger.warning(
@@ -248,7 +244,7 @@ class WaterUseComponent(NamedObject, MetadataMixin):
     FlowRatePerPerson: float = Field(
         ..., title="Flow rate per person [m3/day/p]", ge=0, le=0.1
     )
-    WaterSchedule: str = Field(
+    Schedule: str = Field(
         ..., title="Water schedule"
     )  # TODO: Define a schedule preset to import (not from template)
 
