@@ -1,6 +1,7 @@
 """A module for parsing SBEM template data and generating EnergyPlus objects."""
 
 import logging
+from pathlib import Path
 
 from pydantic import Field
 
@@ -34,6 +35,7 @@ from epinterface.sbem.components.systems import (
     VentilationComponent,
     ZoneHVACComponent,
 )
+from epinterface.sbem.prisma.client import delete_all
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +84,56 @@ class ComponentLibrary(MetadataMixin, arbitrary_types_allowed=True):
     Year: dict[str, YearComponent]
     Week: dict[str, WeekComponent]
     Day: dict[str, DayComponent]
+
+
+async def add_excel_to_db(path: Path, erase_db: bool = False):
+    """Add an excel file to the database."""
+    if erase_db:
+        await delete_all()
+
+    # handle converting excel to dfs
+
+    # write your logic here.
+
+    # add Day
+
+    # add Week
+
+    # add year: note that your will need to connnnect to weeks
+
+    # add lighting/equipment/occupancy/thermostat/wateruse, connect to schedules
+
+    # add space use, connect to above
+
+    # add thermal systems
+
+    # add conditioning systems
+
+    # add ventilation
+
+    # add hvac
+
+    # add dhw
+
+    # add operations
+
+    # add infiltration
+
+    # add materials
+
+    # add construction assemblies - connenct to materials
+
+    # add envelope assemblies - connect to construction assemblies
+
+    # add glazing constructions
+
+    # add envelope - connect to envelope assemblies, glazing constructions, infiltration
+
+    # etc.
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    path_to_excel = Path("path/to/your/lib.xlsx")
+    asyncio.run(add_excel_to_db(path_to_excel, erase_db=True))
