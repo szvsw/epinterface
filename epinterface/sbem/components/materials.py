@@ -102,6 +102,22 @@ class MaterialWithThickness(BaseModel, populate_by_name=True):
     )
 
 
+ConstructionMaterialType = Literal[
+    "Concrete",
+    "Timber",
+    "Screed",
+    "Masonry",
+    "Insulation",
+    "Metal",
+    "Boards",
+    "Other",
+    "Plaster",
+    "Finishes",
+    "Siding",
+    "Sealing",
+]
+
+
 class ConstructionMaterialProperties(
     CommonMaterialPropertiesMixin, populate_by_name=True
 ):
@@ -138,21 +154,6 @@ class ConstructionMaterialProperties(
         validation_alias="TemperatureCoefficientThermalConductivity [W/m-K2]",
     )
     # TODO: material type should be dynamic user entry or enum
-    ConstructionMaterialType = Literal[
-        "Concrete",
-        "Timber",
-        "Screed",
-        "Masonry",
-        "Insulation",
-        "Metal",
-        "Boards",
-        "Other",
-        "Plaster",
-        "Finishes",
-        "Siding",
-        "Sealing",
-    ]
-
     Type: ConstructionMaterialType = Field(
         ..., title="Type of the opaque material", validation_alias="Type [enum]"
     )
