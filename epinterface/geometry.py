@@ -148,6 +148,11 @@ class ShoeboxGeometry(BaseModel):
         return 1 if self.basement else 0
 
     @property
+    def attic_storey_count(self) -> int:
+        """Return the number of attic stories."""
+        return 1 if self.roof_height else 0
+
+    @property
     def zones_height(self) -> float:
         """Return the total height of the zones, excluding any gabling."""
         return self.h * (self.num_stories)
@@ -164,7 +169,7 @@ class ShoeboxGeometry(BaseModel):
 
     @property
     def total_living_area(self) -> float:
-        """Return the total living area of the building."""
+        """Return the total living area of the building (does not include attic/basement)."""
         return self.footprint_area * self.num_stories
 
     @property

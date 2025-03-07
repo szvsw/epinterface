@@ -4,6 +4,7 @@ import asyncio
 import shutil
 import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 from uuid import uuid4
@@ -314,6 +315,18 @@ class SurfaceHandlers(BaseModel):
         return idf
 
 
+@dataclass
+class AddedZoneLists:
+    """A collection of zone lists for a model."""
+
+    conditioned_zone_list: ZoneList
+    all_zones_list: ZoneList
+    occupied_zone_list: ZoneList
+    attic_zone_list: ZoneList
+    basement_zone_list: ZoneList
+    main_zone_list: ZoneList
+
+
 class Model(BaseWeather, validate_assignment=True):
     """A simple model constructor for the IDF model.
 
@@ -336,14 +349,14 @@ class Model(BaseWeather, validate_assignment=True):
         """The total conditioned area of the model.
 
         Returns:
-            float: The total conditioned area of the model.
+            area (float): The total conditioned area of the model.
         """
-        return self.geometry.total_living_area + (
-            self.geometry.footprint_area
-            if (self.geometry.basement and self.conditioned_basement)
-            | (self.conditioned_attic)
-            else 0
-        )
+        conditioned_area = self.geometry.total_living_area
+        if self.geometry.basement and self.conditioned_basement:
+            conditioned_area += self.geometry.footprint_area
+        if self.geometry.roof_height and self.conditioned_attic:
+            conditioned_area += self.geometry.footprint_area
+        return conditioned_area
 
     @property
     def total_people(self) -> float:
@@ -419,7 +432,7 @@ class Model(BaseWeather, validate_assignment=True):
     def add_zone_lists(
         self,
         idf: IDF,
-    ):
+    ) -> tuple[IDF, AddedZoneLists]:
         """Add the zone lists to the IDF model.
 
         Note that this attempts to automatically determine
@@ -431,28 +444,54 @@ class Model(BaseWeather, validate_assignment=True):
 
         Returns:
             idf (IDF): The IDF model with the added zone lists
-            conditioned_zone_list (ZoneList): The list of conditioned zones
-            all_zones_list (ZoneList): The list of all zones
+            zone_lists (AddedZoneLists): The list of zone lists
         """
-        raise NotImplementedError
         all_zone_names = [zone.Name for zone in idf.idfobjects["ZONE"]]
         all_zones_list = ZoneList(Name="All_Zones", Names=all_zone_names)
-        conditioned_zone_names = [
-            zone.Name
-            for zone in idf.idfobjects["ZONE"]
-            if "attic" not in zone.Name.lower()  # attic considered
-            and (
-                not zone.Name.lower().endswith(self.geometry.basement_suffix.lower())
-                if ((not self.conditioned_basement) and self.geometry.basement)
-                else True
-            )
-        ]
 
+        conditioned_zone_names = []
+        attic_zone_names = []
+        basement_zone_names = []
+        main_zone_names = []
+        occupied_zone_names = []
+        for zone in idf.idfobjects["ZONE"]:
+            # handle attic
+            is_attic = "attic" in zone.Name.lower()
+            is_basement = zone.Name.lower().endswith(
+                self.geometry.basement_suffix.lower()
+            )
+            is_normal_zone = not is_attic and not is_basement
+            should_condition = (
+                (is_attic and self.conditioned_attic)
+                or (is_basement and self.conditioned_basement)
+                or is_normal_zone
+            )
+            should_be_occupied = (
+                (is_attic and self.attic_use_fraction is not None)
+                or (is_basement and self.basement_use_fraction is not None)
+                or is_normal_zone
+            )
+            if should_condition:
+                conditioned_zone_names.append(zone.Name)
+            if should_be_occupied:
+                occupied_zone_names.append(zone.Name)
+            if is_attic:
+                attic_zone_names.append(zone.Name)
+            if is_basement:
+                basement_zone_names.append(zone.Name)
+            if is_normal_zone:
+                main_zone_names.append(zone.Name)
+
+        # safety check for zone counts
+        # attic never gets partitioned so it only ever contributes 1
+        # to the conditioned storey count
         conditioned_storey_count = self.geometry.num_stories + (
             1 if self.conditioned_basement else 0
         )
         zones_per_storey = self.geometry.zones_per_storey
-        expected_zone_count = conditioned_storey_count * zones_per_storey
+        expected_zone_count = conditioned_storey_count * zones_per_storey + (
+            1 if self.conditioned_attic else 0
+        )
         if len(conditioned_zone_names) != expected_zone_count:
             msg = f"Expected {expected_zone_count} zones, but found {len(conditioned_zone_names)}."
             raise ValueError(msg)
@@ -460,9 +499,21 @@ class Model(BaseWeather, validate_assignment=True):
         conditioned_zone_list = ZoneList(
             Name="Conditioned_Zones", Names=conditioned_zone_names
         )
+        attic_zone_list = ZoneList(Name="Attic_Zones", Names=attic_zone_names)
+        basement_zone_list = ZoneList(Name="Basement_Zones", Names=basement_zone_names)
+        main_zone_list = ZoneList(Name="Main_Zones", Names=main_zone_names)
+        occupied_zone_list = ZoneList(Name="Occupied_Zones", Names=occupied_zone_names)
+
         idf = conditioned_zone_list.add(idf)
         idf = all_zones_list.add(idf)
-        return idf, conditioned_zone_list, all_zones_list
+        return idf, AddedZoneLists(
+            conditioned_zone_list=conditioned_zone_list,
+            all_zones_list=all_zones_list,
+            occupied_zone_list=occupied_zone_list,
+            attic_zone_list=attic_zone_list,
+            basement_zone_list=basement_zone_list,
+            main_zone_list=main_zone_list,
+        )
 
     # part of the HVAC/conditioning system
     def compute_dhw(self) -> float:
@@ -539,6 +590,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             idf (IDF): The IDF model with the added hot water.
         """
+        raise NotImplementedError
         for zone_name in zone_list.Names:
             idf = self.add_hot_water_to_zone(idf, space_use, zone_name)
         return idf
@@ -580,6 +632,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The IDF model with the added envelope.
         """
+        raise NotImplementedError
         constructions = envelope.Assemblies
         infiltration = envelope.Infiltration
         window_def = envelope.Window
@@ -612,6 +665,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The IDF model with the selected surfaces.
         """
+        raise NotImplementedError
         if self.geometry.roof_height:
             raise SBEMBuilderNotImplementedError("roof_height")
 
@@ -645,6 +699,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             idf (IDF): The IDF model with the added infiltration.
         """
+        raise NotImplementedError
         idf = infiltration.add_infiltration_to_idf_zone(idf, zone_list.Name)
         # idf = self.add_schedules_by_name(idf, infiltration.schedule_names)
         return idf
@@ -658,10 +713,6 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The built energy model.
         """
-        raise NotImplementedError
-        if (not self.geometry.basement) and self.conditioned_basement:
-            raise ValueError("CONDITIONEDBASEMENT:TRUE:BASEMENT:FALSE")
-
         if self.geometry.roof_height:
             raise SBEMBuilderNotImplementedError("roof_height")
         config.output_dir.mkdir(parents=True, exist_ok=True)
@@ -689,7 +740,6 @@ class Model(BaseWeather, validate_assignment=True):
 
         idf = add_default_sim_controls(idf)
         idf, scheds = add_default_schedules(idf)
-        self.lib.Schedule.update(scheds)
 
         idf = SiteGroundTemperature.FromValues(
             assumed_constants.SiteGroundTemperature_degC
@@ -698,11 +748,14 @@ class Model(BaseWeather, validate_assignment=True):
         idf = self.geometry.add(idf)
 
         # construct zone lists
-        idf, conditioned_zone_list, all_zones_list = self.add_zone_lists(idf)
+        idf, added_zone_lists = self.add_zone_lists(idf)
+        raise NotImplementedError
 
         # TODO: Handle separately ventilated attic/basement?
-        idf = self.add_space_use(idf, self.space_use, conditioned_zone_list)
-        idf = self.add_envelope(idf, self.envelope, all_zones_list)
+        idf = self.add_space_use(
+            idf, self.space_use, added_zone_lists.conditioned_zone_list
+        )
+        idf = self.add_envelope(idf, self.envelope, added_zone_lists.all_zones_list)
 
         return idf
 
