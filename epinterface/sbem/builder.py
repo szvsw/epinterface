@@ -457,8 +457,10 @@ class Model(BaseWeather, validate_assignment=True):
         for zone in idf.idfobjects["ZONE"]:
             # handle attic
             is_attic = "attic" in zone.Name.lower()
-            is_basement = zone.Name.lower().endswith(
-                self.geometry.basement_suffix.lower()
+            is_basement = (
+                zone.Name.lower().endswith(self.geometry.basement_suffix.lower())
+                if self.geometry.basement
+                else False
             )
             is_normal_zone = not is_attic and not is_basement
             should_condition = (
@@ -809,6 +811,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             pd.DataFrame: The postprocessed results.
         """
+        raise NotImplementedError
         res_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
@@ -901,28 +904,61 @@ class Model(BaseWeather, validate_assignment=True):
 
 if __name__ == "__main__":
     import asyncio
-    import json
+
+    from prisma.models import Envelope, Operations
 
     # import tempfile
     from pydantic import AnyUrl
 
-    raise NotImplementedError
-    with open("notebooks/everett_lib.json") as f:
-        lib_data = json.load(f)
-    lib = ComponentLibrary.model_validate(lib_data)
-    for env in lib.Envelope.values():
-        if env.WindowDefinition is None:
-            msg = f"Envelope {env.Name} has no window definition"
-            raise ValueError(msg)
-        env.WindowDefinition.GlazingConstruction = "Template_post_2003"
+    from epinterface.sbem.prisma.client import ENVELOPE_INCLUDE, OPERATIONS_INCLUDE, db
+
+    async def _fetch_comps():
+        await db.connect()
+        operations = await Operations.prisma().find_first(include=OPERATIONS_INCLUDE)
+        envelope = await Envelope.prisma().find_first(include=ENVELOPE_INCLUDE)
+
+        await db.disconnect()
+        return operations, envelope
+
+    operations, envelope = asyncio.run(_fetch_comps())
 
     model = Model(
         Weather=AnyUrl(
             "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
         ),
-        lib=lib,
-        space_use_name=next(iter(lib.Operations)),
-        envelope_name=next(iter(lib.Envelope)),
+        operations=ZoneOperationsComponent.model_validate(
+            operations, from_attributes=True
+        ),
+        envelope=ZoneEnvelopeComponent.model_validate(envelope, from_attributes=True),
+        lib=ComponentLibrary(
+            Operations={},
+            SpaceUse={},
+            Occupancy={},
+            Lighting={},
+            Equipment={},
+            Thermostat={},
+            WaterUse={},
+            HVAC={},
+            ConditioningSystems={},
+            ThermalSystem={},
+            Ventilation={},
+            DHW={},
+            Envelope={},
+            GlazingConstructionSimple={},
+            Infiltration={},
+            EnvelopeAssembly={},
+            ConstructionAssembly={},
+            ConstructionMaterial={},
+            Year={},
+            Week={},
+            Day={},
+        ),
+        basement_insulation_surface=None,
+        conditioned_basement=True,
+        basement_use_fraction=None,
+        attic_insulation_surface=None,
+        conditioned_attic=False,
+        attic_use_fraction=None,
         geometry=ShoeboxGeometry(
             x=0,
             y=0,
@@ -931,7 +967,7 @@ if __name__ == "__main__":
             h=3,
             wwr=0.2,
             num_stories=2,
-            basement=False,
+            basement=True,
             zoning="by_storey",
             roof_height=None,
         ),

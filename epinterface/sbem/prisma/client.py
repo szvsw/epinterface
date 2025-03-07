@@ -27,16 +27,20 @@ from prisma.models import (
     Year,
 )
 from prisma.types import (
+    ConditioningSystemsInclude,
     ConstructionAssemblyInclude,
     ConstructionAssemblyLayerInclude,
     EnvelopeAssemblyInclude,
     EnvelopeInclude,
     EquipmentInclude,
+    HVACInclude,
     LightingInclude,
     OccupancyInclude,
+    OperationsInclude,
     RepeatedWeekInclude,
     SpaceUseInclude,
     ThermostatInclude,
+    VentilationInclude,
     WaterUseInclude,
     WeekInclude,
     YearInclude,
@@ -85,6 +89,23 @@ SPACE_USE_INCLUDE: SpaceUseInclude = {
     "WaterUse": {"include": WATER_USE_INCLUDE},
     "Occupancy": {"include": OCCUPANCY_INCLUDE},
 }
+CONDITIONING_SYSTEMS_INCLUDE: ConditioningSystemsInclude = {
+    "Heating": True,
+    "Cooling": True,
+}
+VENTILATION_INCLUDE: VentilationInclude = {
+    "Schedule": {"include": YEAR_INCLUDE},
+}
+HVAC_INCLUDE: HVACInclude = {
+    "ConditioningSystems": {"include": CONDITIONING_SYSTEMS_INCLUDE},
+    "Ventilation": {"include": VENTILATION_INCLUDE},
+}
+OPERATIONS_INCLUDE: OperationsInclude = {
+    "SpaceUse": {"include": SPACE_USE_INCLUDE},
+    "HVAC": {"include": HVAC_INCLUDE},
+    "DHW": True,
+}
+
 
 LAYER_INCLUDE: ConstructionAssemblyLayerInclude = {
     "ConstructionMaterial": True,
@@ -104,6 +125,8 @@ ENVELOPE_ASSEMBLY_INCLUDE: EnvelopeAssemblyInclude = {
 }
 ENVELOPE_INCLUDE: EnvelopeInclude = {
     "Assemblies": {"include": ENVELOPE_ASSEMBLY_INCLUDE},
+    "Infiltration": True,
+    "Window": True,
 }
 
 
