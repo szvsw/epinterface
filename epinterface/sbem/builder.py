@@ -579,45 +579,6 @@ class Model(BaseWeather, validate_assignment=True):
         idf = space_use.DHW.add_water_to_idf_zone(idf, zone.Name, total_ppl)
         return idf
 
-    def add_hot_water_to_zone_list(
-        self, idf: IDF, space_use: ZoneOperationsComponent, zone_list: ZoneList
-    ) -> IDF:
-        """Add the hot water to the zone list.
-
-        Args:
-            idf (IDF): The IDF model to add the hot water to.
-            space_use (ZoneUse): The zone use template.
-            zone_list (ZoneList): The list of zones to add the hot water to.
-
-        Returns:
-            idf (IDF): The IDF model with the added hot water.
-        """
-        raise NotImplementedError
-        for zone_name in zone_list.Names:
-            idf = self.add_hot_water_to_zone(idf, space_use, zone_name)
-        return idf
-
-    def add_space_use(
-        self, idf: IDF, space_use: ZoneOperationsComponent, zone_list: ZoneList
-    ) -> IDF:
-        """Add the space use to the IDF model.
-
-        Args:
-            idf (IDF): The IDF model to add the space use to.
-            space_use (ZoneUse): The zone use template.
-            zone_list (ZoneList): The list of zones to add the space use to.
-
-        Returns:
-            IDF: The IDF model with the added space use.
-        """
-        raise NotImplementedError
-        idf = space_use.add_space_use_to_idf_zone(idf, zone_list)
-        idf = self.add_hot_water_to_zone_list(idf, space_use, zone_list)
-        idf = self.add_schedules_by_name(
-            idf, space_use.schedule_names
-        )  # TODO: Add schedules methodology
-        return idf
-
     def add_envelope(
         self, idf: IDF, envelope: ZoneEnvelopeComponent, inf_zone_list: ZoneList
     ) -> IDF:
@@ -752,6 +713,20 @@ class Model(BaseWeather, validate_assignment=True):
         # construct zone lists
         idf, added_zone_lists = self.add_zone_lists(idf)
         raise NotImplementedError
+
+        # > operations
+        # ----> space use
+        # --------> lighting, equipment, occupancy to main zones.
+        # ------------> special handling for attic, basement according to account for use fractions.
+        # ------------> should schedules be added in per component, or collected and added once?
+        # --------> water use
+        # ------------> special handling for attic, basement according to account for use fractions.
+        # ------------> needs information from DHW component
+        # --------> Thermostat (see below)
+        # ----> HVAC
+        # --------> ConditioningSystems can be effectively ignored, as these are just post-processing.
+        # --------> Ventilation -> HVACTemplate:IdealLoadsAirSystem + HVACTemplate:Thermostat
+        # ----> DHW (see water use above)
 
         # TODO: Handle separately ventilated attic/basement?
         idf = self.add_space_use(
