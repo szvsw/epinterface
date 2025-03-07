@@ -8,7 +8,9 @@ from epinterface.sbem.components.systems import DHWComponent, ZoneHVACComponent
 
 
 class ZoneOperationsComponent(
-    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
+    NamedObject,
+    MetadataMixin,
+    extra="forbid",
 ):
     """Zone use consolidation across space use, HVAC, DHW."""
 

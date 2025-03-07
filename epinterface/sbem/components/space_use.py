@@ -16,7 +16,7 @@ from epinterface.sbem.exceptions import NotImplementedParameter
 logger = logging.getLogger(__name__)
 
 
-class OccupancyComponent(NamedObject, MetadataMixin):
+class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
     """An occupancy object in the SBEM library."""
 
     PeopleDensity: float = Field(
@@ -101,7 +101,7 @@ class OccupancyComponent(NamedObject, MetadataMixin):
 DimmingTypeType = Literal["Off", "Stepped", "Continuous"]
 
 
-class LightingComponent(NamedObject, MetadataMixin):
+class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A lighting object in the SBEM library."""
 
     PowerDensity: float = Field(
@@ -164,7 +164,7 @@ class LightingComponent(NamedObject, MetadataMixin):
         return idf
 
 
-class EquipmentComponent(NamedObject, MetadataMixin):
+class EquipmentComponent(NamedObject, MetadataMixin, extra="forbid"):
     """An equipment object in the SBEM library."""
 
     PowerDensity: float = Field(..., title="Equipment density of the object [W/m2]")
@@ -211,7 +211,7 @@ class EquipmentComponent(NamedObject, MetadataMixin):
 
 
 # TODO: Potentially duplicative with HVACTempelateThermostat in epinterface > interface
-class ThermostatComponent(NamedObject, MetadataMixin):
+class ThermostatComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A thermostat object in the SBEM library."""
 
     IsOn: BoolStr = Field(..., title="Thermostat is on")
@@ -250,7 +250,7 @@ class ThermostatComponent(NamedObject, MetadataMixin):
         return idf
 
 
-class WaterUseComponent(NamedObject, MetadataMixin):
+class WaterUseComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A water use object in the SBEM library."""
 
     FlowRatePerPerson: float = Field(
@@ -269,7 +269,7 @@ class WaterUseComponent(NamedObject, MetadataMixin):
         return {self.WaterSchedule} if self.IsOn else set()
 
 
-class ZoneSpaceUseComponent(NamedObject):
+class ZoneSpaceUseComponent(NamedObject, MetadataMixin, extra="forbid"):
     """Space use object."""
 
     # TODO

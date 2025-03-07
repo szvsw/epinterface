@@ -28,7 +28,7 @@ CoolingSystemType = Literal["DX", "EvapCooling"]
 DistributionType = Literal["Hydronic", "Air", "Steam"]
 
 
-class ThermalSystemComponent(NamedObject, MetadataMixin):
+class ThermalSystemComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A thermal system object in the SBEM library."""
 
     ConditioningType: Literal["Heating", "Cooling"]
@@ -92,7 +92,7 @@ class ThermalSystemComponent(NamedObject, MetadataMixin):
         return "Hydronic"
 
 
-class ConditioningSystemsComponent(NamedObject, MetadataMixin):
+class ConditioningSystemsComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A conditioning system object in the SBEM library."""
 
     Heating: ThermalSystemComponent | None
@@ -118,7 +118,7 @@ VentilationType = Literal["Natural", "Mechanical", "Hybrid"]
 VentilationTechType = Literal["ERV", "HRV", "DCV", "None", "Custom"]
 
 
-class VentilationComponent(NamedObject, MetadataMixin):
+class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A ventilation object in the SBEM library."""
 
     # TODO: add unit notes in field descriptions
@@ -167,7 +167,11 @@ class ZoneHVACComponent(
 DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil"]
 
 
-class DHWComponent(NamedObject, MetadataMixin, extra="ignore", populate_by_name=True):
+class DHWComponent(
+    NamedObject,
+    MetadataMixin,
+    extra="forbid",
+):
     """Domestic Hot Water object."""
 
     SystemCOP: float = Field(

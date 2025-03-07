@@ -9,7 +9,7 @@ from epinterface.sbem.common import NamedObject
 ScheduleTypeLimit = Literal["Fraction", "Temperature"]
 
 
-class DayComponent(NamedObject):
+class DayComponent(NamedObject, extra="forbid"):
     """A day of the week with a schedule type limit and a list of values."""
 
     Type: ScheduleTypeLimit
@@ -78,7 +78,7 @@ class DayComponent(NamedObject):
         return self
 
 
-class WeekComponent(NamedObject):
+class WeekComponent(NamedObject, extra="forbid"):
     """A week with a list of days."""
 
     Monday: DayComponent
@@ -90,7 +90,7 @@ class WeekComponent(NamedObject):
     Sunday: DayComponent
 
 
-class RepeatedWeekComponent(BaseModel):
+class RepeatedWeekComponent(BaseModel, extra="forbid"):
     """A week to repeat with a start and end date and a list of days."""
 
     StartDay: int = Field(..., description="", ge=1, le=31)
@@ -135,7 +135,7 @@ class RepeatedWeekComponent(BaseModel):
         return self
 
 
-class YearComponent(NamedObject):
+class YearComponent(NamedObject, extra="forbid"):
     """A year with a schedule type limit and a list of repeated weeks."""
 
     Type: ScheduleTypeLimit

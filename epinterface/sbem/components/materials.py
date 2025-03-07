@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import BaseModel, Field
 
 from epinterface.sbem.common import MetadataMixin, NamedObject
 
@@ -39,17 +39,12 @@ class CommonMaterialPropertiesMixin(BaseModel):
     Conductivity: float = Field(
         ...,
         title="Conductivity [W/mK]",
-        validation_alias="Conductivity [W/m.K]",
         ge=0,
     )
     Density: float = Field(
         ...,
         title="Density [kg/m3]",
         ge=0,
-        validation_alias=AliasChoices(
-            "Density [kg/m³]",
-            "Density [kg/m3]",
-        ),
     )
 
 
@@ -85,7 +80,8 @@ ConstructionMaterialType = Literal[
 
 
 class ConstructionMaterialProperties(
-    CommonMaterialPropertiesMixin, populate_by_name=True
+    CommonMaterialPropertiesMixin,
+    extra="forbid",
 ):
     """Properties of an opaque material."""
 
@@ -94,29 +90,25 @@ class ConstructionMaterialProperties(
     SpecificHeat: float = Field(
         ...,
         title="Specific heat [J/kgK]",
-        validation_alias="SpecificHeat [J/kg.K]",
         ge=0,
     )
     ThermalAbsorptance: float = Field(
         ...,
-        title="Thermal absorptance",
+        title="Thermal absorptance [0-1]",
         ge=0,
         le=1,
-        validation_alias="ThermalAbsorptance [0-1]",
     )
     SolarAbsorptance: float = Field(
         ...,
-        title="Solar absorptance",
+        title="Solar absorptance [0-1]",
         ge=0,
         le=1,
-        validation_alias="SolarAbsorptance [0-1]",
     )
     VisibleAbsorptance: float = Field(
         ...,
-        title="Visible absorptance",
+        title="Visible absorptance [0-1]",
         ge=0,
         le=1,
-        validation_alias="VisibleAbsorptance [0-1]",
     )
 
     TemperatureCoefficientThermalConductivity: float = Field(
@@ -124,12 +116,9 @@ class ConstructionMaterialProperties(
         # a superscript 2 looks like this:
         title="Temperature coefficient of thermal conductivity [W/m.K2²]",
         ge=0,
-        validation_alias="TemperatureCoefficientThermalConductivity [W/m-K2]",
     )
     # TODO: material type should be dynamic user entry or enum
-    Type: ConstructionMaterialType = Field(
-        ..., title="Type of the opaque material", validation_alias="Type [enum]"
-    )
+    Type: ConstructionMaterialType = Field(..., title="Type of the opaque material")
 
 
 class ConstructionMaterialComponent(

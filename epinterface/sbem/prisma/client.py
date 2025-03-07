@@ -26,8 +26,85 @@ from prisma.models import (
     Week,
     Year,
 )
+from prisma.types import (
+    ConstructionAssemblyInclude,
+    ConstructionAssemblyLayerInclude,
+    EnvelopeAssemblyInclude,
+    EnvelopeInclude,
+    EquipmentInclude,
+    LightingInclude,
+    OccupancyInclude,
+    RepeatedWeekInclude,
+    SpaceUseInclude,
+    ThermostatInclude,
+    WaterUseInclude,
+    WeekInclude,
+    YearInclude,
+)
 
-db = Prisma(auto_register=True)
+# datasource = {"url": "file:database.db"}
+datasource = None
+db = Prisma(auto_register=True, datasource=datasource)
+
+
+WEEK_INCLUDE: WeekInclude = {
+    "Monday": True,
+    "Tuesday": True,
+    "Wednesday": True,
+    "Thursday": True,
+    "Friday": True,
+    "Saturday": True,
+    "Sunday": True,
+}
+REPEATED_WEEK_INCLUDE: RepeatedWeekInclude = {
+    "Week": {"include": WEEK_INCLUDE},
+}
+YEAR_INCLUDE: YearInclude = {
+    "Weeks": {"include": REPEATED_WEEK_INCLUDE},
+}
+LIGHTING_INCLUDE: LightingInclude = {
+    "Schedule": {"include": YEAR_INCLUDE},
+}
+EQUIPMENT_INCLUDE: EquipmentInclude = {
+    "Schedule": {"include": YEAR_INCLUDE},
+}
+THERMOSTAT_INCLUDE: ThermostatInclude = {
+    "HeatingSchedule": {"include": YEAR_INCLUDE},
+    "CoolingSchedule": {"include": YEAR_INCLUDE},
+}
+WATER_USE_INCLUDE: WaterUseInclude = {
+    "Schedule": {"include": YEAR_INCLUDE},
+}
+OCCUPANCY_INCLUDE: OccupancyInclude = {
+    "Schedule": {"include": YEAR_INCLUDE},
+}
+SPACE_USE_INCLUDE: SpaceUseInclude = {
+    "Lighting": {"include": LIGHTING_INCLUDE},
+    "Equipment": {"include": EQUIPMENT_INCLUDE},
+    "Thermostat": {"include": THERMOSTAT_INCLUDE},
+    "WaterUse": {"include": WATER_USE_INCLUDE},
+    "Occupancy": {"include": OCCUPANCY_INCLUDE},
+}
+
+LAYER_INCLUDE: ConstructionAssemblyLayerInclude = {
+    "ConstructionMaterial": True,
+}
+CONSTRUCTION_ASSEMBLY_INCLUDE: ConstructionAssemblyInclude = {
+    "Layers": {"include": LAYER_INCLUDE},
+}
+ENVELOPE_ASSEMBLY_INCLUDE: EnvelopeAssemblyInclude = {
+    "RoofAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "FacadeAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "SlabAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "PartitionAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "ExternalFloorAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "GroundSlabAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "GroundWallAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "InternalMassAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+}
+ENVELOPE_INCLUDE: EnvelopeInclude = {
+    "Assemblies": {"include": ENVELOPE_ASSEMBLY_INCLUDE},
+}
 
 
 async def delete_all():

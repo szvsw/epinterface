@@ -4,7 +4,7 @@ from typing import Literal
 
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule
-from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from epinterface.interface import (
     Construction,
@@ -34,7 +34,6 @@ class GlazingConstructionSimpleComponent(
     StandardMaterialMetadataMixin,
     MetadataMixin,
     extra="forbid",
-    populate_by_name=True,
 ):
     """Glazing construction object."""
 
@@ -42,11 +41,6 @@ class GlazingConstructionSimpleComponent(
     UValue: float = Field(
         ...,
         title="U-value [W/m²K]",
-        validation_alias=AliasChoices(
-            "UValue [W/m2-k]",
-            "UValue [W/m2K]",
-            "UValue [W/m2k]",
-        ),
         ge=0,
     )
     TVis: float = Field(..., title="Visible transmittance", ge=0, le=1)
@@ -78,7 +72,9 @@ class GlazingConstructionSimpleComponent(
 
 
 class InfiltrationComponent(
-    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
+    NamedObject,
+    MetadataMixin,
+    extra="forbid",
 ):
     """Zone infiltration object."""
 
@@ -161,7 +157,7 @@ class InfiltrationComponent(
         return idf
 
 
-class ConstructionLayerComponent(BaseModel):
+class ConstructionLayerComponent(BaseModel, extra="forbid"):
     """Layer of an opaque construction."""
 
     Thickness: float = Field(..., title="Thickness of the layer [m]")
@@ -190,7 +186,9 @@ class ConstructionLayerComponent(BaseModel):
 
 
 class ConstructionAssemblyComponent(
-    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
+    NamedObject,
+    MetadataMixin,
+    extra="forbid",
 ):
     """Opaque construction object."""
 
@@ -242,7 +240,9 @@ class ConstructionAssemblyComponent(
 
 
 class EnvelopeAssemblyComponent(
-    NamedObject, MetadataMixin, extra="forbid", populate_by_name=True
+    NamedObject,
+    MetadataMixin,
+    extra="forbid",
 ):
     """Zone construction object."""
 
@@ -273,7 +273,6 @@ class EnvelopeAssemblyComponent(
     InternalMassExposedAreaPerArea: float | None = Field(
         ...,
         title="Internal mass exposed area per area [m²/m²]",
-        validation_alias="InternalMassExposedAreaPerArea [area / floor (m2/m2)]",
         ge=0,
     )
     GroundIsAdiabatic: BoolStr = Field(..., title="Ground is adiabatic")

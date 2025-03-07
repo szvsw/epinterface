@@ -30,15 +30,6 @@ from prisma.types import (
     ConstructionAssemblyInclude,
     ConstructionAssemblyLayerInclude,
     EnvelopeAssemblyInclude,
-    EquipmentInclude,
-    LightingInclude,
-    OccupancyInclude,
-    RepeatedWeekInclude,
-    SpaceUseInclude,
-    ThermostatInclude,
-    WaterUseInclude,
-    WeekInclude,
-    YearInclude,
 )
 
 from epinterface.sbem.components.envelope import (
@@ -63,53 +54,12 @@ from epinterface.sbem.components.systems import (
     VentilationComponent,
     ZoneHVACComponent,
 )
-from epinterface.sbem.prisma.client import delete_all
-
-WEEK_INCLUDE: WeekInclude = {
-    "Monday": True,
-    "Tuesday": True,
-    "Wednesday": True,
-    "Thursday": True,
-    "Friday": True,
-    "Saturday": True,
-    "Sunday": True,
-}
-REPEATED_WEEK_INCLUDE: RepeatedWeekInclude = {
-    "Week": {"include": WEEK_INCLUDE},
-}
-
-YEAR_INCLUDE: YearInclude = {
-    "Weeks": {"include": REPEATED_WEEK_INCLUDE},
-}
-
-LIGHTING_INCLUDE: LightingInclude = {
-    "Schedule": {"include": YEAR_INCLUDE},
-}
-
-EQUIPMENT_INCLUDE: EquipmentInclude = {
-    "Schedule": {"include": YEAR_INCLUDE},
-}
-
-THERMOSTAT_INCLUDE: ThermostatInclude = {
-    "HeatingSchedule": {"include": YEAR_INCLUDE},
-    "CoolingSchedule": {"include": YEAR_INCLUDE},
-}
-
-WATER_USE_INCLUDE: WaterUseInclude = {
-    "Schedule": {"include": YEAR_INCLUDE},
-}
-
-OCCUPANCY_INCLUDE: OccupancyInclude = {
-    "Schedule": {"include": YEAR_INCLUDE},
-}
-
-SPACE_USE_INCLUDE: SpaceUseInclude = {
-    "Lighting": {"include": LIGHTING_INCLUDE},
-    "Equipment": {"include": EQUIPMENT_INCLUDE},
-    "Thermostat": {"include": THERMOSTAT_INCLUDE},
-    "WaterUse": {"include": WATER_USE_INCLUDE},
-    "Occupancy": {"include": OCCUPANCY_INCLUDE},
-}
+from epinterface.sbem.prisma.client import (
+    SPACE_USE_INCLUDE,
+    YEAR_INCLUDE,
+    db,
+    delete_all,
+)
 
 
 async def test_schedules(db: Prisma):  # noqa: D103
@@ -722,10 +672,9 @@ async def test_operations(db: Prisma):  # noqa: D103
 
 
 async def main():  # noqa: D103
-    db = Prisma(auto_register=True)
     await db.connect()
 
-    await delete_all(db)
+    await delete_all()
     await test_schedules(db)
     await test_construction_assembly(db)
     await test_operations(db)
