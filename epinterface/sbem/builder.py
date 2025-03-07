@@ -335,6 +335,7 @@ class Model(BaseWeather, validate_assignment=True):
 
     geometry: ShoeboxGeometry
     attic_insulation_surface: AtticInsulationSurfaceOption
+    # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
     conditioned_attic: bool
     attic_use_fraction: float | None = Field(..., ge=0, le=1)
     operations: ZoneOperationsComponent
