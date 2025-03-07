@@ -723,11 +723,22 @@ class Model(BaseWeather, validate_assignment=True):
         # --------> water use
         # ------------> special handling for attic, basement according to account for use fractions.
         # ------------> needs information from DHW component
-        # --------> Thermostat (see below)
+        # ------------> needs to calculate flow rates correctly.
+        # --------> Thermostat (Ventilation below)
         # ----> HVAC
         # --------> ConditioningSystems can be effectively ignored, as these are just post-processing.
-        # --------> Ventilation -> HVACTemplate:IdealLoadsAirSystem + HVACTemplate:Thermostat
+        # --------> Ventilation
+        # ------------> HVACTemplate:IdealLoadsAirSystem + HVACTemplate:Thermostat, + DesignSpecification:OutdoorAir?
+        # ------------> Needs to deal with link to thermostat.
         # ----> DHW (see water use above)
+        # > envelope
+        # ----> facade, roof, ground, floor/celing, partition, [external floor?], [slab], [internal mass]
+        # --------> special handling for roof/basement insulation
+        # --------> special handling for basement/ground heat transfer
+        # ----> infiltration
+        # --------> special handling for attic (if ventilated?)/basement (if present)
+        # ----> window
+        # --------> special handling for operable windows
 
         # TODO: Handle separately ventilated attic/basement?
         idf = self.add_space_use(
