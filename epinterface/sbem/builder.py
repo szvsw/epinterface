@@ -719,7 +719,6 @@ class Model(BaseWeather, validate_assignment=True):
         # ----> space use
         # --------> lighting, equipment, occupancy to main zones.
         # ------------> special handling for attic, basement according to account for use fractions.
-        # ------------> should schedules be added in per component, or collected and added once?
         # --------> water use
         # ------------> special handling for attic, basement according to account for use fractions.
         # ------------> needs information from DHW component
@@ -897,9 +896,14 @@ if __name__ == "__main__":
     # import tempfile
     from pydantic import AnyUrl
 
-    from epinterface.sbem.prisma.client import ENVELOPE_INCLUDE, OPERATIONS_INCLUDE, db
+    from epinterface.sbem.prisma.client import (
+        ENVELOPE_INCLUDE,
+        OPERATIONS_INCLUDE,
+        prisma_settings,
+    )
 
     async def _fetch_comps():
+        db = prisma_settings.db
         await db.connect()
         operations = await Operations.prisma().find_first(include=OPERATIONS_INCLUDE)
         envelope = await Envelope.prisma().find_first(include=ENVELOPE_INCLUDE)

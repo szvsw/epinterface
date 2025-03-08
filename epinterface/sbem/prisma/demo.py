@@ -57,8 +57,8 @@ from epinterface.sbem.components.systems import (
 from epinterface.sbem.prisma.client import (
     SPACE_USE_INCLUDE,
     YEAR_INCLUDE,
-    db,
     delete_all,
+    prisma_settings,
 )
 
 
@@ -672,6 +672,7 @@ async def test_operations(db: Prisma):  # noqa: D103
 
 
 async def main():  # noqa: D103
+    db = prisma_settings.db
     await db.connect()
 
     await delete_all()

@@ -1,55 +1,80 @@
 """Prisma client for SBEM."""
 
-from prisma import Prisma
-from prisma.models import (
-    DHW,
-    HVAC,
-    ConditioningSystems,
-    ConstructionAssembly,
-    ConstructionAssemblyLayer,
-    ConstructionMaterial,
-    Day,
-    Envelope,
-    EnvelopeAssembly,
-    Equipment,
-    GlazingConstructionSimple,
-    Infiltration,
-    Lighting,
-    Occupancy,
-    Operations,
-    RepeatedWeek,
-    SpaceUse,
-    ThermalSystem,
-    Thermostat,
-    Ventilation,
-    WaterUse,
-    Week,
-    Year,
-)
-from prisma.types import (
-    ConditioningSystemsInclude,
-    ConstructionAssemblyInclude,
-    ConstructionAssemblyLayerInclude,
-    EnvelopeAssemblyInclude,
-    EnvelopeInclude,
-    EquipmentInclude,
-    HVACInclude,
-    LightingInclude,
-    OccupancyInclude,
-    OperationsInclude,
-    RepeatedWeekInclude,
-    SpaceUseInclude,
-    ThermostatInclude,
-    VentilationInclude,
-    WaterUseInclude,
-    WeekInclude,
-    YearInclude,
-)
+from functools import cached_property
 
-# datasource = {"url": "file:database.db"}
-datasource = None
-db = Prisma(auto_register=True, datasource=datasource)
+try:
+    from prisma import Prisma
+    from prisma.models import (
+        DHW,
+        HVAC,
+        ConditioningSystems,
+        ConstructionAssembly,
+        ConstructionAssemblyLayer,
+        ConstructionMaterial,
+        Day,
+        Envelope,
+        EnvelopeAssembly,
+        Equipment,
+        GlazingConstructionSimple,
+        Infiltration,
+        Lighting,
+        Occupancy,
+        Operations,
+        RepeatedWeek,
+        SpaceUse,
+        ThermalSystem,
+        Thermostat,
+        Ventilation,
+        WaterUse,
+        Week,
+        Year,
+    )
+    from prisma.types import (
+        ConditioningSystemsInclude,
+        ConstructionAssemblyInclude,
+        ConstructionAssemblyLayerInclude,
+        DatasourceOverride,
+        EnvelopeAssemblyInclude,
+        EnvelopeInclude,
+        EquipmentInclude,
+        HVACInclude,
+        LightingInclude,
+        OccupancyInclude,
+        OperationsInclude,
+        RepeatedWeekInclude,
+        SpaceUseInclude,
+        ThermostatInclude,
+        VentilationInclude,
+        WaterUseInclude,
+        WeekInclude,
+        YearInclude,
+    )
+except ImportError as e:
+    msg = "Prisma client has not yet been generated. "
+    msg += "Please run `epinterface generate` to generate the client, or if more customization is desired,"
+    msg += "run `prisma generate --schema $(epinterface schemapath)` directly."
+    raise ImportError(msg) from e
+from pydantic import FilePath
+from pydantic_settings import BaseSettings
 
+
+class PrismaSettings(BaseSettings):
+    """Settings for the Prisma client."""
+
+    database_path: FilePath | None = None
+
+    @cached_property
+    def db(self) -> Prisma:
+        """Get the Prisma client."""
+        datasource: DatasourceOverride | None = (
+            {"url": f"file:{self.database_path}"}
+            if self.database_path is not None
+            else None
+        )
+        return Prisma(auto_register=True, datasource=datasource)
+
+
+prisma_settings = PrismaSettings()
 
 WEEK_INCLUDE: WeekInclude = {
     "Monday": True,
