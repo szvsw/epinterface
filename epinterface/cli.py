@@ -27,6 +27,7 @@ def generate():
     # check the install location of epinterface
     epinterface_dir = files("epinterface")
     path_to_schema = epinterface_dir / "sbem" / "prisma" / "schema.prisma"
+    path_to_partials = epinterface_dir / "sbem" / "prisma" / "partial_types.py"
 
     # Try to find the prisma executable
     accepted_commands = ("prisma", "prisma.exe")
@@ -37,7 +38,15 @@ def generate():
 
     try:
         subprocess.run(  # noqa: S603
-            [prisma_cmd, "generate", "--schema", str(path_to_schema)],
+            [
+                prisma_cmd,
+                "py",
+                "generate",
+                "--schema",
+                str(path_to_schema),
+                "--partials",
+                str(path_to_partials),
+            ],
             check=True,
             text=True,
             capture_output=True,
@@ -60,3 +69,14 @@ def schemapath():
     epinterface_dir = files("epinterface")
     path_to_schema = epinterface_dir / "sbem" / "prisma" / "schema.prisma"
     click.echo(str(path_to_schema))
+
+
+@cli.command(
+    help="Return the path to the prisma partials file. "
+    "This is useful for passing the `--partials` flag to `prisma <subcommand>`."
+)
+def partials_path():
+    """Return the path to the prisma partials file."""
+    epinterface_dir = files("epinterface")
+    path_to_partials = epinterface_dir / "sbem" / "prisma" / "partial_types.py"
+    click.echo(str(path_to_partials))

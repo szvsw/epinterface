@@ -1,9 +1,48 @@
 """Prisma client for SBEM."""
 
+from dataclasses import dataclass
 from functools import cached_property
+from typing import Generic, TypeVar
+
+from pydantic import FilePath
+from pydantic_settings import BaseSettings
+
+from epinterface.sbem.common import NamedObject
+from epinterface.sbem.components.operations import ZoneOperationsComponent
+from epinterface.sbem.components.schedules import YearComponent
+from epinterface.sbem.components.space_use import (
+    EquipmentComponent,
+    LightingComponent,
+    OccupancyComponent,
+    ThermostatComponent,
+    WaterUseComponent,
+    ZoneSpaceUseComponent,
+)
+from epinterface.sbem.components.systems import (
+    ConditioningSystemsComponent,
+    DHWComponent,
+    ThermalSystemComponent,
+    VentilationComponent,
+    ZoneHVACComponent,
+)
 
 try:
     from prisma import Prisma
+    from prisma.bases import (
+        BaseConditioningSystems,
+        BaseDHW,
+        BaseEquipment,
+        BaseHVAC,
+        BaseLighting,
+        BaseOccupancy,
+        BaseOperations,
+        BaseSpaceUse,
+        BaseThermalSystem,
+        BaseThermostat,
+        BaseVentilation,
+        BaseWaterUse,
+        BaseYear,
+    )
     from prisma.models import (
         DHW,
         HVAC,
@@ -29,11 +68,24 @@ try:
         Week,
         Year,
     )
+    from prisma.partials import (
+        EquipmentWithSchedule,
+        HVACWithConditioningSystemsAndVentilation,
+        LightingWithSchedule,
+        OccupancyWithSchedule,
+        OperationsWithChildren,
+        SpaceUseWithChildren,
+        ThermostatWithSchedule,
+        VentilationWithSchedule,
+        WaterUseWithSchedule,
+        YearWithWeeks,
+    )
     from prisma.types import (
         ConditioningSystemsInclude,
         ConstructionAssemblyInclude,
         ConstructionAssemblyLayerInclude,
         DatasourceOverride,
+        DHWInclude,
         EnvelopeAssemblyInclude,
         EnvelopeInclude,
         EquipmentInclude,
@@ -43,6 +95,7 @@ try:
         OperationsInclude,
         RepeatedWeekInclude,
         SpaceUseInclude,
+        ThermalSystemInclude,
         ThermostatInclude,
         VentilationInclude,
         WaterUseInclude,
@@ -54,8 +107,6 @@ except (RuntimeError, ImportError) as e:
     msg += "Please run `epinterface generate` to generate the client, or if more customization is desired,"
     msg += "run `prisma generate --schema $(epinterface schemapath)` directly."
     raise ImportError(msg) from e
-from pydantic import FilePath
-from pydantic_settings import BaseSettings
 
 
 class PrismaSettings(BaseSettings):
@@ -114,6 +165,8 @@ SPACE_USE_INCLUDE: SpaceUseInclude = {
     "WaterUse": {"include": WATER_USE_INCLUDE},
     "Occupancy": {"include": OCCUPANCY_INCLUDE},
 }
+THERMAL_SYSTEM_INCLUDE: ThermalSystemInclude = {}
+DHW_INCLUDE: DHWInclude = {}
 CONDITIONING_SYSTEMS_INCLUDE: ConditioningSystemsInclude = {
     "Heating": True,
     "Cooling": True,
@@ -153,6 +206,187 @@ ENVELOPE_INCLUDE: EnvelopeInclude = {
     "Infiltration": True,
     "Window": True,
 }
+
+
+BaseT = TypeVar(
+    "BaseT",
+    bound=BaseYear
+    | BaseOccupancy
+    | BaseLighting
+    | BaseEquipment
+    | BaseWaterUse
+    | BaseThermostat
+    | BaseVentilation
+    | BaseConditioningSystems
+    | BaseSpaceUse
+    | BaseOperations
+    | BaseHVAC
+    | BaseThermalSystem
+    | BaseDHW,
+)
+IncludeT = TypeVar(
+    "IncludeT",
+    YearInclude,
+    OccupancyInclude,
+    LightingInclude,
+    EquipmentInclude,
+    WaterUseInclude,
+    ThermostatInclude,
+    VentilationInclude,
+    ConditioningSystemsInclude,
+    SpaceUseInclude,
+    OperationsInclude,
+    HVACInclude,
+    ThermalSystemInclude,
+    DHWInclude,
+)
+ValidatorT = TypeVar("ValidatorT", bound=NamedObject, contravariant=True)
+YearT = TypeVar("YearT", bound=BaseYear)
+OccupancyT = TypeVar("OccupancyT", bound=BaseOccupancy)
+LightingT = TypeVar("LightingT", bound=BaseLighting)
+EquipmentT = TypeVar("EquipmentT", bound=BaseEquipment)
+WaterUseT = TypeVar("WaterUseT", bound=BaseWaterUse)
+ThermostatT = TypeVar("ThermostatT", bound=BaseThermostat)
+VentilationT = TypeVar("VentilationT", bound=BaseVentilation)
+ConditioningSystemsT = TypeVar("ConditioningSystemsT", bound=BaseConditioningSystems)
+SpaceUseT = TypeVar("SpaceUseT", bound=BaseSpaceUse)
+OperationsT = TypeVar("OperationsT", bound=BaseOperations)
+HVACT = TypeVar("HVACT", bound=BaseHVAC)
+ThermalSystemT = TypeVar("ThermalSystemT", bound=BaseThermalSystem)
+DHWT = TypeVar("DHWT", bound=BaseDHW)
+
+
+@dataclass
+class Link(Generic[BaseT, IncludeT, ValidatorT]):
+    """Link to a deep object."""
+
+    prisma_model: type[BaseT]
+    include: IncludeT
+    validator: type[ValidatorT]
+
+    async def get_deep_object(self, name: str) -> tuple[BaseT, ValidatorT]:
+        """Get a deep object by name."""
+        # It would be great if we could disable the type checker for this line,
+        # but right now the BaseT / IncludeT are not constrained to only allow certain combinations.
+
+        record = await self.prisma_model.prisma().find_first_or_raise(
+            where={"Name": name},
+            include=self.include,  # pyright: ignore [reportArgumentType]
+        )
+        return record, self.validator.model_validate(record)
+
+
+@dataclass
+class DeepObjectLinkers(
+    Generic[
+        YearT,
+        OccupancyT,
+        LightingT,
+        EquipmentT,
+        WaterUseT,
+        ThermostatT,
+        VentilationT,
+        ConditioningSystemsT,
+        SpaceUseT,
+        OperationsT,
+        HVACT,
+        DHWT,
+        ThermalSystemT,
+    ]
+):
+    """Deep object linkers."""
+
+    Year: Link[YearT, YearInclude, YearComponent]
+    Occupancy: Link[OccupancyT, OccupancyInclude, OccupancyComponent]
+    Lighting: Link[LightingT, LightingInclude, LightingComponent]
+    Equipment: Link[EquipmentT, EquipmentInclude, EquipmentComponent]
+    WaterUse: Link[WaterUseT, WaterUseInclude, WaterUseComponent]
+    Thermostat: Link[ThermostatT, ThermostatInclude, ThermostatComponent]
+    Ventilation: Link[VentilationT, VentilationInclude, VentilationComponent]
+    ConditioningSystems: Link[
+        ConditioningSystemsT, ConditioningSystemsInclude, ConditioningSystemsComponent
+    ]
+    SpaceUse: Link[SpaceUseT, SpaceUseInclude, ZoneSpaceUseComponent]
+    Operations: Link[OperationsT, OperationsInclude, ZoneOperationsComponent]
+    HVAC: Link[HVACT, HVACInclude, ZoneHVACComponent]
+    DHW: Link[DHWT, DHWInclude, DHWComponent]
+    ThermalSystem: Link[ThermalSystemT, ThermalSystemInclude, ThermalSystemComponent]
+
+
+deep_fetcher = DeepObjectLinkers(
+    Year=Link(
+        prisma_model=YearWithWeeks,
+        include=YEAR_INCLUDE,
+        validator=YearComponent,
+    ),
+    Occupancy=Link(
+        prisma_model=OccupancyWithSchedule,
+        include=OCCUPANCY_INCLUDE,
+        validator=OccupancyComponent,
+    ),
+    Lighting=Link(
+        prisma_model=LightingWithSchedule,
+        include=LIGHTING_INCLUDE,
+        validator=LightingComponent,
+    ),
+    Equipment=Link(
+        prisma_model=EquipmentWithSchedule,
+        include=EQUIPMENT_INCLUDE,
+        validator=EquipmentComponent,
+    ),
+    WaterUse=Link(
+        prisma_model=WaterUseWithSchedule,
+        include=WATER_USE_INCLUDE,
+        validator=WaterUseComponent,
+    ),
+    Thermostat=Link(
+        prisma_model=ThermostatWithSchedule,
+        include=THERMOSTAT_INCLUDE,
+        validator=ThermostatComponent,
+    ),
+    Ventilation=Link(
+        prisma_model=VentilationWithSchedule,
+        include=VENTILATION_INCLUDE,
+        validator=VentilationComponent,
+    ),
+    ConditioningSystems=Link(
+        prisma_model=ConditioningSystems,
+        include=CONDITIONING_SYSTEMS_INCLUDE,
+        validator=ConditioningSystemsComponent,
+    ),
+    SpaceUse=Link(
+        prisma_model=SpaceUseWithChildren,
+        include=SPACE_USE_INCLUDE,
+        validator=ZoneSpaceUseComponent,
+    ),
+    Operations=Link(
+        prisma_model=OperationsWithChildren,
+        include=OPERATIONS_INCLUDE,
+        validator=ZoneOperationsComponent,
+    ),
+    HVAC=Link(
+        prisma_model=HVACWithConditioningSystemsAndVentilation,
+        include=HVAC_INCLUDE,
+        validator=ZoneHVACComponent,
+    ),
+    DHW=Link(
+        prisma_model=DHW,
+        include=DHW_INCLUDE,
+        validator=DHWComponent,
+    ),
+    ThermalSystem=Link(
+        prisma_model=ThermalSystem,
+        include=THERMAL_SYSTEM_INCLUDE,
+        validator=ThermalSystemComponent,
+    ),
+)
+
+
+@dataclass
+class PrismaClient:
+    """Prisma client for SBEM."""
+
+    db: Prisma
 
 
 async def delete_all():
