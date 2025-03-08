@@ -144,12 +144,13 @@ class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
         logger.warning(
             f"Ignoring IlluminanceTarget for zone(s) {target_zone_or_zone_list_name}."
         )
-        raise NotImplementedError
-        # TODO: add schedule to idf
+        idf, year_name = self.Schedule.add_year_to_idf(
+            idf, name_prefix=f"LIGHTS_{self.Name}"
+        )
         lights = Lights(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_Lights",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Schedule_Name=self.Schedule.Name,
+            Schedule_Name=year_name,
             Design_Level_Calculation_Method="Watts/Area",
             Watts_per_Zone_Floor_Area=self.PowerDensity,
             Watts_per_Person=None,
@@ -192,12 +193,13 @@ class EquipmentComponent(NamedObject, MetadataMixin, extra="forbid"):
             f"Adding equipment to zone with schedule {self.Schedule}.  Make sure this schedule exists."
         )
 
-        raise NotImplementedError
-        # TODO: add schedule to idf
+        idf, year_name = self.Schedule.add_year_to_idf(
+            idf, name_prefix=f"EQUIPMENT_{self.Name}"
+        )
         equipment = ElectricEquipment(
             Name=f"{target_zone_or_zone_list_name}_{self.Name.join('_')}_Equipment",
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
-            Schedule_Name=self.Schedule.Name,
+            Schedule_Name=year_name,
             Design_Level_Calculation_Method="Watts/Area",
             Watts_per_Zone_Floor_Area=self.PowerDensity,
             Watts_per_Person=None,

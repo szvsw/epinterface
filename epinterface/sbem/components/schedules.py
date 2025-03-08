@@ -1,6 +1,6 @@
 """This module contains the definitions for the schedules."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from archetypal.idfclass.idf import IDF
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -80,8 +80,19 @@ class DayComponent(NamedObject, extra="forbid"):
 
         return self
 
-    def add_day_to_idf(self, idf: IDF):
-        """Add the day to the IDF."""
+    def add_day_to_idf(self, idf: IDF, name_prefix: str | None) -> tuple[IDF, str]:
+        """Add the day to the IDF.
+
+        The name prefix can be used to scope the schedule creation to ensure a unique schedule per object.
+
+        Args:
+            idf (IDF): The IDF object to add the day to.
+            name_prefix (str | None): The prefix to use for the schedule name.
+
+        Returns:
+            idf (IDF): The IDF object with the day added.
+            day_name (str): The name of the day schedule.
+        """
         day_sched = ScheduleDayHourly(
             Name=self.Name,
             Schedule_Type_Limits_Name=self.Type,
@@ -110,8 +121,10 @@ class DayComponent(NamedObject, extra="forbid"):
             Hour_23=self.Hour_22,
             Hour_24=self.Hour_23,
         )
+        if name_prefix is not None:
+            day_sched.Name = f"{name_prefix}_DAY_{day_sched.Name}"
         idf = day_sched.add(idf)
-        return idf
+        return idf, day_sched.Name
 
 
 class WeekComponent(NamedObject, extra="forbid"):
@@ -148,22 +161,40 @@ class WeekComponent(NamedObject, extra="forbid"):
             self.Sunday,
         ]
 
-    def add_week_to_idf(self, idf: IDF):
-        """Add the week to the IDF."""
-        for day in self.Days:
-            idf = day.add_day_to_idf(idf)
+    def add_week_to_idf(self, idf: IDF, name_prefix: str | None) -> tuple[IDF, str]:
+        """Add the week to the IDF.
+
+        The name prefix can be used to scope the schedule creation to ensure a unique schedule per object.
+
+        Args:
+            idf (IDF): The IDF object to add the week to.
+            name_prefix (str | None): The prefix to use for the schedule name.
+
+        Returns:
+            idf (IDF): The IDF object with the week added.
+            week_name (str): The name of the week schedule.
+        """
+        idf, monday_name = self.Monday.add_day_to_idf(idf, name_prefix)
+        idf, tuesday_name = self.Tuesday.add_day_to_idf(idf, name_prefix)
+        idf, wednesday_name = self.Wednesday.add_day_to_idf(idf, name_prefix)
+        idf, thursday_name = self.Thursday.add_day_to_idf(idf, name_prefix)
+        idf, friday_name = self.Friday.add_day_to_idf(idf, name_prefix)
+        idf, saturday_name = self.Saturday.add_day_to_idf(idf, name_prefix)
+        idf, sunday_name = self.Sunday.add_day_to_idf(idf, name_prefix)
         week_sched = ScheduleWeekDaily(
             Name=self.Name,
-            Monday_ScheduleDay_Name=self.Monday.Name,
-            Tuesday_ScheduleDay_Name=self.Tuesday.Name,
-            Wednesday_ScheduleDay_Name=self.Wednesday.Name,
-            Thursday_ScheduleDay_Name=self.Thursday.Name,
-            Friday_ScheduleDay_Name=self.Friday.Name,
-            Saturday_ScheduleDay_Name=self.Saturday.Name,
-            Sunday_ScheduleDay_Name=self.Sunday.Name,
+            Monday_ScheduleDay_Name=monday_name,
+            Tuesday_ScheduleDay_Name=tuesday_name,
+            Wednesday_ScheduleDay_Name=wednesday_name,
+            Thursday_ScheduleDay_Name=thursday_name,
+            Friday_ScheduleDay_Name=friday_name,
+            Saturday_ScheduleDay_Name=saturday_name,
+            Sunday_ScheduleDay_Name=sunday_name,
         )
+        if name_prefix is not None:
+            week_sched.Name = f"{name_prefix}_WEEK_{week_sched.Name}"
         idf = week_sched.add(idf)
-        return idf
+        return idf, week_sched.Name
 
     @property
     def Type(self) -> ScheduleTypeLimit:
@@ -241,30 +272,35 @@ class YearComponent(NamedObject, extra="forbid"):
 
         return self
 
-    def add_year_to_idf(self, idf: IDF):
-        """Add the year to the IDF."""
-        for week in self.Weeks:
-            idf = week.Week.add_week_to_idf(idf)
+    def add_year_to_idf(self, idf: IDF, name_prefix: str | None = None):
+        """Add the year to the IDF.
+
+        The name prefix can be used to scope the schedule creation to ensure a unique schedule per object.
+
+        Args:
+            idf (IDF): The IDF object to add the year to.
+            name_prefix (str | None): The prefix to use for the schedule name.
+
+        Returns:
+            idf (IDF): The IDF object with the year added.
+            year_name (str): The name of the year schedule.
+        """
         # because of the weird way eppy requires schedule:year input, we create a pass through dict
         # before validating.
-        schedule_year_obj = {
+        schedule_year_obj: dict[str, Any] = {
             "Name": self.Name,
             "Schedule_Type_Limits_Name": self.Type,
-            "ScheduleWeek_Name_1": self.Weeks[0].Week.Name,
-            "Start_Month_1": self.Weeks[0].StartMonth,
-            "Start_Day_1": self.Weeks[0].StartDay,
-            "End_Month_1": self.Weeks[0].EndMonth,
-            "End_Day_1": self.Weeks[0].EndDay,
         }
-        for i in range(1, len(self.Weeks)):
-            schedule_year_obj[f"ScheduleWeek_Name_{i + 1}"] = self.Weeks[i].Week.Name
-            schedule_year_obj[f"Start_Month_{i + 1}"] = self.Weeks[i].StartMonth
-            schedule_year_obj[f"Start_Day_{i + 1}"] = self.Weeks[i].StartDay
-            schedule_year_obj[f"End_Month_{i + 1}"] = self.Weeks[i].EndMonth
-            schedule_year_obj[f"End_Day_{i + 1}"] = self.Weeks[i].EndDay
+        for i, week in enumerate(self.Weeks):
+            idf, week_name = week.Week.add_week_to_idf(idf, name_prefix)
+            schedule_year_obj[f"ScheduleWeek_Name_{i + 1}"] = week_name
+            schedule_year_obj[f"Start_Month_{i + 1}"] = week.StartMonth
+            schedule_year_obj[f"Start_Day_{i + 1}"] = week.StartDay
+            schedule_year_obj[f"End_Month_{i + 1}"] = week.EndMonth
+            schedule_year_obj[f"End_Day_{i + 1}"] = week.EndDay
+
         year_sched = ScheduleYear(**schedule_year_obj)
+        if name_prefix is not None:
+            year_sched.Name = f"{name_prefix}_YEAR_{year_sched.Name}"
         idf = year_sched.add(idf)
-        week_names = {week.Week.Name for week in self.Weeks}
-        day_names = {day.Name for week in self.Weeks for day in week.Week.Days}
-        year_name = self.Name
-        return idf, year_name, week_names, day_names
+        return idf, year_sched.Name
