@@ -2,10 +2,13 @@
 
 from typing import Literal
 
+from archetypal.idfclass.idf import IDF
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from epinterface.interface import ScheduleDayHourly, ScheduleWeekDaily, ScheduleYear
 from epinterface.sbem.common import NamedObject
 
+# TODO: handle schedule type limits in a consistent way once?
 ScheduleTypeLimit = Literal["Fraction", "Temperature"]
 
 
@@ -77,6 +80,39 @@ class DayComponent(NamedObject, extra="forbid"):
 
         return self
 
+    def add_day_to_idf(self, idf: IDF):
+        """Add the day to the IDF."""
+        day_sched = ScheduleDayHourly(
+            Name=self.Name,
+            Schedule_Type_Limits_Name=self.Type,
+            Hour_1=self.Hour_00,
+            Hour_2=self.Hour_01,
+            Hour_3=self.Hour_02,
+            Hour_4=self.Hour_03,
+            Hour_5=self.Hour_04,
+            Hour_6=self.Hour_05,
+            Hour_7=self.Hour_06,
+            Hour_8=self.Hour_07,
+            Hour_9=self.Hour_08,
+            Hour_10=self.Hour_09,
+            Hour_11=self.Hour_10,
+            Hour_12=self.Hour_11,
+            Hour_13=self.Hour_12,
+            Hour_14=self.Hour_13,
+            Hour_15=self.Hour_14,
+            Hour_16=self.Hour_15,
+            Hour_17=self.Hour_16,
+            Hour_18=self.Hour_17,
+            Hour_19=self.Hour_18,
+            Hour_20=self.Hour_19,
+            Hour_21=self.Hour_20,
+            Hour_22=self.Hour_21,
+            Hour_23=self.Hour_22,
+            Hour_24=self.Hour_23,
+        )
+        idf = day_sched.add(idf)
+        return idf
+
 
 class WeekComponent(NamedObject, extra="forbid"):
     """A week with a list of days."""
@@ -88,6 +124,51 @@ class WeekComponent(NamedObject, extra="forbid"):
     Friday: DayComponent
     Saturday: DayComponent
     Sunday: DayComponent
+
+    @model_validator(mode="after")
+    def validate_type_limits_are_consistent(self):
+        """Validate that the type limits are consistent."""
+        lim = self.Monday.Type
+        for day in self.Days:
+            if day.Type != lim:
+                msg = "Type limits are not consistent"
+                raise ValueError(msg)
+        return self
+
+    @property
+    def Days(self) -> list[DayComponent]:
+        """Get the days of the week as a list."""
+        return [
+            self.Monday,
+            self.Tuesday,
+            self.Wednesday,
+            self.Thursday,
+            self.Friday,
+            self.Saturday,
+            self.Sunday,
+        ]
+
+    def add_week_to_idf(self, idf: IDF):
+        """Add the week to the IDF."""
+        for day in self.Days:
+            idf = day.add_day_to_idf(idf)
+        week_sched = ScheduleWeekDaily(
+            Name=self.Name,
+            Monday_ScheduleDay_Name=self.Monday.Name,
+            Tuesday_ScheduleDay_Name=self.Tuesday.Name,
+            Wednesday_ScheduleDay_Name=self.Wednesday.Name,
+            Thursday_ScheduleDay_Name=self.Thursday.Name,
+            Friday_ScheduleDay_Name=self.Friday.Name,
+            Saturday_ScheduleDay_Name=self.Saturday.Name,
+            Sunday_ScheduleDay_Name=self.Sunday.Name,
+        )
+        idf = week_sched.add(idf)
+        return idf
+
+    @property
+    def Type(self) -> ScheduleTypeLimit:
+        """Get the type limit of the week."""
+        return self.Monday.Type
 
 
 class RepeatedWeekComponent(BaseModel, extra="forbid"):
@@ -150,7 +231,40 @@ class YearComponent(NamedObject, extra="forbid"):
         return weeks
 
     @model_validator(mode="after")
-    def check_leaf_days_have_consistent_type(self):
-        """Check that the leaf days have a consistent type."""
-        # TODO: Implement
+    def check_weeks_have_consistent_type(self):
+        """Check that the weeks have a consistent type."""
+        lim = self.Weeks[0].Week.Type
+        for week in self.Weeks:
+            if week.Week.Type != lim:
+                msg = "Type limits are not consistent"
+                raise ValueError(msg)
+
         return self
+
+    def add_year_to_idf(self, idf: IDF):
+        """Add the year to the IDF."""
+        for week in self.Weeks:
+            idf = week.Week.add_week_to_idf(idf)
+        # because of the weird way eppy requires schedule:year input, we create a pass through dict
+        # before validating.
+        schedule_year_obj = {
+            "Name": self.Name,
+            "Schedule_Type_Limits_Name": self.Type,
+            "ScheduleWeek_Name_1": self.Weeks[0].Week.Name,
+            "Start_Month_1": self.Weeks[0].StartMonth,
+            "Start_Day_1": self.Weeks[0].StartDay,
+            "End_Month_1": self.Weeks[0].EndMonth,
+            "End_Day_1": self.Weeks[0].EndDay,
+        }
+        for i in range(1, len(self.Weeks)):
+            schedule_year_obj[f"ScheduleWeek_Name_{i + 1}"] = self.Weeks[i].Week.Name
+            schedule_year_obj[f"Start_Month_{i + 1}"] = self.Weeks[i].StartMonth
+            schedule_year_obj[f"Start_Day_{i + 1}"] = self.Weeks[i].StartDay
+            schedule_year_obj[f"End_Month_{i + 1}"] = self.Weeks[i].EndMonth
+            schedule_year_obj[f"End_Day_{i + 1}"] = self.Weeks[i].EndDay
+        year_sched = ScheduleYear(**schedule_year_obj)
+        idf = year_sched.add(idf)
+        week_names = {week.Week.Name for week in self.Weeks}
+        day_names = {day.Name for week in self.Weeks for day in week.Week.Days}
+        year_name = self.Name
+        return idf, year_name, week_names, day_names
