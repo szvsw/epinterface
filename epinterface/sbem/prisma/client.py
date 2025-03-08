@@ -273,7 +273,7 @@ class Link(Generic[BaseT, IncludeT, ValidatorT]):
             where={"Name": name},
             include=self.include,  # pyright: ignore [reportArgumentType]
         )
-        return record, self.validator.model_validate(record)
+        return record, self.validator.model_validate(record, from_attributes=True)
 
 
 @dataclass
