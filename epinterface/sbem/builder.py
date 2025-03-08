@@ -338,12 +338,13 @@ class Model(BaseWeather, validate_assignment=True):
     # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
     conditioned_attic: bool
     attic_use_fraction: float | None = Field(..., ge=0, le=1)
-    operations: ZoneOperationsComponent
-    envelope: ZoneEnvelopeComponent
     basement_use_fraction: float | None = Field(..., ge=0, le=1)
     conditioned_basement: bool
     basement_insulation_surface: BasementInsulationSurfaceOption
     lib: ComponentLibrary
+
+    Envelope: ZoneEnvelopeComponent
+    Operations: ZoneOperationsComponent
 
     @property
     def total_conditioned_area(self) -> float:
@@ -368,8 +369,8 @@ class Model(BaseWeather, validate_assignment=True):
 
         """
         ppl_per_m2 = (
-            self.operations.SpaceUse.Occupancy.PeopleDensity
-            if self.operations.SpaceUse.Occupancy.IsOn
+            self.Operations.SpaceUse.Occupancy.PeopleDensity
+            if self.Operations.SpaceUse.Occupancy.IsOn
             else 0
         )
         total_area = self.total_conditioned_area
@@ -743,7 +744,7 @@ class Model(BaseWeather, validate_assignment=True):
         idf = self.add_space_use(
             idf, self.space_use, added_zone_lists.conditioned_zone_list
         )
-        idf = self.add_envelope(idf, self.envelope, added_zone_lists.all_zones_list)
+        idf = self.add_envelope(idf, self.Envelope, added_zone_lists.all_zones_list)
 
         return idf
 
@@ -819,9 +820,9 @@ class Model(BaseWeather, validate_assignment=True):
         res_series.name = "kWh/m2"
 
         if move_energy:
-            if self.operations.HVAC.ConditioningSystems.Heating is not None:
-                heat_cop = self.operations.HVAC.ConditioningSystems.Heating.effective_system_cop
-                heat_fuel = self.operations.HVAC.ConditioningSystems.Heating.Fuel
+            if self.Operations.HVAC.ConditioningSystems.Heating is not None:
+                heat_cop = self.Operations.HVAC.ConditioningSystems.Heating.effective_system_cop
+                heat_fuel = self.Operations.HVAC.ConditioningSystems.Heating.Fuel
                 heat_energy = res_series["District Heating"] / heat_cop
                 if heat_fuel not in res_series.index:
                     res_series[heat_fuel] = 0
@@ -829,9 +830,9 @@ class Model(BaseWeather, validate_assignment=True):
 
             raise NotImplementedError
             cool_cop = (
-                self.operations.HVAC.ConditioningSystems.Cooling.effective_system_cop
+                self.Operations.HVAC.ConditioningSystems.Cooling.effective_system_cop
             )
-            dhw_cop = self.operations.DHW.SystemCOP
+            dhw_cop = self.Operations.DHW.SystemCOP
             cool_fuel = self.space_use.Conditioning.CoolingFuelType
             dhw_fuel = self.space_use.HotWater.HotWaterFuelType
             cool_energy = res_series["District Cooling"] / cool_cop
@@ -917,10 +918,10 @@ if __name__ == "__main__":
         Weather=AnyUrl(
             "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
         ),
-        operations=ZoneOperationsComponent.model_validate(
+        Operations=ZoneOperationsComponent.model_validate(
             operations, from_attributes=True
         ),
-        envelope=ZoneEnvelopeComponent.model_validate(envelope, from_attributes=True),
+        Envelope=ZoneEnvelopeComponent.model_validate(envelope, from_attributes=True),
         lib=ComponentLibrary(
             Operations={},
             SpaceUse={},
