@@ -49,7 +49,7 @@ try:
         WeekInclude,
         YearInclude,
     )
-except ImportError as e:
+except (RuntimeError, ImportError) as e:
     msg = "Prisma client has not yet been generated. "
     msg += "Please run `epinterface generate` to generate the client, or if more customization is desired,"
     msg += "run `prisma generate --schema $(epinterface schemapath)` directly."
