@@ -8,6 +8,13 @@ from pydantic import FilePath
 from pydantic_settings import BaseSettings
 
 from epinterface.sbem.common import NamedObject
+from epinterface.sbem.components.envelope import (
+    ConstructionAssemblyComponent,
+    EnvelopeAssemblyComponent,
+    GlazingConstructionSimpleComponent,
+    InfiltrationComponent,
+    ZoneEnvelopeComponent,
+)
 from epinterface.sbem.components.operations import ZoneOperationsComponent
 from epinterface.sbem.components.schedules import YearComponent
 from epinterface.sbem.components.space_use import (
@@ -30,9 +37,14 @@ try:
     from prisma import Prisma
     from prisma.bases import (
         BaseConditioningSystems,
+        BaseConstructionAssembly,
         BaseDHW,
+        BaseEnvelope,
+        BaseEnvelopeAssembly,
         BaseEquipment,
+        BaseGlazingConstructionSimple,
         BaseHVAC,
+        BaseInfiltration,
         BaseLighting,
         BaseOccupancy,
         BaseOperations,
@@ -69,6 +81,9 @@ try:
         Year,
     )
     from prisma.partials import (
+        ConstructionAssemblyWithLayers,
+        EnvelopeAssemblyWithChildren,
+        EnvelopeWithChildren,
         EquipmentWithSchedule,
         HVACWithConditioningSystemsAndVentilation,
         LightingWithSchedule,
@@ -89,7 +104,9 @@ try:
         EnvelopeAssemblyInclude,
         EnvelopeInclude,
         EquipmentInclude,
+        GlazingConstructionSimpleInclude,
         HVACInclude,
+        InfiltrationInclude,
         LightingInclude,
         OccupancyInclude,
         OperationsInclude,
@@ -201,12 +218,14 @@ ENVELOPE_ASSEMBLY_INCLUDE: EnvelopeAssemblyInclude = {
     "GroundWallAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
     "InternalMassAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
 }
+
 ENVELOPE_INCLUDE: EnvelopeInclude = {
     "Assemblies": {"include": ENVELOPE_ASSEMBLY_INCLUDE},
     "Infiltration": True,
     "Window": True,
 }
-
+INFILTRATION_INCLUDE: InfiltrationInclude = {}
+GLAZING_CONSTRUCTION_SIMPLE_INCLUDE: GlazingConstructionSimpleInclude = {}
 
 BaseT = TypeVar(
     "BaseT",
@@ -222,7 +241,12 @@ BaseT = TypeVar(
     | BaseOperations
     | BaseHVAC
     | BaseThermalSystem
-    | BaseDHW,
+    | BaseDHW
+    | BaseConstructionAssembly
+    | BaseEnvelopeAssembly
+    | BaseEnvelope
+    | BaseInfiltration
+    | BaseGlazingConstructionSimple,
 )
 IncludeT = TypeVar(
     "IncludeT",
@@ -239,6 +263,11 @@ IncludeT = TypeVar(
     HVACInclude,
     ThermalSystemInclude,
     DHWInclude,
+    ConstructionAssemblyInclude,
+    EnvelopeAssemblyInclude,
+    EnvelopeInclude,
+    InfiltrationInclude,
+    GlazingConstructionSimpleInclude,
 )
 ValidatorT = TypeVar("ValidatorT", bound=NamedObject, contravariant=True)
 YearT = TypeVar("YearT", bound=BaseYear)
@@ -254,6 +283,13 @@ OperationsT = TypeVar("OperationsT", bound=BaseOperations)
 HVACT = TypeVar("HVACT", bound=BaseHVAC)
 ThermalSystemT = TypeVar("ThermalSystemT", bound=BaseThermalSystem)
 DHWT = TypeVar("DHWT", bound=BaseDHW)
+ConstructionAssemblyT = TypeVar("ConstructionAssemblyT", bound=BaseConstructionAssembly)
+EnvelopeAssemblyT = TypeVar("EnvelopeAssemblyT", bound=BaseEnvelopeAssembly)
+EnvelopeT = TypeVar("EnvelopeT", bound=BaseEnvelope)
+InfiltrationT = TypeVar("InfiltrationT", bound=BaseInfiltration)
+GlazingConstructionSimpleT = TypeVar(
+    "GlazingConstructionSimpleT", bound=BaseGlazingConstructionSimple
+)
 
 
 @dataclass
@@ -292,6 +328,11 @@ class DeepObjectLinkers(
         HVACT,
         DHWT,
         ThermalSystemT,
+        ConstructionAssemblyT,
+        EnvelopeAssemblyT,
+        EnvelopeT,
+        InfiltrationT,
+        GlazingConstructionSimpleT,
     ]
 ):
     """Deep object linkers."""
@@ -311,6 +352,21 @@ class DeepObjectLinkers(
     HVAC: Link[HVACT, HVACInclude, ZoneHVACComponent]
     DHW: Link[DHWT, DHWInclude, DHWComponent]
     ThermalSystem: Link[ThermalSystemT, ThermalSystemInclude, ThermalSystemComponent]
+    ConstructionAssembly: Link[
+        ConstructionAssemblyT,
+        ConstructionAssemblyInclude,
+        ConstructionAssemblyComponent,
+    ]
+    EnvelopeAssembly: Link[
+        EnvelopeAssemblyT, EnvelopeAssemblyInclude, EnvelopeAssemblyComponent
+    ]
+    Envelope: Link[EnvelopeT, EnvelopeInclude, ZoneEnvelopeComponent]
+    Infiltration: Link[InfiltrationT, InfiltrationInclude, InfiltrationComponent]
+    GlazingConstructionSimple: Link[
+        GlazingConstructionSimpleT,
+        GlazingConstructionSimpleInclude,
+        GlazingConstructionSimpleComponent,
+    ]
 
 
 deep_fetcher = DeepObjectLinkers(
@@ -378,6 +434,31 @@ deep_fetcher = DeepObjectLinkers(
         prisma_model=ThermalSystem,
         include=THERMAL_SYSTEM_INCLUDE,
         validator=ThermalSystemComponent,
+    ),
+    ConstructionAssembly=Link(
+        prisma_model=ConstructionAssemblyWithLayers,
+        include=CONSTRUCTION_ASSEMBLY_INCLUDE,
+        validator=ConstructionAssemblyComponent,
+    ),
+    EnvelopeAssembly=Link(
+        prisma_model=EnvelopeAssemblyWithChildren,
+        include=ENVELOPE_ASSEMBLY_INCLUDE,
+        validator=EnvelopeAssemblyComponent,
+    ),
+    Envelope=Link(
+        prisma_model=EnvelopeWithChildren,
+        include=ENVELOPE_INCLUDE,
+        validator=ZoneEnvelopeComponent,
+    ),
+    Infiltration=Link(
+        prisma_model=Infiltration,
+        include=INFILTRATION_INCLUDE,
+        validator=InfiltrationComponent,
+    ),
+    GlazingConstructionSimple=Link(
+        prisma_model=GlazingConstructionSimple,
+        include=GLAZING_CONSTRUCTION_SIMPLE_INCLUDE,
+        validator=GlazingConstructionSimpleComponent,
     ),
 )
 

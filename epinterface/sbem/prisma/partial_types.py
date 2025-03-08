@@ -2,6 +2,10 @@
 
 from prisma.models import (
     HVAC,
+    ConstructionAssembly,
+    ConstructionAssemblyLayer,
+    Envelope,
+    EnvelopeAssembly,
     Equipment,
     Lighting,
     Occupancy,
@@ -75,6 +79,7 @@ Ventilation.create_partial(
     relations={"Schedule": "YearWithWeeks"},
 )
 
+
 HVAC.create_partial(
     name="HVACWithConditioningSystemsAndVentilation",
     required={"ConditioningSystems", "Ventilation"},
@@ -104,4 +109,45 @@ Operations.create_partial(
         "SpaceUse": "SpaceUseWithChildren",
         "HVAC": "HVACWithConditioningSystemsAndVentilation",
     },
+)
+
+
+ConstructionAssemblyLayer.create_partial(
+    name="ConstructionAssemblyLayerWithConstructionMaterial",
+    required={"ConstructionMaterial"},
+)
+
+ConstructionAssembly.create_partial(
+    name="ConstructionAssemblyWithLayers",
+    required={"Layers"},
+    relations={"Layers": "ConstructionAssemblyLayerWithConstructionMaterial"},
+)
+
+EnvelopeAssembly.create_partial(
+    name="EnvelopeAssemblyWithChildren",
+    required={
+        "RoofAssembly",
+        "FacadeAssembly",
+        "SlabAssembly",
+        "PartitionAssembly",
+        "ExternalFloorAssembly",
+        "GroundSlabAssembly",
+        "GroundWallAssembly",
+    },
+    relations={
+        "RoofAssembly": "ConstructionAssemblyWithLayers",
+        "FacadeAssembly": "ConstructionAssemblyWithLayers",
+        "SlabAssembly": "ConstructionAssemblyWithLayers",
+        "PartitionAssembly": "ConstructionAssemblyWithLayers",
+        "ExternalFloorAssembly": "ConstructionAssemblyWithLayers",
+        "GroundSlabAssembly": "ConstructionAssemblyWithLayers",
+        "GroundWallAssembly": "ConstructionAssemblyWithLayers",
+        "InternalMassAssembly": "ConstructionAssemblyWithLayers",
+    },
+)
+
+Envelope.create_partial(
+    name="EnvelopeWithChildren",
+    required={"Assemblies", "Infiltration", "Window"},
+    relations={"Assemblies": "EnvelopeAssemblyWithChildren"},
 )
