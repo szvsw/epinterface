@@ -6,6 +6,7 @@ from typing import Literal
 
 import pytest
 from prisma import Prisma
+from prisma.errors import RecordNotFoundError
 from prisma.models import Day
 from prisma.types import DayCreateInput, WeekCreateInput
 
@@ -117,11 +118,13 @@ def create_schedules(db: Prisma):
     create_schedule(db, "Ventilation")
 
 
+typologies = ["office", "residential"]
+ages = ["new", "old"]
+locations = ["cold", "warm"]
+
+
 def create_space_use_children(db: Prisma):
     """Create space use children objects for the given database for the typical uses."""
-    typologies = ["office", "residential"]
-    ages = ["new", "old"]
-    locations = ["cold", "warm"]
     for typology in typologies:
         epd = 10 if typology == "office" else 20
         for age in ages:
@@ -176,6 +179,58 @@ def create_space_use_children(db: Prisma):
         )
 
 
+def create_hvac_systems(db: Prisma):
+    """Create HVAC systems for the given database for the typical uses."""
+    for typology in typologies:
+        for location in locations:
+            db.thermalsystem.create(
+                data={
+                    "Name": f"Heating_{location}_{typology}",
+                    "ConditioningType": "Heating",
+                    "Fuel": "Electricity" if typology == "office" else "Gas",
+                    "SystemCOP": 3.5
+                    if location == "cold" and typology == "office"
+                    else 0.95,
+                    "DistributionCOP": 0.9 if typology == "office" else 0.8,
+                }
+            )
+            db.thermalsystem.create(
+                data={
+                    "Name": f"Cooling_{location}_{typology}",
+                    "ConditioningType": "Cooling",
+                    "Fuel": "Electricity",
+                    "SystemCOP": 3.5 if location == "cold" else 4.5,
+                    "DistributionCOP": 0.9 if typology == "office" else 0.8,
+                }
+            )
+            db.conditioningsystems.create(
+                data={
+                    "Name": f"{location}_{typology}",
+                    "Heating": {"connect": {"Name": f"Heating_{location}_{typology}"}},
+                    "Cooling": {"connect": {"Name": f"Cooling_{location}_{typology}"}},
+                }
+            )
+            db.ventilation.create(
+                data={
+                    "Name": f"{location}_{typology}",
+                    "Schedule": {"connect": {"Name": "Ventilation_Year"}},
+                    "Rate": 0.5,
+                    "MinFreshAir": 0.1,
+                    "Type": "Natural",
+                    "TechType": "HRV",
+                }
+            )
+            db.hvac.create(
+                data={
+                    "Name": f"{location}_{typology}",
+                    "ConditioningSystems": {
+                        "connect": {"Name": f"{location}_{typology}"}
+                    },
+                    "Ventilation": {"connect": {"Name": f"{location}_{typology}"}},
+                }
+            )
+
+
 @pytest.fixture(scope="module")
 def db_with_schedules_and_space_use_children():
     """Create a database with schedules and space use children to be used in other tests."""
@@ -185,6 +240,7 @@ def db_with_schedules_and_space_use_children():
         with settings.db:
             create_schedules(settings.db)
             create_space_use_children(settings.db)
+            create_hvac_systems(settings.db)
             yield settings.db
 
 
@@ -248,11 +304,37 @@ def test_create_db_with_conflicts(
                 assert len(settings.db.year.find_many()) == 1
 
 
-def test_deep_fetch(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_lighting(db_with_schedules_and_space_use_children: Prisma):
     """Test the deep fetch of a lighting object."""
     lighting, lighting_comp = deep_fetcher.Lighting.get_deep_object("new_cold_office")
     assert lighting_comp.PowerDensity == lighting.PowerDensity
     assert lighting_comp.Schedule.Name == lighting.Schedule.Name
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.Lighting.get_deep_object("new_cold_office_does_not_exist")
+
+
+def test_deep_fetch_ventilation(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of a ventilation object."""
+    hvac, hvac_comp = deep_fetcher.HVAC.get_deep_object("cold_office")
+    assert hvac_comp.ConditioningSystems.Heating is not None
+    assert hvac_comp.ConditioningSystems.Cooling is not None
+    assert (
+        hvac_comp.Ventilation.Schedule.Weeks[0].Week.Name == "Ventilation_RegularWeek"
+    )
+
+
+@pytest.mark.skip(reason="not implemented")
+def test_fetch_schedules_ordering(db_with_schedules_and_space_use_children: Prisma):
+    """Test the ordering of schedules."""
+    pass
+
+
+@pytest.mark.skip(reason="not implemented")
+def test_fetch_construction_assembly_ordering(
+    db_with_schedules_and_space_use_children: Prisma,
+):
+    """Test the ordering of construction assemblies."""
+    pass
 
 
 # def test_db_path_does_not_exist():

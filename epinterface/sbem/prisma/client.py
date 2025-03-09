@@ -248,7 +248,10 @@ REPEATED_WEEK_INCLUDE: RepeatedWeekInclude = {
     "Week": {"include": WEEK_INCLUDE},
 }
 YEAR_INCLUDE: YearInclude = {
-    "Weeks": {"include": REPEATED_WEEK_INCLUDE},
+    "Weeks": {
+        "include": REPEATED_WEEK_INCLUDE,
+        "order_by": [{"StartMonth": "asc"}, {"StartDay": "asc"}],
+    },
 }
 LIGHTING_INCLUDE: LightingInclude = {
     "Schedule": {"include": YEAR_INCLUDE},
@@ -297,7 +300,7 @@ LAYER_INCLUDE: ConstructionAssemblyLayerInclude = {
     "ConstructionMaterial": True,
 }
 CONSTRUCTION_ASSEMBLY_INCLUDE: ConstructionAssemblyInclude = {
-    "Layers": {"include": LAYER_INCLUDE},
+    "Layers": {"include": LAYER_INCLUDE, "order_by": {"LayerOrder": "asc"}},
 }
 ENVELOPE_ASSEMBLY_INCLUDE: EnvelopeAssemblyInclude = {
     "RoofAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
