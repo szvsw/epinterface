@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import sys
 from importlib.resources import files
+from pathlib import Path
+from typing import Literal
 
 import click
 
@@ -80,3 +82,35 @@ def partials_path():
     epinterface_dir = files("epinterface")
     path_to_partials = epinterface_dir / "sbem" / "prisma" / "partial_types.py"
     click.echo(str(path_to_partials))
+
+
+@cli.command(help="Create a new database file at the given path.")
+@click.argument(
+    "path",
+    type=click.Path(
+        exists=False,
+        path_type=Path,
+    ),
+)
+@click.option(
+    "--if-exists",
+    type=click.Choice(["raise", "overwrite", "ignore"]),
+    default="raise",
+    help="What to do if the database file already exists. 'raise' will raise an error, "
+    "'overwrite' will create a new empty database, 'migrate' will preserve the data "
+    "and apply any schema changes, 'ignore' will use the existing database as-is.",
+)
+def new(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore"]):
+    """Create a new database file at the given path."""
+    from epinterface.sbem.prisma.client import PrismaSettings
+
+    if path.suffix != ".db":
+        click.echo("Error: The database file should have a .db suffix.", err=True)
+        sys.exit(1)
+
+    try:
+        PrismaSettings.New(database_path=path, if_exists=if_exists, auto_register=False)
+    except FileExistsError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    click.echo(f"Database available at {path}.")
