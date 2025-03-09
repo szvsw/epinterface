@@ -1,10 +1,13 @@
 """Prisma client for SBEM."""
 
+import shutil
+import subprocess
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Generic, TypeVar
+from importlib import resources
+from typing import Any, Generic, Literal, TypeVar
 
-from pydantic import FilePath
+from pydantic import FilePath, validate_call
 from pydantic_settings import BaseSettings
 
 from epinterface.sbem.common import NamedObject
@@ -131,10 +134,93 @@ except (RuntimeError, ImportError) as e:
     raise ImportError(msg) from e
 
 
+from pathlib import Path
+
+
 class PrismaSettings(BaseSettings):
     """Settings for the Prisma client."""
 
     database_path: FilePath | None = None
+    auto_register: bool = True
+
+    @classmethod
+    @validate_call
+    def New(
+        cls,
+        database_path: Path,
+        if_exists: Literal["raise", "migrate", "overwrite", "ignore"],
+        auto_register: bool = True,
+    ):
+        """Create a new PrismaSettings object which can be used to yield a Prisma instance.
+
+        If the provided database path exists already, then we can either raise an error,
+        create a new database and overwrite it, ignore it (i.e. use as is) or migrate it.
+
+        Note that there is some special handling since normally prisma expects either a hardcoded strin
+        in the datasource of the schema.prisma or to load it from the env file, but unfortunatley
+        so instead we do a little trick where we will let database.db in the scoped directory
+        be the working copy which we can move/copy from.
+
+
+        Args:
+            database_path (Path): The path to the database file.
+            if_exists (Literal["raise", "migrate", "overwrite", "ignore"]): What to do if the database file already exists.
+            auto_register (bool): Whether to automatically register the prisma client.
+
+        Returns:
+            settings (PrismaSettings): A PrismaSettings object.
+        """
+        # 1. check if the path exists and handle appropriately.
+        epinterface_path = resources.files("epinterface")
+        prisma_path = epinterface_path / "sbem" / "prisma"
+        schema_path = prisma_path / "schema.prisma"
+        path_exists = database_path.exists()
+        generator_output_path = Path(str(prisma_path / "database.db"))
+        generator_output_path_exists = generator_output_path.exists()
+        accepted_commands = ("prisma", "prisma.exe")
+        prisma_cmd = shutil.which("prisma")
+        if not prisma_cmd or not prisma_cmd.lower().endswith(accepted_commands):
+            msg = "Prisma executable not found."
+            raise RuntimeError(msg)
+
+        def apply_migrations():
+            try:
+                subprocess.run(  # noqa: S603
+                    [prisma_cmd, "migrate", "deploy", "--schema", str(schema_path)],
+                    check=True,
+                    text=True,
+                    capture_output=False,
+                    shell=False,
+                )
+            except subprocess.CalledProcessError as e:
+                msg = f"Error applying migrations: {e}"
+                raise RuntimeError(msg) from e
+
+        if generator_output_path_exists:
+            msg = f"Temp database file {generator_output_path} already exists and would be overwritten.."
+            raise FileExistsError(msg)
+
+        if path_exists and if_exists == "raise":
+            msg = f"Database file {database_path} already exists."
+            raise FileExistsError(msg)
+        elif path_exists and if_exists == "migrate":
+            shutil.copy(database_path, database_path.with_suffix(".db.bak"))
+            shutil.move(database_path, generator_output_path)
+            apply_migrations()
+            shutil.move(generator_output_path, database_path)
+        elif path_exists and if_exists == "ignore":
+            pass
+        elif path_exists and if_exists == "overwrite":
+            shutil.copy(database_path, database_path.with_suffix(".db.bak"))
+            apply_migrations()
+            shutil.move(generator_output_path, database_path)
+        elif path_exists:
+            msg = f"Database file {database_path} exists but unknown special case handler is set to {if_exists}."
+            raise ValueError(msg)
+        else:
+            apply_migrations()
+            shutil.move(generator_output_path, database_path)
+        return cls(database_path=database_path, auto_register=auto_register)
 
     @cached_property
     def db(self) -> Prisma:
@@ -144,7 +230,7 @@ class PrismaSettings(BaseSettings):
             if self.database_path is not None
             else None
         )
-        return Prisma(auto_register=True, datasource=datasource)
+        return Prisma(auto_register=self.auto_register, datasource=datasource)
 
 
 prisma_settings = PrismaSettings()
