@@ -1,6 +1,6 @@
 """A module for automatically fetching and composing SBEM objects."""
 
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, TypeVar, get_origin
 
 import networkx as nx
 from pydantic import BaseModel, Field, create_model
@@ -89,7 +89,7 @@ NamedObjectT = TypeVar("NamedObjectT", bound=NamedObject)
 # bind the Link type to a type where the first two type parameters are unknown but the third is a NamedObjectT
 
 
-def construct_graph():
+def construct_graph(root_node: type[NamedObject] = ZoneComponent):
     """Construct a graph of the SBEM objects.
 
     Nodes are fields of of SBEM NamedObjects, with edges representing the type of the child field as stored in the parent field.
@@ -106,7 +106,12 @@ def construct_graph():
                 )
                 handle_obj_class(g, child_field_name, child_annotation)
 
-            elif hasattr(child_annotation, "__args__"):
+            elif hasattr(
+                child_annotation, "__args__"
+            ):  # but if it's a list, we want to skip
+                if get_origin(child_annotation) in [list, tuple, dict]:
+                    # TODO: special handling for list/dict cases using an additional entry in the edge data.
+                    continue
                 for note in child_annotation.__args__:
                     if isinstance(note, NamedObject.__class__) and issubclass(
                         note, NamedObject
@@ -115,7 +120,7 @@ def construct_graph():
                         handle_obj_class(g, child_field_name, note)
                         break
 
-    handle_obj_class(g, "root", ZoneComponent)
+    handle_obj_class(g, "root", root_node)
     return g
 
 
