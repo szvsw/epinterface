@@ -81,6 +81,48 @@ def test_deep_fetch_lighting(db_with_schedules_and_space_use_children: Prisma):
         deep_fetcher.Lighting.get_deep_object("new_cold_office_does_not_exist")
 
 
+def test_deep_fetch_equipment(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of an equipment object."""
+    equipment, equipment_comp = deep_fetcher.Equipment.get_deep_object("new_office")
+    assert equipment_comp.PowerDensity == equipment.PowerDensity
+    assert equipment_comp.Schedule.Name == equipment.Schedule.Name
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.Equipment.get_deep_object("new_cold_office_does_not_exist")
+
+
+def test_deep_fetch_thermostat(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of a thermostat object."""
+    thermostat, thermostat_comp = deep_fetcher.Thermostat.get_deep_object("cold_office")
+    assert thermostat_comp.HeatingSchedule.Name == thermostat.HeatingSchedule.Name
+    assert thermostat_comp.CoolingSchedule.Name == thermostat.CoolingSchedule.Name
+
+
+def test_deep_fetch_occupancy(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of an occupancy object."""
+    occupancy, occupancy_comp = deep_fetcher.Occupancy.get_deep_object("office")
+    assert occupancy_comp.Schedule.Name == occupancy.Schedule.Name
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.Occupancy.get_deep_object("new_cold_office_does_not_exist")
+
+
+def test_deep_fetch_water_use(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of a water use object."""
+    water_use, water_use_comp = deep_fetcher.WaterUse.get_deep_object("office")
+    assert water_use_comp.Schedule.Name == water_use.Schedule.Name
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.WaterUse.get_deep_object("new_cold_office_does_not_exist")
+
+
+def test_deep_fetch_space_use(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of a space use object."""
+    space_use, space_use_comp = deep_fetcher.SpaceUse.get_deep_object("default")
+    assert space_use_comp.Lighting.Name == space_use.Lighting.Name
+    assert space_use_comp.Equipment.Name == space_use.Equipment.Name
+    assert space_use_comp.Occupancy.Name == space_use.Occupancy.Name
+    assert space_use_comp.WaterUse.Name == space_use.WaterUse.Name
+    assert space_use_comp.Thermostat.Name == space_use.Thermostat.Name
+
+
 def test_deep_fetch_ventilation(db_with_schedules_and_space_use_children: Prisma):
     """Test the deep fetch of a ventilation object."""
     hvac, hvac_comp = deep_fetcher.HVAC.get_deep_object("cold_office")
@@ -89,6 +131,67 @@ def test_deep_fetch_ventilation(db_with_schedules_and_space_use_children: Prisma
     assert (
         hvac_comp.Ventilation.Schedule.Weeks[0].Week.Name == "Ventilation_RegularWeek"
     )
+
+
+def test_deep_fetch_thermal_system(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of a thermal system object."""
+    thermal_system, thermal_system_comp = deep_fetcher.ThermalSystem.get_deep_object(
+        "Heating_cold_office"
+    )
+    assert thermal_system_comp.DistributionCOP == thermal_system.DistributionCOP
+    assert thermal_system_comp.SystemCOP == thermal_system.SystemCOP
+    assert thermal_system_comp.Fuel == thermal_system.Fuel
+    assert thermal_system_comp.ConditioningType == thermal_system.ConditioningType
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.ThermalSystem.get_deep_object("new_cold_office_does_not_exist")
+
+
+def test_deep_fetch_dhw_system(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of a dhw system object."""
+    dhw_system, dhw_system_comp = deep_fetcher.DHW.get_deep_object("good")
+    assert dhw_system_comp.FuelType == dhw_system.FuelType
+    assert dhw_system_comp.SystemCOP == dhw_system.SystemCOP
+    assert dhw_system_comp.DistributionCOP == dhw_system.DistributionCOP
+    assert dhw_system_comp.WaterTemperatureInlet == dhw_system.WaterTemperatureInlet
+    assert dhw_system_comp.WaterSupplyTemperature == dhw_system.WaterSupplyTemperature
+    assert dhw_system_comp.IsOn == dhw_system.IsOn
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.DHW.get_deep_object("new_cold_office_does_not_exist")
+
+
+def test_deep_fetch_conditioning_system(
+    db_with_schedules_and_space_use_children: Prisma,
+):
+    """Test the deep fetch of a conditioning system object."""
+    conditioning_system, conditioning_system_comp = (
+        deep_fetcher.ConditioningSystems.get_deep_object("cold_office")
+    )
+    if (
+        conditioning_system_comp.Heating is None
+        or conditioning_system_comp.Cooling is None
+    ):
+        pytest.fail(
+            reason="No heating or cooling system found in the conditioning comp, which is unexpected."
+        )
+    if conditioning_system.Heating is None or conditioning_system.Cooling is None:
+        pytest.fail(
+            reason="No heating or cooling system found in the conditioning system, which is unexpected."
+        )
+    assert conditioning_system_comp.Heating.Name == conditioning_system.Heating.Name
+    assert conditioning_system_comp.Cooling.Name == conditioning_system.Cooling.Name
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.ConditioningSystems.get_deep_object(
+            "new_cold_office_does_not_exist"
+        )
+
+
+def test_deep_fetch_hvac(db_with_schedules_and_space_use_children: Prisma):
+    """Test the deep fetch of a hvac object."""
+    hvac, hvac_comp = deep_fetcher.HVAC.get_deep_object("cold_office")
+    assert hvac_comp.ConditioningSystems.Name == hvac.ConditioningSystems.Name
+    assert hvac_comp.Ventilation.Name == hvac.Ventilation.Name
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.HVAC.get_deep_object("new_cold_office_does_not_exist")
 
 
 def test_deep_fetch_operations(db_with_schedules_and_space_use_children: Prisma):
@@ -104,6 +207,8 @@ def test_deep_fetch_operations(db_with_schedules_and_space_use_children: Prisma)
     assert operations_comp.SpaceUse.WaterUse.Name == operations.SpaceUse.WaterUse.Name
     assert operations_comp.HVAC.Name == operations.HVAC.Name
     assert operations_comp.DHW.Name == operations.DHW.Name
+    with pytest.raises(RecordNotFoundError):
+        deep_fetcher.Operations.get_deep_object("new_cold_office_does_not_exist")
 
 
 @pytest.mark.skip(reason="not implemented")
