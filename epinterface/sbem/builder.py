@@ -890,8 +890,6 @@ class Model(BaseWeather, validate_assignment=True):
 
 
 if __name__ == "__main__":
-    import asyncio
-
     from prisma.models import Envelope, Operations
 
     # import tempfile
@@ -903,16 +901,16 @@ if __name__ == "__main__":
         prisma_settings,
     )
 
-    async def _fetch_comps():
+    def _fetch_comps():
         db = prisma_settings.db
-        await db.connect()
-        operations = await Operations.prisma().find_first(include=OPERATIONS_INCLUDE)
-        envelope = await Envelope.prisma().find_first(include=ENVELOPE_INCLUDE)
+        db.connect()
+        operations = Operations.prisma().find_first(include=OPERATIONS_INCLUDE)
+        envelope = Envelope.prisma().find_first(include=ENVELOPE_INCLUDE)
 
-        await db.disconnect()
+        db.disconnect()
         return operations, envelope
 
-    operations, envelope = asyncio.run(_fetch_comps())
+    operations, envelope = _fetch_comps()
 
     model = Model(
         Weather=AnyUrl(

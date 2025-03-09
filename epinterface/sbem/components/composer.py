@@ -167,7 +167,7 @@ def construct_pydantic_models_from_graph(g: nx.DiGraph, use_children: bool = Tru
             def get_deep_fetcher(cls):
                 return deep_fetcher.get_deep_fetcher(cls.ValClass)
 
-            async def get_component(self, context: dict):
+            def get_component(self, context: dict):
                 component_name = (
                     self.selector.construct_name(context)
                     if self.selector is not None
@@ -184,17 +184,15 @@ def construct_pydantic_models_from_graph(g: nx.DiGraph, use_children: bool = Tru
                         child_selector: BaseModelWithValidator = getattr(
                             self, child_name
                         )
-                        children_components[
-                            child_name
-                        ] = await child_selector.get_component(context=context)
+                        children_components[child_name] = child_selector.get_component(
+                            context=context
+                        )
 
                 if component_name is None:
                     component = self.ValClass(**children_components)
                 else:
                     fetcher = self.get_deep_fetcher()
-                    _record, component_base = await fetcher.get_deep_object(
-                        component_name
-                    )
+                    _record, component_base = fetcher.get_deep_object(component_name)
                     component = self.ValClass(
                         **component_base.model_dump(), **children_components
                     )
@@ -349,13 +347,9 @@ if __name__ == "__main__":
     # print(getattr(getattr(getattr(ma_selector, key), key2), key3))
     from epinterface.sbem.prisma.client import prisma_settings
 
-    async def _main():
-        db = prisma_settings.db
+    with prisma_settings.db:
+        # db = prisma_settings.db
 
-        await db.connect()
-        print(await ma_selector.get_component({"typology": "office", "age": 10}))
-        await db.disconnect()
-
-    import asyncio
-
-    asyncio.run(_main())
+        # db.connect()
+        print(ma_selector.get_component({"typology": "office", "age": 10}))
+        # db.disconnect()

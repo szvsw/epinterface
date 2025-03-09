@@ -312,12 +312,12 @@ class Link(Generic[BaseT, IncludeT, ValidatorT]):
     include: IncludeT
     validator: type[ValidatorT]
 
-    async def get_deep_object(self, name: str) -> tuple[BaseT, ValidatorT]:
+    def get_deep_object(self, name: str) -> tuple[BaseT, ValidatorT]:
         """Get a deep object by name."""
         # It would be great if we could disable the type checker for this line,
         # but right now the BaseT / IncludeT are not constrained to only allow certain combinations.
 
-        record = await self.prisma_model.prisma().find_first_or_raise(
+        record = self.prisma_model.prisma().find_unique_or_raise(
             where={"Name": name},
             include=self.include,  # pyright: ignore [reportArgumentType]
         )
@@ -500,30 +500,30 @@ class PrismaClient:
     db: Prisma
 
 
-async def delete_all():
+def delete_all():
     """Delete all the objects in the database."""
     # delete everything in the db
-    await Zone.prisma().delete_many()
-    await Envelope.prisma().delete_many()
-    await EnvelopeAssembly.prisma().delete_many()
-    await ConstructionAssemblyLayer.prisma().delete_many()
-    await ConstructionAssembly.prisma().delete_many()
-    await ConstructionMaterial.prisma().delete_many()
-    await Infiltration.prisma().delete_many()
-    await GlazingConstructionSimple.prisma().delete_many()
-    await Operations.prisma().delete_many()
-    await HVAC.prisma().delete_many()
-    await ConditioningSystems.prisma().delete_many()
-    await SpaceUse.prisma().delete_many()
-    await Occupancy.prisma().delete_many()
-    await Lighting.prisma().delete_many()
-    await Thermostat.prisma().delete_many()
-    await Equipment.prisma().delete_many()
-    await WaterUse.prisma().delete_many()
-    await ThermalSystem.prisma().delete_many()
-    await DHW.prisma().delete_many()
-    await Ventilation.prisma().delete_many()
-    await RepeatedWeek.prisma().delete_many()
-    await Year.prisma().delete_many()
-    await Week.prisma().delete_many()
-    await Day.prisma().delete_many()
+    Zone.prisma().delete_many()
+    Envelope.prisma().delete_many()
+    EnvelopeAssembly.prisma().delete_many()
+    ConstructionAssemblyLayer.prisma().delete_many()
+    ConstructionAssembly.prisma().delete_many()
+    ConstructionMaterial.prisma().delete_many()
+    Infiltration.prisma().delete_many()
+    GlazingConstructionSimple.prisma().delete_many()
+    Operations.prisma().delete_many()
+    HVAC.prisma().delete_many()
+    ConditioningSystems.prisma().delete_many()
+    SpaceUse.prisma().delete_many()
+    Occupancy.prisma().delete_many()
+    Lighting.prisma().delete_many()
+    Thermostat.prisma().delete_many()
+    Equipment.prisma().delete_many()
+    WaterUse.prisma().delete_many()
+    ThermalSystem.prisma().delete_many()
+    DHW.prisma().delete_many()
+    Ventilation.prisma().delete_many()
+    RepeatedWeek.prisma().delete_many()
+    Year.prisma().delete_many()
+    Week.prisma().delete_many()
+    Day.prisma().delete_many()

@@ -1,7 +1,5 @@
 """Demo of prisma object creation and deserialization."""
 
-import asyncio
-
 from prisma import Prisma
 from prisma.models import (
     DHW,
@@ -62,8 +60,8 @@ from epinterface.sbem.prisma.client import (
 )
 
 
-async def test_schedules(db: Prisma):  # noqa: D103
-    async with db.tx() as tx:
+def test_schedules(db: Prisma):  # noqa: D103
+    with db.tx() as tx:
         day = await Day.prisma(tx).create(
             data={
                 "Name": "Office Day asdfd",
@@ -160,8 +158,8 @@ async def test_schedules(db: Prisma):  # noqa: D103
     year = YearComponent.model_validate(year, from_attributes=True)
 
 
-async def test_construction_assembly(db: Prisma):  # noqa: D103
-    async with db.tx() as tx:
+def test_construction_assembly(db: Prisma):  # noqa: D103
+    with db.tx() as tx:
         material = await ConstructionMaterial.prisma(tx).create(
             data={
                 "Name": "Office Material",
@@ -343,8 +341,8 @@ async def test_construction_assembly(db: Prisma):  # noqa: D103
     )
 
 
-async def test_operations(db: Prisma):  # noqa: D103
-    async with db.tx() as tx:
+def test_operations(db: Prisma):  # noqa: D103
+    with db.tx() as tx:
         day = await Day.prisma(tx).create(
             data={
                 "Name": "Office Day",
@@ -671,17 +669,17 @@ async def test_operations(db: Prisma):  # noqa: D103
     print(operations.model_dump_json(indent=2))
 
 
-async def main():  # noqa: D103
+def main():  # noqa: D103
     db = prisma_settings.db
-    await db.connect()
+    db.connect()
 
-    await delete_all()
-    await test_schedules(db)
-    await test_construction_assembly(db)
-    await test_operations(db)
+    delete_all()
+    test_schedules(db)
+    test_construction_assembly(db)
+    test_operations(db)
 
-    await db.disconnect()
+    db.disconnect()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

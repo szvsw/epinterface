@@ -86,10 +86,10 @@ class ComponentLibrary(MetadataMixin, arbitrary_types_allowed=True):
     Day: dict[str, DayComponent]
 
 
-async def add_excel_to_db(path: Path, erase_db: bool = False):
+def add_excel_to_db(path: Path, erase_db: bool = False):
     """Add an excel file to the database."""
     if erase_db:
-        await delete_all()
+        delete_all()
 
     # handle converting excel to dfs
 
@@ -133,7 +133,5 @@ async def add_excel_to_db(path: Path, erase_db: bool = False):
 
 
 if __name__ == "__main__":
-    import asyncio
-
     path_to_excel = Path("path/to/your/lib.xlsx")
-    asyncio.run(add_excel_to_db(path_to_excel, erase_db=True))
+    add_excel_to_db(path_to_excel, erase_db=True)
