@@ -4,10 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from archetypal.idfclass import IDF
-from archetypal.schedule import (
-    Schedule,
-)
+from archetypal.schedule import Schedule
 
 from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
@@ -47,27 +44,10 @@ def load_excel_to_dict(base_path: Path, sheet_name: str) -> dict[str, Any]:
     return {d["Name"]: d for d in data}
 
 
-def add_schedules_by_name(self, idf: IDF, schedule_names: set[str]) -> IDF:
-    """Add schedules to the IDF model by name.
-
-    Args:
-        idf (IDF): The IDF model to add the schedules to.
-        schedule_names (set[str]): The names of the schedules to add.
-
-    Returns:
-        IDF: The IDF model with the added schedules.
-    """
-    schedules = [self.lib.Schedules[s] for s in schedule_names]
-    for schedule in schedules:
-        yr_sch, *_ = schedule.to_year_week_day()
-        yr_sch.to_epbunch(idf)
-    return idf
-
-
 def daily_schedule_handling(daily_schedule_df) -> dict[str, Schedule]:
     """Create the schedules from the excel file."""
     daily_schedules = {}
-    for index, row in daily_schedule_df.iterrows():
+    for _index, row in daily_schedule_df.iterrows():
         name = row["Name"]
         hours = row[[f"Hour_{i}" for i in range(24)]].tolist()
         daily_schedules[name] = hours
@@ -77,8 +57,9 @@ def daily_schedule_handling(daily_schedule_df) -> dict[str, Schedule]:
 def weekly_schedule_handling(
     weekly_schedule_df, daily_schedule_df
 ) -> dict[str, Schedule]:
+    """Create the schedules from the excel file."""
     weekly_schedules = {}
-    for index, row in weekly_schedule_df.iterrows():
+    for _index, row in weekly_schedule_df.iterrows():
         name = row["Name"]
         days = [
             daily_schedule_df[row[day]]
@@ -101,7 +82,7 @@ def yearly_schedule_handling(
 ) -> dict[str, Schedule]:
     """Create the yearly schedules from the monthly and daily schedule objects."""
     yearly_schedules = {}
-    for index, row in yearly_schedule_df.iterrows():
+    for _index, row in yearly_schedule_df.iterrows():
         start_day = row["Start_Day"]
         week_schedule = weekly_schedule_df[row["Week_Schedule_Name"]]
         schedule = Schedule(Name=row["Name"], start_day=start_day, Values=week_schedule)
@@ -117,7 +98,7 @@ def create_schedules(base_path: Path) -> dict[str, Schedule]:
     weekly_schedules = weekly_schedule_handling(
         pd.read_excel(base_path, sheet_name="Weekly_Schedules"), daily_schedules
     )
-    yearly_schedules = yearly_schedule_handling(
+    _yearly_schedules = yearly_schedule_handling(
         pd.read_excel(base_path, sheet_name="Yearly_Schedules"), weekly_schedules
     )
     raise NotImplementedError

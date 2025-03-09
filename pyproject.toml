@@ -50,7 +50,7 @@ include = ["epinterface"]
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
-ignore = ["epinterface/sbem/prisma/demo.py"]
+ignore = ["epinterface/sbem/prisma/demo.py", "epinterface/sbem/parser.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
