@@ -62,7 +62,7 @@ from epinterface.sbem.prisma.client import (
 
 def test_schedules(db: Prisma):  # noqa: D103
     with db.tx() as tx:
-        day = await Day.prisma(tx).create(
+        day = Day.prisma(tx).create(
             data={
                 "Name": "Office Day asdfd",
                 "Type": "Fraction",
@@ -92,7 +92,7 @@ def test_schedules(db: Prisma):  # noqa: D103
                 "Hour_23": 0.0,
             }
         )
-        week = await Week.prisma(tx).create(
+        week = Week.prisma(tx).create(
             data={
                 "Name": "Office Week asdf",
                 "Monday": {
@@ -132,7 +132,7 @@ def test_schedules(db: Prisma):  # noqa: D103
                 },
             }
         )
-        year = await Year.prisma(tx).create(
+        year = Year.prisma(tx).create(
             data={
                 "Name": "Office Year asdf",
                 "Type": "Fraction",
@@ -160,7 +160,7 @@ def test_schedules(db: Prisma):  # noqa: D103
 
 def test_construction_assembly(db: Prisma):  # noqa: D103
     with db.tx() as tx:
-        material = await ConstructionMaterial.prisma(tx).create(
+        material = ConstructionMaterial.prisma(tx).create(
             data={
                 "Name": "Office Material",
                 "Roughness": "Rough",
@@ -174,7 +174,7 @@ def test_construction_assembly(db: Prisma):  # noqa: D103
                 "VisibleAbsorptance": 0.0,
             }
         )
-        construction_assembly = await ConstructionAssembly.prisma(tx).create(
+        construction_assembly = ConstructionAssembly.prisma(tx).create(
             data={
                 "Name": "Office Construction Assembly",
                 "Type": "Facade",
@@ -227,7 +227,7 @@ def test_construction_assembly(db: Prisma):  # noqa: D103
             "InternalMassAssembly": {"include": construction_assembly_include_layers},
         }
 
-        envelope_assembly = await EnvelopeAssembly.prisma(tx).create(
+        envelope_assembly = EnvelopeAssembly.prisma(tx).create(
             data={
                 "Name": "Office Envelope Assembly",
                 "InternalMassExposedAreaPerArea": 0.1,
@@ -280,7 +280,7 @@ def test_construction_assembly(db: Prisma):  # noqa: D103
             include=envelope_assembly_includes_construction_assemblies,
         )
 
-        window = await GlazingConstructionSimple.prisma(tx).create(
+        window = GlazingConstructionSimple.prisma(tx).create(
             data={
                 "Name": "Office Window",
                 "UValue": 0.0,
@@ -289,7 +289,7 @@ def test_construction_assembly(db: Prisma):  # noqa: D103
                 "Type": "Single",
             }
         )
-        infiltration = await Infiltration.prisma(tx).create(
+        infiltration = Infiltration.prisma(tx).create(
             data={
                 "Name": "Office Infiltration",
                 "IsOn": True,
@@ -304,7 +304,7 @@ def test_construction_assembly(db: Prisma):  # noqa: D103
             }
         )
 
-        envelope = await Envelope.prisma(tx).create(
+        envelope = Envelope.prisma(tx).create(
             data={
                 "Name": "Office Envelope",
                 "Assemblies": {
@@ -343,7 +343,7 @@ def test_construction_assembly(db: Prisma):  # noqa: D103
 
 def test_operations(db: Prisma):  # noqa: D103
     with db.tx() as tx:
-        day = await Day.prisma(tx).create(
+        day = Day.prisma(tx).create(
             data={
                 "Name": "Office Day",
                 "Type": "Fraction",
@@ -374,7 +374,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        schedule = await Year.prisma(tx).create(
+        schedule = Year.prisma(tx).create(
             data={
                 "Name": "Office Schedule",
                 "Type": "Fraction",
@@ -403,7 +403,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        occupancy = await Occupancy.prisma(tx).create(
+        occupancy = Occupancy.prisma(tx).create(
             data={
                 "Name": "Office Occupancy",
                 "PeopleDensity": 10,
@@ -417,7 +417,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        lighting = await Lighting.prisma(tx).create(
+        lighting = Lighting.prisma(tx).create(
             data={
                 "Name": "Office Lighting",
                 "PowerDensity": 10,
@@ -431,7 +431,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        thermostat = await Thermostat.prisma(tx).create(
+        thermostat = Thermostat.prisma(tx).create(
             data={
                 "Name": "Office Thermostat",
                 "IsOn": True,
@@ -450,7 +450,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        equipment = await Equipment.prisma(tx).create(
+        equipment = Equipment.prisma(tx).create(
             data={
                 "Name": "Office Equipment",
                 "PowerDensity": 10,
@@ -463,7 +463,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        water_use = await WaterUse.prisma(tx).create(
+        water_use = WaterUse.prisma(tx).create(
             data={
                 "Name": "Office Water Use",
                 "FlowRatePerPerson": 0.05,
@@ -475,7 +475,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        space_use = await SpaceUse.prisma(tx).create(
+        space_use = SpaceUse.prisma(tx).create(
             data={
                 "Name": "Office Zone Space Use",
                 "Lighting": {
@@ -507,7 +507,7 @@ def test_operations(db: Prisma):  # noqa: D103
             include=SPACE_USE_INCLUDE,
         )
 
-        cooling = await ThermalSystem.prisma(tx).create(
+        cooling = ThermalSystem.prisma(tx).create(
             data={
                 "Name": "Office Cooling",
                 "ConditioningType": "Cooling",
@@ -517,7 +517,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        heating = await ThermalSystem.prisma(tx).create(
+        heating = ThermalSystem.prisma(tx).create(
             data={
                 "Name": "Office Heating",
                 "ConditioningType": "Heating",
@@ -527,7 +527,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        conditioning = await ConditioningSystems.prisma(tx).create(
+        conditioning = ConditioningSystems.prisma(tx).create(
             data={
                 "Name": "Office Conditioning",
                 "Cooling": {
@@ -543,7 +543,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        ventilation = await Ventilation.prisma(tx).create(
+        ventilation = Ventilation.prisma(tx).create(
             data={
                 "Name": "Office Ventilation",
                 "Rate": 10,
@@ -558,7 +558,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        dhw = await DHW.prisma(tx).create(
+        dhw = DHW.prisma(tx).create(
             data={
                 "Name": "Office DHW",
                 "SystemCOP": 3.5,
@@ -570,7 +570,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        havc = await HVAC.prisma(tx).create(
+        havc = HVAC.prisma(tx).create(
             data={
                 "Name": "Office Zone HVAC",
                 "ConditioningSystems": {
@@ -586,7 +586,7 @@ def test_operations(db: Prisma):  # noqa: D103
             }
         )
 
-        zone_operations = await Operations.prisma(tx).create(
+        zone_operations = Operations.prisma(tx).create(
             data={
                 "Name": "Office Zone Operations",
                 "SpaceUse": {
