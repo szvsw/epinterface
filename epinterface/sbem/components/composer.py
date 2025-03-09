@@ -226,7 +226,7 @@ def construct_composer_model(  # noqa: C901
             else (ComponentNameConstructor, ...)
         )
 
-        class BaseModelWithValidator(BaseModel, extra=extra_handling):
+        class BaseSelectorWithValidator(BaseModel, extra=extra_handling):
             ValClass: ClassVar[type[NamedObject]] = validator
             selector: ComponentNameConstructor | None
 
@@ -286,7 +286,7 @@ def construct_composer_model(  # noqa: C901
                 f"{node}Selector",
                 children=(children_model | None, None),
                 selector=this_selector,
-                __base__=BaseModelWithValidator,
+                __base__=BaseSelectorWithValidator,
             )
         else:
             # we want to add a classvar to the model which stores the validator
@@ -295,7 +295,7 @@ def construct_composer_model(  # noqa: C901
                 f"{node}Selector",
                 **node_fields,
                 selector=this_selector,
-                __base__=BaseModelWithValidator,
+                __base__=BaseSelectorWithValidator,
             )
 
     return handle_node(g, "root", use_children=use_children, validator=root_validator)
