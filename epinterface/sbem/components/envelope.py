@@ -20,12 +20,6 @@ from epinterface.sbem.components.materials import (
     StandardMaterialMetadataMixin,
 )
 
-# CONSTRUCTION CLASSES
-
-
-# TODO: why is this a class? shouldn't thickness just be an attribute in the material consutruction class?
-
-
 WindowType = Literal["Single", "Double", "Triple"]
 
 
