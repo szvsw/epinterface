@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import FilePath
 from pydantic_settings import BaseSettings
@@ -32,6 +32,7 @@ from epinterface.sbem.components.systems import (
     VentilationComponent,
     ZoneHVACComponent,
 )
+from epinterface.sbem.components.zones import ZoneComponent
 
 try:
     from prisma import Prisma
@@ -54,6 +55,7 @@ try:
         BaseVentilation,
         BaseWaterUse,
         BaseYear,
+        BaseZone,
     )
     from prisma.models import (
         DHW,
@@ -79,6 +81,7 @@ try:
         WaterUse,
         Week,
         Year,
+        Zone,
     )
     from prisma.partials import (
         ConstructionAssemblyWithLayers,
@@ -94,6 +97,7 @@ try:
         VentilationWithSchedule,
         WaterUseWithSchedule,
         YearWithWeeks,
+        ZoneWithChildren,
     )
     from prisma.types import (
         ConditioningSystemsInclude,
@@ -118,6 +122,7 @@ try:
         WaterUseInclude,
         WeekInclude,
         YearInclude,
+        ZoneInclude,
     )
 except (RuntimeError, ImportError) as e:
     msg = "Prisma client has not yet been generated. "
@@ -226,6 +231,10 @@ ENVELOPE_INCLUDE: EnvelopeInclude = {
 }
 INFILTRATION_INCLUDE: InfiltrationInclude = {}
 GLAZING_CONSTRUCTION_SIMPLE_INCLUDE: GlazingConstructionSimpleInclude = {}
+ZONE_INCLUDE: ZoneInclude = {
+    "Envelope": {"include": ENVELOPE_INCLUDE},
+    "Operations": {"include": OPERATIONS_INCLUDE},
+}
 
 BaseT = TypeVar(
     "BaseT",
@@ -246,7 +255,8 @@ BaseT = TypeVar(
     | BaseEnvelopeAssembly
     | BaseEnvelope
     | BaseInfiltration
-    | BaseGlazingConstructionSimple,
+    | BaseGlazingConstructionSimple
+    | BaseZone,
 )
 IncludeT = TypeVar(
     "IncludeT",
@@ -268,6 +278,7 @@ IncludeT = TypeVar(
     EnvelopeInclude,
     InfiltrationInclude,
     GlazingConstructionSimpleInclude,
+    ZoneInclude,
 )
 ValidatorT = TypeVar("ValidatorT", bound=NamedObject, contravariant=True)
 YearT = TypeVar("YearT", bound=BaseYear)
@@ -290,6 +301,7 @@ InfiltrationT = TypeVar("InfiltrationT", bound=BaseInfiltration)
 GlazingConstructionSimpleT = TypeVar(
     "GlazingConstructionSimpleT", bound=BaseGlazingConstructionSimple
 )
+ZoneT = TypeVar("ZoneT", bound=BaseZone)
 
 
 @dataclass
@@ -333,6 +345,7 @@ class DeepObjectLinkers(
         EnvelopeT,
         InfiltrationT,
         GlazingConstructionSimpleT,
+        ZoneT,
     ]
 ):
     """Deep object linkers."""
@@ -367,6 +380,18 @@ class DeepObjectLinkers(
         GlazingConstructionSimpleInclude,
         GlazingConstructionSimpleComponent,
     ]
+    Zone: Link[ZoneT, ZoneInclude, ZoneComponent]
+
+    def get_deep_fetcher(
+        self, val_class: type[ValidatorT]
+    ) -> Link[Any, IncludeT, ValidatorT]:
+        """Get the deep fetcher for a given class."""
+        for _key, link_type in self.__annotations__.items():
+            if hasattr(link_type, "__args__") and link_type.__args__[-1] == val_class:
+                return getattr(self, _key)
+
+        msg = f"No link found for {val_class}"
+        raise ValueError(msg)
 
 
 deep_fetcher = DeepObjectLinkers(
@@ -460,6 +485,11 @@ deep_fetcher = DeepObjectLinkers(
         include=GLAZING_CONSTRUCTION_SIMPLE_INCLUDE,
         validator=GlazingConstructionSimpleComponent,
     ),
+    Zone=Link(
+        prisma_model=ZoneWithChildren,
+        include=ZONE_INCLUDE,
+        validator=ZoneComponent,
+    ),
 )
 
 
@@ -473,6 +503,7 @@ class PrismaClient:
 async def delete_all():
     """Delete all the objects in the database."""
     # delete everything in the db
+    await Zone.prisma().delete_many()
     await Envelope.prisma().delete_many()
     await EnvelopeAssembly.prisma().delete_many()
     await ConstructionAssemblyLayer.prisma().delete_many()

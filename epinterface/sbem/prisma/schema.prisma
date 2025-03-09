@@ -41,6 +41,7 @@ model Metadata {
   ConstructionAssemblies ConstructionAssembly[]
   EnvelopeAssemblies     EnvelopeAssembly[]
   Envelopes              Envelope[]
+  Zones                  Zone[]
 }
 
 // Environmental data shared by many components
@@ -263,6 +264,8 @@ model Operations {
   DHW        DHW       @relation(fields: [DHWId], references: [id])
   MetadataId String?
   Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  Zones Zone[]
 }
 
 // Envelope Components
@@ -421,6 +424,8 @@ model Envelope {
 
   MetadataId String?
   Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  Zones Zone[]
 }
 
 model Day {
@@ -509,4 +514,19 @@ model Year {
   CoolingThermostats Thermostat[]  @relation("CoolingSchedule")
   WaterUses          WaterUse[]    @relation("WaterSchedule")
   Ventilations       Ventilation[] @relation("VentilationSchedule")
+}
+
+model Zone {
+  id   String @id @default(uuid())
+  Name String @unique
+
+  // Relations
+  MetadataId String?
+  Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
+
+  EnvelopeId String
+  Envelope   Envelope @relation(fields: [EnvelopeId], references: [id])
+
+  OperationsId String
+  Operations   Operations @relation(fields: [OperationsId], references: [id])
 }

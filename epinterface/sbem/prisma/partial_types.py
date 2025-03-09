@@ -17,6 +17,7 @@ from prisma.models import (
     WaterUse,
     Week,
     Year,
+    Zone,
 )
 
 Week.create_partial(
@@ -150,4 +151,13 @@ Envelope.create_partial(
     name="EnvelopeWithChildren",
     required={"Assemblies", "Infiltration", "Window"},
     relations={"Assemblies": "EnvelopeAssemblyWithChildren"},
+)
+
+Zone.create_partial(
+    name="ZoneWithChildren",
+    required={"Envelope", "Operations"},
+    relations={
+        "Envelope": "EnvelopeWithChildren",
+        "Operations": "OperationsWithChildren",
+    },
 )
