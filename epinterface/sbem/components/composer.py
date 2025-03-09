@@ -1,6 +1,7 @@
 """A module for automatically fetching and composing SBEM objects."""
 
-from typing import Any, ClassVar, TypeVar, get_origin
+import uuid
+from typing import Any, ClassVar, Literal, TypeVar, get_origin
 
 import networkx as nx
 from pydantic import BaseModel, Field, create_model
@@ -89,10 +90,20 @@ NamedObjectT = TypeVar("NamedObjectT", bound=NamedObject)
 # bind the Link type to a type where the first two type parameters are unknown but the third is a NamedObjectT
 
 
-def construct_graph(root_node: type[NamedObject] = ZoneComponent):
+def construct_graph(root_node: type[NamedObject]):
     """Construct a graph of the SBEM objects.
 
     Nodes are fields of of SBEM NamedObjects, with edges representing the type of the child field as stored in the parent field.
+
+    It begins with checking the root node's fields, then recurses into the child fields which are also NamedObjects.
+
+    Note that currently, lists/dicts/tuples of NamedObjects are not supported.
+
+    Args:
+        root_node (type[NamedObject]): The root node of the graph.
+
+    Returns:
+        graph (nx.DiGraph): A graph of the SBEM objects.
     """
     g = nx.DiGraph()
 
@@ -124,9 +135,58 @@ def construct_graph(root_node: type[NamedObject] = ZoneComponent):
     return g
 
 
-def construct_pydantic_models_from_graph(g: nx.DiGraph, use_children: bool = True):  # noqa: C901
-    """Abstractly constructs a pydantic model from a graph of SBEM hierarchies."""
-    # we want to construct a pydantic model that will look, e.g. like this when serialized:
+def recursive_tree_dict_merge(d1: dict, d2: dict):
+    """Merge two dictionaries recursively.
+
+    The behavior is as follows:
+    - Every key/tree in d2 is merged into d1.
+    - If a key is found in both dictionaries, the value from d2 is used.
+    - If a key is found in d1 but not in d2, the value from d1 is used.
+    - If a key is found in d2 but not in d1, the value from d2 is used.
+
+    Args:
+        d1 (dict): The base dictionary.
+        d2 (dict): The dictionary to merge.
+    """
+    for key, value in d2.items():
+        if key not in d1:
+            msg = f"{key} is not in the d1 target dictionary."
+            raise ValueError(msg)
+        if isinstance(value, dict):
+            if not isinstance(d1[key], dict) and d1[key] is not None:
+                msg = f"{key} is not a dict in the d1 target dictionary."
+                raise ValueError(msg)
+            recursive_tree_dict_merge(d1[key], value)
+        else:
+            d1[key] = value
+
+
+def construct_composer_model(  # noqa: C901
+    g: nx.DiGraph,
+    root_validator: type[NamedObject],
+    use_children: bool = True,
+    extra_handling: Literal["ignore", "forbid"] = "forbid",
+):
+    """Abstractly constructs a composition model from a graph of SBEM hierarchies.
+
+    The ComposerModel.get_component(x: dict) method can be used to generate a composition of SBEM
+    objects through the hierarchy, starting with the root node, and then substituting child nodes as they
+    become available.
+
+    Args:
+        g (nx.DiGraph): The graph to construct the model from.
+        root_validator (type[NamedObject]): The root validator type.
+        use_children (bool): Whether to use `children` nesting keys (more verbose structure)
+        extra_handling (Literal["ignore", "forbid"]): Whether to allow extra fields when validating provided serialized schemas.
+
+    Returns:
+        A pydantic model that can be used to execute component mapping and composition.
+    """
+    from epinterface.sbem.prisma.client import deep_fetcher
+
+    # Cache to avoid recomputing the same field types - e.g. once
+    # we have computed the field type for a Occupancy.Schedule,
+    # we can immediately return it for Lighting.Schedule, Thermostat.HeatingSchedule, etc.
     resolved_field_types = {}
 
     def get_field_type_for_edge(
@@ -149,6 +209,8 @@ def construct_pydantic_models_from_graph(g: nx.DiGraph, use_children: bool = Tru
             )
         return (resolved_field_types[target_node_type] | None, None)
 
+    # TODO: figure out how to abstract this so that the root node type passed in can be used to
+    # give type safety assurances on the selector.get_component() method..
     def handle_node(
         g: nx.DiGraph, node: str, use_children: bool, validator: type[NamedObject]
     ):
@@ -164,43 +226,54 @@ def construct_pydantic_models_from_graph(g: nx.DiGraph, use_children: bool = Tru
             else (ComponentNameConstructor, ...)
         )
 
-        class BaseModelWithValidator(BaseModel):
+        class BaseModelWithValidator(BaseModel, extra=extra_handling):
             ValClass: ClassVar[type[NamedObject]] = validator
             selector: ComponentNameConstructor | None
 
+            # TODO: we should allow fetching from in mem caches
+            # so that this becomes abstracted and decoupled from the
+            # database logic.
             @classmethod
             def get_deep_fetcher(cls):
                 return deep_fetcher.get_deep_fetcher(cls.ValClass)
 
-            def get_component(self, context: dict):
+            def get_component(self, context: dict, allow_unvalidated: bool = False):
                 component_name = (
                     self.selector.construct_name(context)
                     if self.selector is not None
                     else None
                 )
                 children_components = {}
-                for (
-                    child_name,
-                    child_annotation,
-                ) in self.ValClass.__annotations__.items():
-                    if isinstance(
-                        child_annotation, BaseModelWithValidator.__class__
-                    ) and issubclass(child_annotation, BaseModelWithValidator):
-                        child_selector: BaseModelWithValidator = getattr(
-                            self, child_name
-                        )
-                        children_components[child_name] = child_selector.get_component(
-                            context=context
+                for field_name in self.model_dump():
+                    field_selector = getattr(self, field_name)
+                    if (
+                        not isinstance(field_selector, ComponentNameConstructor)
+                        and field_selector is not None
+                    ):
+                        children_components[field_name] = field_selector.get_component(
+                            context=context,
+                            allow_unvalidated=True,
                         )
 
                 if component_name is None:
-                    component = self.ValClass(**children_components)
+                    component_name = f"{self.ValClass.__name__}_{str(uuid.uuid4())[:8]}"
+                    try:
+                        component = self.ValClass(
+                            Name=component_name, **children_components
+                        )
+                    except Exception:
+                        if allow_unvalidated:
+                            return {"Name": component_name, **children_components}
+                        else:
+                            raise
                 else:
                     fetcher = self.get_deep_fetcher()
                     _record, component_base = fetcher.get_deep_object(component_name)
-                    component = self.ValClass(
-                        **component_base.model_dump(), **children_components
-                    )
+                    data = component_base.model_dump(exclude_none=True)
+
+                    recursive_tree_dict_merge(data, children_components)
+
+                    component = self.ValClass(**data)
                 return component
 
         if use_children:
@@ -225,17 +298,20 @@ def construct_pydantic_models_from_graph(g: nx.DiGraph, use_children: bool = Tru
                 __base__=BaseModelWithValidator,
             )
 
-    return handle_node(g, "root", use_children=use_children, validator=ZoneComponent)
+    return handle_node(g, "root", use_children=use_children, validator=root_validator)
 
 
 if __name__ == "__main__":
     import yaml
 
-    from epinterface.sbem.prisma.client import deep_fetcher
+    root_node_class = ZoneComponent
+    g = construct_graph(root_node_class)
 
-    g = construct_graph()
-
-    SelectorModel = construct_pydantic_models_from_graph(g, use_children=False)
+    SelectorModel = construct_composer_model(
+        g,
+        root_validator=root_node_class,
+        use_children=False,
+    )
 
     ma_selector = SelectorModel(
         **{
@@ -350,7 +426,11 @@ if __name__ == "__main__":
     # key2 = "SpaceUse"
     # key3 = "Occupancy"
     # print(getattr(getattr(getattr(ma_selector, key), key2), key3))
+    from pathlib import Path
+
     from epinterface.sbem.prisma.client import prisma_settings
+
+    prisma_settings.database_path = Path("massachusetts.db")
 
     with prisma_settings.db:
         # db = prisma_settings.db
