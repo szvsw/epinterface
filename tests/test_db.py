@@ -72,7 +72,7 @@ def test_create_db_with_conflicts(
                 assert len(settings.db.year.find_many()) == 1
 
 
-def test_deep_fetch_lighting(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_lighting(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a lighting object."""
     lighting, lighting_comp = deep_fetcher.Lighting.get_deep_object("new_cold_office")
     assert lighting_comp.PowerDensity == lighting.PowerDensity
@@ -81,7 +81,7 @@ def test_deep_fetch_lighting(db_with_schedules_and_space_use_children: Prisma):
         deep_fetcher.Lighting.get_deep_object("new_cold_office_does_not_exist")
 
 
-def test_deep_fetch_equipment(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_equipment(preseeded_readonly_db: Prisma):
     """Test the deep fetch of an equipment object."""
     equipment, equipment_comp = deep_fetcher.Equipment.get_deep_object("new_office")
     assert equipment_comp.PowerDensity == equipment.PowerDensity
@@ -90,14 +90,14 @@ def test_deep_fetch_equipment(db_with_schedules_and_space_use_children: Prisma):
         deep_fetcher.Equipment.get_deep_object("new_cold_office_does_not_exist")
 
 
-def test_deep_fetch_thermostat(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_thermostat(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a thermostat object."""
     thermostat, thermostat_comp = deep_fetcher.Thermostat.get_deep_object("cold_office")
     assert thermostat_comp.HeatingSchedule.Name == thermostat.HeatingSchedule.Name
     assert thermostat_comp.CoolingSchedule.Name == thermostat.CoolingSchedule.Name
 
 
-def test_deep_fetch_occupancy(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_occupancy(preseeded_readonly_db: Prisma):
     """Test the deep fetch of an occupancy object."""
     occupancy, occupancy_comp = deep_fetcher.Occupancy.get_deep_object("office")
     assert occupancy_comp.Schedule.Name == occupancy.Schedule.Name
@@ -105,7 +105,7 @@ def test_deep_fetch_occupancy(db_with_schedules_and_space_use_children: Prisma):
         deep_fetcher.Occupancy.get_deep_object("new_cold_office_does_not_exist")
 
 
-def test_deep_fetch_water_use(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_water_use(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a water use object."""
     water_use, water_use_comp = deep_fetcher.WaterUse.get_deep_object("office")
     assert water_use_comp.Schedule.Name == water_use.Schedule.Name
@@ -113,7 +113,7 @@ def test_deep_fetch_water_use(db_with_schedules_and_space_use_children: Prisma):
         deep_fetcher.WaterUse.get_deep_object("new_cold_office_does_not_exist")
 
 
-def test_deep_fetch_space_use(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_space_use(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a space use object."""
     space_use, space_use_comp = deep_fetcher.SpaceUse.get_deep_object("default")
     assert space_use_comp.Lighting.Name == space_use.Lighting.Name
@@ -123,7 +123,7 @@ def test_deep_fetch_space_use(db_with_schedules_and_space_use_children: Prisma):
     assert space_use_comp.Thermostat.Name == space_use.Thermostat.Name
 
 
-def test_deep_fetch_ventilation(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_ventilation(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a ventilation object."""
     hvac, hvac_comp = deep_fetcher.HVAC.get_deep_object("cold_office")
     assert hvac_comp.ConditioningSystems.Heating is not None
@@ -133,7 +133,7 @@ def test_deep_fetch_ventilation(db_with_schedules_and_space_use_children: Prisma
     )
 
 
-def test_deep_fetch_thermal_system(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_thermal_system(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a thermal system object."""
     thermal_system, thermal_system_comp = deep_fetcher.ThermalSystem.get_deep_object(
         "Heating_cold_office"
@@ -146,7 +146,7 @@ def test_deep_fetch_thermal_system(db_with_schedules_and_space_use_children: Pri
         deep_fetcher.ThermalSystem.get_deep_object("new_cold_office_does_not_exist")
 
 
-def test_deep_fetch_dhw_system(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_dhw_system(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a dhw system object."""
     dhw_system, dhw_system_comp = deep_fetcher.DHW.get_deep_object("good")
     assert dhw_system_comp.FuelType == dhw_system.FuelType
@@ -159,9 +159,7 @@ def test_deep_fetch_dhw_system(db_with_schedules_and_space_use_children: Prisma)
         deep_fetcher.DHW.get_deep_object("new_cold_office_does_not_exist")
 
 
-def test_deep_fetch_conditioning_system(
-    db_with_schedules_and_space_use_children: Prisma,
-):
+def test_deep_fetch_conditioning_system(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a conditioning system object."""
     conditioning_system, conditioning_system_comp = (
         deep_fetcher.ConditioningSystems.get_deep_object("cold_office")
@@ -185,7 +183,7 @@ def test_deep_fetch_conditioning_system(
         )
 
 
-def test_deep_fetch_hvac(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_hvac(preseeded_readonly_db: Prisma):
     """Test the deep fetch of a hvac object."""
     hvac, hvac_comp = deep_fetcher.HVAC.get_deep_object("cold_office")
     assert hvac_comp.ConditioningSystems.Name == hvac.ConditioningSystems.Name
@@ -194,7 +192,7 @@ def test_deep_fetch_hvac(db_with_schedules_and_space_use_children: Prisma):
         deep_fetcher.HVAC.get_deep_object("new_cold_office_does_not_exist")
 
 
-def test_deep_fetch_operations(db_with_schedules_and_space_use_children: Prisma):
+def test_deep_fetch_operations(preseeded_readonly_db: Prisma):
     """Test the deep fetch of an operations object."""
     operations, operations_comp = deep_fetcher.Operations.get_deep_object("default_ops")
     assert operations_comp.SpaceUse.Name == operations.SpaceUse.Name
@@ -212,15 +210,13 @@ def test_deep_fetch_operations(db_with_schedules_and_space_use_children: Prisma)
 
 
 @pytest.mark.skip(reason="not implemented")
-def test_fetch_schedules_ordering(db_with_schedules_and_space_use_children: Prisma):
+def test_fetch_schedules_ordering(preseeded_readonly_db: Prisma):
     """Test the ordering of schedules."""
     pass
 
 
 @pytest.mark.skip(reason="not implemented")
-def test_fetch_construction_assembly_ordering(
-    db_with_schedules_and_space_use_children: Prisma,
-):
+def test_fetch_construction_assembly_ordering(preseeded_readonly_db: Prisma):
     """Test the ordering of construction assemblies."""
     pass
 

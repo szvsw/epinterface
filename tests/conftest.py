@@ -16,7 +16,7 @@ from epinterface.sbem.prisma.seed_fns import (
 
 
 @pytest.fixture(scope="module")
-def db_with_schedules_and_space_use_children():
+def preseeded_readonly_db():
     """Create a database with schedules and space use children to be used in other tests."""
     with tempfile.TemporaryDirectory() as temp_dir:
         database_path = Path(temp_dir) / "test.db"
