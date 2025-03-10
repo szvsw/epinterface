@@ -211,18 +211,99 @@ def test_deep_fetch_operations(preseeded_readonly_db: Prisma):
 
 @pytest.mark.skip(reason="not implemented")
 def test_fetch_schedules_ordering(preseeded_readonly_db: Prisma):
-    """Test the ordering of schedules."""
+    """Test the ordering of schedules, specifically that the repeated weeks are in correct order sorted by starting month then starting day."""
     pass
 
 
-@pytest.mark.skip(reason="not implemented")
-def test_fetch_construction_assembly_ordering(preseeded_readonly_db: Prisma):
+def test_deep_fetch_construction_assembly_ordering(preseeded_readonly_db: Prisma):
     """Test the ordering of construction assemblies."""
-    pass
+    construction_assembly, construction_assembly_comp = (
+        deep_fetcher.ConstructionAssembly.get_deep_object("Roof")
+    )
+    layer_order = [layer.LayerOrder for layer in construction_assembly.Layers]
+    # TODO: this is relying on the fact that they are out of order in the db write;
+    # this should be done with a newly created construction assembly wihtin this test to
+    # make sure if the seed_fn changes that this test is no longer invalid.
+    assert layer_order == [0, 1, 2, 3]
+    layer_order_comp = [layer.LayerOrder for layer in construction_assembly_comp.Layers]
+    assert layer_order_comp == [0, 1, 2, 3]
+    for i in range(4):
+        assert (
+            construction_assembly_comp.Layers[i].ConstructionMaterial.Name
+            == construction_assembly.Layers[i].ConstructionMaterial.Name
+        )
 
 
-# def test_db_path_does_not_exist():
-#     prisma_settings.database_path = Path("does_not_exist.db")
-#     db = prisma_settings.db
-#     with db:
-#         assert db.year.find_many() == []
+def test_deep_fetch_envelope_assembly(preseeded_readonly_db: Prisma):
+    """Test the deep fetch of an envelope assembly object."""
+    envelope_assembly, envelope_assembly_comp = (
+        deep_fetcher.EnvelopeAssembly.get_deep_object("default")
+    )
+    assert (
+        envelope_assembly_comp.RoofAssembly.Name == envelope_assembly.RoofAssembly.Name
+    )
+    assert (
+        envelope_assembly_comp.RoofAssembly.Layers[0].ConstructionMaterial.Name
+        == envelope_assembly.RoofAssembly.Layers[0].ConstructionMaterial.Name
+    )
+
+
+def test_deep_fetch_glazing_construction(preseeded_readonly_db: Prisma):
+    """Test the deep fetch of a glazing construction object."""
+    glazing_construction, glazing_construction_comp = (
+        deep_fetcher.GlazingConstructionSimple.get_deep_object("single")
+    )
+    assert glazing_construction_comp.Name == glazing_construction.Name
+    assert glazing_construction_comp.UValue == glazing_construction.UValue
+    assert glazing_construction_comp.SHGF == glazing_construction.SHGF
+    assert glazing_construction_comp.TVis == glazing_construction.TVis
+    assert glazing_construction_comp.Type == glazing_construction.Type
+
+
+def test_deep_fetch_infiltration(preseeded_readonly_db: Prisma):
+    """Test the deep fetch of an infiltration object."""
+    infiltration, infiltration_comp = deep_fetcher.Infiltration.get_deep_object(
+        "office_unweatherized"
+    )
+    assert infiltration_comp.Name == infiltration.Name
+    assert infiltration_comp.IsOn == infiltration.IsOn
+    assert infiltration_comp.AirChangesPerHour == infiltration.AirChangesPerHour
+    assert infiltration_comp.CalculationMethod == infiltration.CalculationMethod
+
+
+def test_deep_fetch_envelope(preseeded_readonly_db: Prisma):
+    """Test the deep fetch of an envelope object."""
+    envelope, envelope_comp = deep_fetcher.Envelope.get_deep_object("default_env")
+    assert envelope_comp.Name == envelope.Name
+
+    _expected_assemblies, expected_assemblies_comp = (
+        deep_fetcher.EnvelopeAssembly.get_deep_object("default")
+    )
+    _expected_infiltration, expected_infiltration_comp = (
+        deep_fetcher.Infiltration.get_deep_object("office_unweatherized")
+    )
+    _expected_window, expected_window_comp = (
+        deep_fetcher.GlazingConstructionSimple.get_deep_object("single")
+    )
+
+    assert envelope_comp.Assemblies == expected_assemblies_comp
+    assert envelope_comp.Infiltration == expected_infiltration_comp
+    assert envelope_comp.Window == expected_window_comp
+
+
+def test_deep_fetch_zone(preseeded_readonly_db: Prisma):
+    """Test the deep fetch of a zone object."""
+    zone, zone_comp = deep_fetcher.Zone.get_deep_object("default_zone")
+    assert zone_comp.Name == zone.Name
+    assert zone_comp.Envelope.Name == zone.Envelope.Name
+    assert zone_comp.Operations.Name == zone.Operations.Name
+
+    _expected_envelope, expected_envelope_comp = deep_fetcher.Envelope.get_deep_object(
+        "default_env"
+    )
+    _expected_operations, expected_operations_comp = (
+        deep_fetcher.Operations.get_deep_object("default_ops")
+    )
+
+    assert zone_comp.Envelope == expected_envelope_comp
+    assert zone_comp.Operations == expected_operations_comp
