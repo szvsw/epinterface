@@ -872,3 +872,15 @@ def test_dict_for_component_name_constructor():
 
 # TODO: test not found/fallbacks (either due to name not in db, or due to pre-fetch check that field value, e.g. typology="office" is valid)
 # TODO: test using 3 consecutive levels from top
+
+
+@pytest.mark.skip(reason="not yet implemented")
+def test_der_deser():
+    """Test that the der and deser works."""
+    pass
+
+
+@pytest.mark.skip(reason="Not yet implemented")
+def test_yaml_template_generator():
+    """Test that the yaml template generator works."""
+    pass

@@ -4,6 +4,7 @@ import uuid
 from typing import Any, ClassVar, Literal, TypeVar, get_origin
 
 import networkx as nx
+import yaml
 from pydantic import BaseModel, Field, create_model
 
 from epinterface.sbem.common import NamedObject
@@ -125,6 +126,7 @@ def construct_composer_model(  # noqa: C901
     root_validator: type[NamedObject],
     use_children: bool = True,
     extra_handling: Literal["ignore", "forbid"] = "forbid",
+    allow_partials: bool = True,
 ):
     """Abstractly constructs a composition model from a graph of SBEM hierarchies.
 
@@ -132,14 +134,17 @@ def construct_composer_model(  # noqa: C901
     objects through the hierarchy, starting with the root node, and then substituting child nodes as they
     become available.
 
+    Setting allow_partials to False will require a complete tree (but also use autopopulation) - this is mainly for easily generating schemas.
+
     Args:
         g (nx.DiGraph): The graph to construct the model from.
         root_validator (type[NamedObject]): The root validator type.
         use_children (bool): Whether to use `children` nesting keys (more verbose structure)
         extra_handling (Literal["ignore", "forbid"]): Whether to allow extra fields when validating provided serialized schemas.
+        allow_partials (bool): Whether to allow partial resolutions.
 
     Returns:
-        A pydantic model that can be used to execute component mapping and composition.
+        composer_model (BaseResolutionTree): A pydantic model that can be used to execute component mapping and composition.
     """
     from prisma import Prisma
 
@@ -155,25 +160,45 @@ def construct_composer_model(  # noqa: C901
         target_node_name: str,  # TODO: this will cause infinite recursion when a parent and child have named fields in common.
         target_node_type: type[NamedObject],
         use_children: bool,
+        allow_partials: bool,
     ):
         if target_node_type not in resolved_field_types:
             resolved_field_types[target_node_type] = handle_node(
-                g, target_node_name, use_children, target_node_type
+                g,
+                target_node_name,
+                use_children,
+                target_node_type,
+                allow_partials=allow_partials,
             )
-        return (resolved_field_types[target_node_type] | None, None)
+        return (
+            (resolved_field_types[target_node_type] | None, None)
+            if allow_partials
+            else (
+                resolved_field_types[target_node_type],
+                resolved_field_types[target_node_type](selector=None),
+            )
+        )
 
     # TODO: figure out how to abstract this so that the root node type passed in can be used to
     # give type safety assurances on the selector.get_component() method..
     def handle_node(  # noqa: C901
-        g: nx.DiGraph, node: str, use_children: bool, validator: type[NamedObject]
+        g: nx.DiGraph,
+        node: str,
+        use_children: bool,
+        validator: type[NamedObject],
+        allow_partials: bool,
     ):
         edges_starting_at_node = g.edges(node, data=True)
         node_fields = {}
         for _parent_name, child_name, data in edges_starting_at_node:
             node_fields[child_name] = get_field_type_for_edge(
-                g, child_name, data["data"]["type"], use_children=use_children
+                g,
+                child_name,
+                data["data"]["type"],
+                use_children=use_children,
+                allow_partials=allow_partials,
             )
-        this_selector = ComponentNameConstructor | None, None
+        this_selector = (ComponentNameConstructor | None, None)
 
         # TODO: lift some of this scope up so we don't have a bunch of classes which are not part of the same
         # inheritance hierarchy.
@@ -188,6 +213,28 @@ def construct_composer_model(  # noqa: C901
             def get_deep_fetcher(cls):
                 """Get the deep fetcher for the component corresponding to the selected validator."""
                 return deep_fetcher.get_deep_fetcher(cls.ValClass)
+
+            @classmethod
+            def create_data_entry_template(cls):
+                g = construct_graph(cls.ValClass)
+                Model = construct_composer_model(
+                    g,
+                    root_validator=cls.ValClass,
+                    use_children=False,
+                    allow_partials=False,
+                )
+                model = Model(
+                    selector=ComponentNameConstructor(
+                        source_fields=["selector_col_a", "selector_col_b"]
+                    )
+                )
+
+                return yaml.safe_dump(
+                    model.model_dump(
+                        exclude_none=True,
+                    ),
+                    indent=2,
+                )
 
             def get_component(
                 self,
@@ -273,6 +320,10 @@ def construct_composer_model(  # noqa: C901
                 children_to_check = [
                     child for child in self.model_fields if child != "selector"
                 ]
+                if len(children_to_check) == 0:
+                    # We are at a leaf node, which is only valid if it has a selector.
+                    # TODO: in the future, leaf nodes could be constructed dynamically by assigning computers for field values.
+                    return False, ["NoSelectorSpecified"]
                 is_valid = True
                 errors = []
                 for child in children_to_check:
@@ -321,4 +372,22 @@ def construct_composer_model(  # noqa: C901
                 __base__=ResolutionTreeWithValidator,
             )
 
-    return handle_node(g, "root", use_children=use_children, validator=root_validator)
+    return handle_node(
+        g,
+        "root",
+        use_children=use_children,
+        validator=root_validator,
+        allow_partials=allow_partials,
+    )
+
+
+if __name__ == "__main__":
+    from epinterface.sbem.components.zones import ZoneComponent
+
+    g = construct_graph(ZoneComponent)
+    model = construct_composer_model(g, ZoneComponent, use_children=False)
+    template_yaml = model.create_data_entry_template()
+    parsed_yaml = yaml.safe_load(template_yaml)
+    model_from_yaml = model.model_validate(parsed_yaml)
+    model_from_yaml.selector = None
+    model_from_yaml.validate_successful_resolution()
