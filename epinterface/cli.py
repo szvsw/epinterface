@@ -85,12 +85,14 @@ def partials_path():
 
 
 @cli.command(help="Create a new database file at the given path.")
-@click.argument(
-    "path",
+@click.option(
+    "--path",
     type=click.Path(
         exists=False,
         path_type=Path,
     ),
+    default="components.db",
+    prompt="Enter the path to the database file.",
 )
 @click.option(
     "--if-exists",
@@ -99,8 +101,9 @@ def partials_path():
     help="What to do if the database file already exists. 'raise' will raise an error, "
     "'overwrite' will create a new empty database, 'migrate' will preserve the data "
     "and apply any schema changes, 'ignore' will use the existing database as-is.",
+    prompt="What to do if the database file already exists?",
 )
-def new(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore"]):
+def make(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore"]):
     """Create a new database file at the given path."""
     from epinterface.sbem.prisma.client import PrismaSettings
 
@@ -114,3 +117,28 @@ def new(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore"
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
     click.echo(f"Database available at {path}.")
+
+
+@cli.command(help="Create a yaml template file for entering component maps.")
+@click.option(
+    "--path",
+    type=click.Path(
+        exists=False,
+        path_type=Path,
+    ),
+    default="component_map.yaml",
+    prompt="Enter the path to the yaml template file for entering component maps.",
+)
+def template(path: Path):
+    """Create a yaml template file for entering component maps."""
+    from epinterface.sbem.components.composer import (
+        construct_composer_model,
+        construct_graph,
+    )
+    from epinterface.sbem.components.zones import ZoneComponent
+
+    g = construct_graph(ZoneComponent)
+    model = construct_composer_model(g, ZoneComponent, use_children=False)
+    template_yaml = model.create_data_entry_template()
+    with open(path, "w") as f:
+        f.write(template_yaml)
