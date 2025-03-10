@@ -39,14 +39,16 @@ from epinterface.sbem.components.systems import (
     VentilationComponent,
     ZoneHVACComponent,
 )
-from epinterface.sbem.prisma.client import delete_all
+from epinterface.sbem.prisma.client import (
+    EQUIPMENT_INCLUDE,
+    LIGHTING_INCLUDE,
+    OCCUPANCY_INCLUDE,
+    THERMOSTAT_INCLUDE,
+    YEAR_INCLUDE,
+    delete_all,
+)
 
 logger = logging.getLogger(__name__)
-
-
-# attribution classes
-
-# helper functions
 
 
 class ComponentLibrary(MetadataMixin, arbitrary_types_allowed=True):
@@ -194,7 +196,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "Hour_21": float(row["Hour21"]),
                     "Hour_22": float(row["Hour22"]),
                     "Hour_23": float(row["Hour23"]),
-                }
+                },
             )
 
         for _, row in component_dfs_dict["Week_schedules"].iterrows():
@@ -213,7 +215,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
         # add year: note that your will need to connnnect to weeks
         for _, row in component_dfs_dict["Year_schedules"].iterrows():
-            tx.year.create(
+            year = tx.year.create(
                 data={
                     "Name": row["Year_schedules"],
                     "Type": row["Schedule_type"],
@@ -229,43 +231,51 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "October": {"connect": {"Name": row["Oct"]}},
                     "November": {"connect": {"Name": row["Nov"]}},
                     "December": {"connect": {"Name": row["Dec"]}},
-                }
+                },
+                include=YEAR_INCLUDE,
             )
+            YearComponent.model_validate(year, from_attributes=True)
 
         for _, row in component_dfs_dict["Occupancy"].iterrows():
-            tx.occupancy.create(
+            occupancy = tx.occupancy.create(
                 data={
                     "Name": row["Name"],
                     "PeopleDensity": row["Occupant_density"],
                     "IsOn": True,
                     "MetabolicRate": row["MetabolicRate"],
                     "Schedule": {"connect": {"Name": row["Occupant_schedule"]}},
-                }
+                },
+                include=OCCUPANCY_INCLUDE,
             )
+            OccupancyComponent.model_validate(occupancy, from_attributes=True)
 
         for _, row in component_dfs_dict["Lighting"].iterrows():
-            tx.lighting.create(
+            lighting = tx.lighting.create(
                 data={
                     "Name": row["Name"],
                     "PowerDensity": row["Lighting_power_density"],
                     "DimmingType": row["DimmingType"],
                     "IsOn": True,
                     "Schedule": {"connect": {"Name": row["Lighting_schedule"]}},
-                }
+                },
+                include=LIGHTING_INCLUDE,
             )
+            LightingComponent.model_validate(lighting, from_attributes=True)
 
         for _, row in component_dfs_dict["Power"].iterrows():
-            tx.equipment.create(
+            equipment = tx.equipment.create(
                 data={
                     "Name": row["Name"],
                     "PowerDensity": row["Equipment_power_density"],
                     "IsOn": True,
                     "Schedule": {"connect": {"Name": row["Equipment_schedule"]}},
-                }
+                },
+                include=EQUIPMENT_INCLUDE,
             )
+            EquipmentComponent.model_validate(equipment, from_attributes=True)
 
         for _, row in component_dfs_dict["Setpoints"].iterrows():
-            tx.thermostat.create(
+            thermostat = tx.thermostat.create(
                 data={
                     "Name": row["Name"],
                     "HeatingSetpoint": row["Heating_setpoint"],
@@ -273,8 +283,10 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "IsOn": True,
                     "HeatingSchedule": {"connect": {"Name": row["Heating_schedule"]}},
                     "CoolingSchedule": {"connect": {"Name": row["Cooling_schedule"]}},
-                }
+                },
+                include=THERMOSTAT_INCLUDE,
             )
+            ThermostatComponent.model_validate(thermostat, from_attributes=True)
 
         for _, row in component_dfs_dict["Water_flow"].iterrows():
             tx.wateruse.create(

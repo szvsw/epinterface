@@ -3,7 +3,7 @@
 from typing import Literal
 
 from archetypal.idfclass.idf import IDF
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from epinterface.interface import (
     ScheduleDayHourly,
@@ -40,7 +40,9 @@ TypeLimits: dict[ScheduleTypeLimitType, ScheduleTypeLimits] = {
 class DayComponent(NamedObject, extra="forbid"):
     """A day of the week with a schedule type limit and a list of values."""
 
-    Type: ScheduleTypeLimitType
+    Type: ScheduleTypeLimitType = Field(
+        ..., description="The ScheduleTypeLimits of the day."
+    )
     Hour_00: float
     Hour_01: float
     Hour_02: float
@@ -275,7 +277,9 @@ class WeekComponent(NamedObject, extra="forbid"):
 class YearComponent(NamedObject, extra="forbid"):
     """A year with a schedule type limit and a list of repeated weeks."""
 
-    Type: ScheduleTypeLimitType
+    Type: Literal["Equipment", "Lighting", "Occupancy", "Flow rate", "Setpoint"] = (
+        Field(..., description="The system that the schedule is applicable to.")
+    )
     January: WeekComponent
     February: WeekComponent
     March: WeekComponent
@@ -317,6 +321,11 @@ class YearComponent(NamedObject, extra="forbid"):
                 raise ValueError(msg)
 
         return self
+
+    @property
+    def schedule_type_limits(self):
+        """Get the schedule type limits for the year."""
+        return self.January.Type
 
     def add_year_to_idf(self, idf: IDF, name_prefix: str | None = None):
         """Add the year to the IDF.
@@ -399,11 +408,12 @@ class YearComponent(NamedObject, extra="forbid"):
             year_sched.Name = f"{name_prefix}_YEAR_{year_sched.Name}"
         idf = year_sched.add(idf)
 
-        if not idf.getobject("SCHEDULETYPELIMITS", self.Type):
-            if self.Type not in TypeLimits:
-                msg = f"Type {self.Type} not in TypeLimits, unsure how to add to IDF."
+        type_lim = self.schedule_type_limits
+        if not idf.getobject("SCHEDULETYPELIMITS", type_lim):
+            if type_lim not in TypeLimits:
+                msg = f"Type {type_lim} not in TypeLimits, unsure how to add to IDF."
                 raise ValueError(msg)
-            lim = TypeLimits[self.Type]
+            lim = TypeLimits[type_lim]
             lim.add(idf)
 
         return idf, year_sched.Name
