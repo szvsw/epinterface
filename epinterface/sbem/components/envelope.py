@@ -189,8 +189,8 @@ class ConstructionAssemblyComponent(
     Layers: list[ConstructionLayerComponent] = Field(
         ..., title="Layers of the opaque construction"
     )
-    VegetationLayer: NanStr = Field(
-        ..., title="Vegetation layer of the opaque construction"
+    VegetationLayer: NanStr | None = Field(
+        default=None, title="Vegetation layer of the opaque construction"
     )
     Type: ConstructionComponentSurfaceType = Field(
         ..., title="Type of the opaque construction"
@@ -262,10 +262,10 @@ class EnvelopeAssemblyComponent(
         ..., title="Ground wall construction object name"
     )
     InternalMassAssembly: ConstructionAssemblyComponent | None = Field(
-        ..., title="Internal mass construction object name"
+        default=None, title="Internal mass construction object name"
     )
     InternalMassExposedAreaPerArea: float | None = Field(
-        ...,
+        default=None,
         title="Internal mass exposed area per area [m²/m²]",
         ge=0,
     )

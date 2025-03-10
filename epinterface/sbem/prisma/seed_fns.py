@@ -124,8 +124,8 @@ def create_space_use_children(db: Prisma):
     """Create space use children objects for the given database for the typical uses."""
     last_equipment_name = ""
     for typology in typologies:
-        epd = 10 if typology == "office" else 20
         for age in ages:
+            epd = 10 if typology == "office" else 20
             epd = epd * 0.83 if age == "new" else epd
             last_equipment_name = f"{age}_{typology}"
             db.equipment.create(
@@ -139,10 +139,10 @@ def create_space_use_children(db: Prisma):
 
     last_lighting_name = ""
     for typology in typologies:
-        lpd = 10 if typology == "office" else 20
         for age in ages:
-            lpd = lpd * 0.8 if age == "old" else lpd
             for loc in locations:
+                lpd = 10 if typology == "office" else 20
+                lpd = lpd * 0.8 if age == "old" else lpd
                 lpd = lpd * 1.23 if loc == "cold" else lpd
                 last_lighting_name = f"{age}_{loc}_{typology}"
                 db.lighting.create(
@@ -562,8 +562,8 @@ def create_envelope_assemblies(db: Prisma):
 def create_infiltration(db: Prisma):
     """Create infiltration for the given database."""
     for typology in typologies:
-        infil = 0.2 if typology == "office" else 0.3
         for tightness in tightnesses:
+            infil = 0.2 if typology == "office" else 0.3
             if tightness == "unweatherized":
                 infil = infil * 1.5
             elif tightness == "lightly":

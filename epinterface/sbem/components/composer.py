@@ -220,11 +220,12 @@ def construct_composer_model(  # noqa: C901
             node_fields[child_name] = get_field_type_for_edge(
                 g, child_name, data["data"]["type"], use_children=use_children
             )
-        this_selector = (
-            (ComponentNameConstructor | None, None)
-            if node != "root"
-            else (ComponentNameConstructor, ...)
-        )
+        # this_selector = (
+        #     (ComponentNameConstructor | None, None)
+        #     if node != "root"
+        #     else (ComponentNameConstructor, ...)
+        # )
+        this_selector = ComponentNameConstructor | None, None
 
         class BaseSelectorWithValidator(BaseModel, extra=extra_handling):
             ValClass: ClassVar[type[NamedObject]] = validator

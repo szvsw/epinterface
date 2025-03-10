@@ -9,9 +9,15 @@ from epinterface.sbem.components.composer import (
     ComponentNameConstructor,
     construct_composer_model,
     construct_graph,
+    recursive_tree_dict_merge,
+)
+from epinterface.sbem.components.envelope import (
+    GlazingConstructionSimpleComponent,
+    ZoneEnvelopeComponent,
 )
 from epinterface.sbem.components.operations import ZoneOperationsComponent
 from epinterface.sbem.components.space_use import ZoneSpaceUseComponent
+from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.prisma.client import deep_fetcher
 
 
@@ -326,18 +332,12 @@ def test_composer_on_space_uses(
     assert isinstance(alt_comp, ZoneSpaceUseComponent)
     assert alt_comp != comp
     assert alt_comp.Equipment.Name == "new_office"
-    assert alt_comp.Equipment.PowerDensity == 10 * 0.83  # from seed_fn
+    assert pytest.approx(alt_comp.Equipment.PowerDensity) == 10 * 0.83  # from seed_fn
     assert alt_comp.Equipment != comp.Equipment
     assert alt_comp.Occupancy == comp.Occupancy
     assert alt_comp.WaterUse == comp.WaterUse
     assert alt_comp.Lighting == comp.Lighting
     assert alt_comp.Thermostat == comp.Thermostat
-
-    # TODO: test behavior when provided context dict to get_component is missing fields
-
-    # TODO: test extra fields
-
-    # TODO: test not found/fallbacks (either due to name not in db, or due to pre-fetch check that field value, e.g. typology="office" is valid)
 
 
 def test_operations_selector(preseeded_readonly_db: Prisma):
@@ -394,14 +394,243 @@ def test_operations_selector(preseeded_readonly_db: Prisma):
 
     assert alt_comp.SpaceUse.Equipment != comp.SpaceUse.Equipment
     assert alt_comp.SpaceUse.Equipment.Name == "new_office"
-    assert alt_comp.SpaceUse.Equipment.PowerDensity == 10 * 0.83  # from seed_fn
+    assert (
+        pytest.approx(alt_comp.SpaceUse.Equipment.PowerDensity) == 10 * 0.83
+    )  # from seed_fn
 
     assert alt_comp.HVAC.Ventilation != comp.HVAC.Ventilation
     assert alt_comp.HVAC.Ventilation.Name == "cold_office"
     assert alt_comp.HVAC.Ventilation.Rate == 0.5  # from seed_fn
     assert alt_comp.HVAC.Ventilation.MinFreshAir == 0.4  # from seed_fn
 
-    # TODO: test skipping 2 levels
-    # TODO: test using 3 consecutive levels from top
 
-    # etc
+def test_envelope_selector(preseeded_readonly_db: Prisma):
+    """Test the envelope selector to include deeply nested target components."""
+    root_graph = construct_graph(ZoneEnvelopeComponent)
+    SelectorModel = construct_composer_model(
+        root_graph, ZoneEnvelopeComponent, use_children=False
+    )
+
+    selector = SelectorModel(selector=ComponentNameConstructor(source_fields=["basic"]))
+
+    comp = selector.get_component({"basic": "default_env"})
+
+    assert isinstance(comp, ZoneEnvelopeComponent)
+    assert comp.Name == "default_env"
+
+    alt_selector = SelectorModel(
+        selector=ComponentNameConstructor(source_fields=["default_env"]),
+        **{
+            "Infiltration": {
+                "selector": ComponentNameConstructor(
+                    source_fields=["typology", "weatherization"]
+                )
+            },
+        },
+    )
+
+    alt_comp = alt_selector.get_component({
+        "default_env": "default_env",
+        "typology": "residential",
+        "weatherization": "heavily",
+    })
+    assert isinstance(alt_comp, ZoneEnvelopeComponent)
+    assert alt_comp != comp
+    assert alt_comp.Infiltration.Name == "residential_heavily"
+    assert (
+        pytest.approx(alt_comp.Infiltration.AirChangesPerHour) == 0.8 * 0.3
+    )  # from seed_fn
+    assert alt_comp.Assemblies == comp.Assemblies
+
+    component_selectors_dict = {
+        "Assemblies": {
+            "selector": ComponentNameConstructor(source_fields=["default_assembly"])
+        },
+        "Infiltration": {
+            "selector": ComponentNameConstructor(
+                source_fields=["typology", "weatherization"]
+            )
+        },
+        "Window": {"selector": ComponentNameConstructor(source_fields=["window_type"])},
+    }
+    alt_selector = SelectorModel(
+        **component_selectors_dict,  # pyright: ignore [reportArgumentType]
+    )
+
+    alt_comp_2 = alt_selector.get_component({
+        "default_assembly": "default",
+        "typology": "residential",
+        "weatherization": "moderately",
+        "window_type": "double",
+    })
+
+    assert isinstance(alt_comp_2, ZoneEnvelopeComponent)
+    assert alt_comp_2.Assemblies == alt_comp.Assemblies
+    assert alt_comp_2.Infiltration != alt_comp.Infiltration
+    assert alt_comp_2.Infiltration.Name == "residential_moderately"
+    assert pytest.approx(alt_comp_2.Infiltration.AirChangesPerHour) == 1.0 * 0.3
+    assert alt_comp_2.Window != alt_comp.Window
+    assert isinstance(alt_comp_2.Window, GlazingConstructionSimpleComponent)
+    assert alt_comp_2.Window.Name == "double"
+    assert alt_comp_2.Window.UValue == 0.5
+    assert alt_comp_2.Window.SHGF == 0.5
+
+
+def test_zone_selector(preseeded_readonly_db: Prisma):
+    """Test the zone selector to include deeply nested target components."""
+    root_graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(
+        root_graph, ZoneComponent, use_children=False
+    )
+
+    selector = SelectorModel(selector=ComponentNameConstructor(source_fields=["basic"]))
+
+    comp = selector.get_component({"basic": "default_zone"})
+
+    assert isinstance(comp, ZoneComponent)
+    assert comp.Name == "default_zone"
+
+    multi_level_selector = SelectorModel(
+        selector=ComponentNameConstructor(source_fields=["default_zone"]),
+        **{
+            "Operations": {
+                "SpaceUse": {
+                    "Equipment": {
+                        "selector": ComponentNameConstructor(
+                            source_fields=["age", "typology"]
+                        )
+                    }
+                }
+            }
+        },
+    )
+
+    alt_comp = multi_level_selector.get_component({
+        "default_zone": "default_zone",
+        "age": "new",
+        "typology": "office",
+    })
+
+    assert isinstance(alt_comp, ZoneComponent)
+    assert alt_comp != comp
+    assert alt_comp.Envelope == comp.Envelope
+    assert alt_comp.Operations.HVAC == comp.Operations.HVAC
+    assert alt_comp.Operations.DHW == comp.Operations.DHW
+    assert alt_comp.Operations.SpaceUse.Equipment != comp.Operations.SpaceUse.Equipment
+    assert alt_comp.Operations.SpaceUse.Equipment.Name == "new_office"
+    assert (
+        pytest.approx(alt_comp.Operations.SpaceUse.Equipment.PowerDensity) == 10 * 0.83
+    )  # from seed_fn
+    assert alt_comp.Operations.SpaceUse.Occupancy == comp.Operations.SpaceUse.Occupancy
+    assert alt_comp.Operations.SpaceUse.WaterUse == comp.Operations.SpaceUse.WaterUse
+    assert alt_comp.Operations.SpaceUse.Lighting == comp.Operations.SpaceUse.Lighting
+    assert (
+        alt_comp.Operations.SpaceUse.Thermostat == comp.Operations.SpaceUse.Thermostat
+    )
+
+
+# TODO: test behavior when provided context dict to get_component is missing fields
+
+# TODO: test extra fields
+
+# TODO: test not found/fallbacks (either due to name not in db, or due to pre-fetch check that field value, e.g. typology="office" is valid)
+# TODO: test using 3 consecutive levels from top
+
+
+# etc
+def test_recursive_tree_dict_merger():
+    """Test the recursive tree dict merger."""
+    d1 = {
+        "a1": {
+            "b1": {
+                "c": 1,
+                "d": None,
+            },
+            "b2": {
+                "e": {
+                    "g": 5,
+                },
+                "f": 4,
+            },
+        },
+        "a2": {
+            "b1": {
+                "c": 7,
+                "d": 13,
+            },
+            "b2": {
+                "e": {
+                    "g": 21,
+                },
+                "f": 54,
+            },
+        },
+    }
+    d2 = {
+        "a1": {
+            "b1": {
+                "d": 2,
+            },
+        },
+        "a2": {
+            "b2": {
+                "f": 100,
+            },
+        },
+    }
+
+    recursive_tree_dict_merge(d1, d2)
+    assert d1 == {
+        "a1": {
+            "b1": {
+                "c": 1,
+                "d": 2,
+            },
+            "b2": {
+                "e": {
+                    "g": 5,
+                },
+                "f": 4,
+            },
+        },
+        "a2": {
+            "b1": {
+                "c": 7,
+                "d": 13,
+            },
+            "b2": {
+                "e": {
+                    "g": 21,
+                },
+                "f": 100,
+            },
+        },
+    }
+
+    d1 = {"a": {"b": {"c": 1, "d": None}}}
+    d2 = {"a": {"c": 3}}
+    with pytest.raises(ValueError, match="c is not in the d1 target dictionary."):
+        recursive_tree_dict_merge(d1, d2)
+
+    d1 = {"a": 2}
+    d2 = {"a": {"b": 3}}
+    with pytest.raises(
+        ValueError, match="a is not a dict in the d1 target dictionary."
+    ):
+        recursive_tree_dict_merge(d1, d2)
+
+
+@pytest.mark.xfail(
+    reason="Currently errors out due to checking if b is in None, but None is not iterable."
+)
+def test_overwriting_a_none_key_with_dict():
+    """Test that a None key can be overwritten with a dict."""
+    d1 = {"a": None}
+    d2 = {"a": {"b": 3}}
+    recursive_tree_dict_merge(d1, d2)
+    assert d1 == {"a": {"b": 3}}
+
+    d1 = {"a": {"b": None}}
+    d2 = {"a": {"b": {"c": 3}}}
+    recursive_tree_dict_merge(d1, d2)
+    assert d1 == {"a": {"b": {"c": 3}}}
