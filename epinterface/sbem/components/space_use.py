@@ -15,6 +15,8 @@ from epinterface.sbem.exceptions import NotImplementedParameter
 
 logger = logging.getLogger(__name__)
 
+# TODO: add some type validation on schedules - e.g. people must be people type, lighting and equipment must be power, heating setpoints must be schedules, etc.
+
 
 class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
     """An occupancy object in the SBEM library."""
@@ -54,7 +56,7 @@ class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
             return idf
 
         activity_sch_name = (
-            f"{target_zone_or_zone_list_name}_{self.Name}_Activity_Schedule"
+            f"{target_zone_or_zone_list_name}_{self.safe_name}_PEOPLE_Activity_Schedule"
         )
         lim = "AnyNumber"
         if not idf.getobject("SCHEDULETYPELIMITS", lim):
@@ -71,19 +73,11 @@ class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
         )
         activity_sch_year, *_ = activity_sch.to_year_week_day()
         activity_sch_year.to_epbunch(idf)
-
-        logger.warning(
-            f"Adding people to zone with schedule {self.Schedule}.  Make sure this schedule exists."
-        )
         logger.warning(
             f"Ignoring AirspeedSchedule for zone(s) {target_zone_or_zone_list_name}."
         )
-        raise NotImplementedError
-        # TODO: add schedule to idf
 
-        name_prefix = (
-            f"{target_zone_or_zone_list_name}_{self.Name.replace(' ', '_')}_PEOPLE"
-        )
+        name_prefix = f"{target_zone_or_zone_list_name}_{self.safe_name}_PEOPLE"
         idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=name_prefix)
         people = People(
             Name=name_prefix,
@@ -144,10 +138,7 @@ class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
         logger.warning(
             f"Ignoring IlluminanceTarget for zone(s) {target_zone_or_zone_list_name}."
         )
-        name_prefix = (
-            f"{target_zone_or_zone_list_name}_{self.Name.replace(' ', '_')}_LIGHTS"
-        )
-        raise NotImplementedError
+        name_prefix = f"{target_zone_or_zone_list_name}_{self.safe_name}_LIGHTS"
         idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=name_prefix)
         lights = Lights(
             Name=name_prefix,
@@ -191,10 +182,7 @@ class EquipmentComponent(NamedObject, MetadataMixin, extra="forbid"):
         if not self.IsOn:
             return idf
 
-        name_prefix = (
-            f"{target_zone_or_zone_list_name}_{self.Name.replace(' ', '_')}_EQUIPMENT"
-        )
-        raise NotImplementedError
+        name_prefix = f"{target_zone_or_zone_list_name}_{self.safe_name}_EQUIPMENT"
         idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=name_prefix)
         equipment = ElectricEquipment(
             Name=name_prefix,
@@ -243,10 +231,6 @@ class ThermostatComponent(NamedObject, MetadataMixin, extra="forbid"):
         if not self.IsOn:
             return idf
 
-        logger.warning(
-            f"Adding thermostat to zone with heating schedule {self.HeatingSchedule} and cooling schedule {self.CoolingSchedule}.  Make sure these schedules exist."
-        )
-
         raise NotImplementedError
         idf = idf.newidfobject("HVACTEMPLATE:THERMOSTAT", **self.model_dump())
         return idf
@@ -294,7 +278,7 @@ class ZoneSpaceUseComponent(NamedObject, MetadataMixin, extra="forbid"):
             IDF: The updated IDF object.
         """
         idf = self.Lighting.add_lights_to_idf_zone(idf, target_zone_name)
-        # idf = self.Occupancy.add_people_to_idf_zone(idf, target_zone_name)
+        idf = self.Occupancy.add_people_to_idf_zone(idf, target_zone_name)
         idf = self.Equipment.add_equipment_to_idf_zone(idf, target_zone_name)
         # idf = self.Thermostat.add_thermostat_to_idf_zone(idf, target_zone_name)
         # raise NotImplementedError

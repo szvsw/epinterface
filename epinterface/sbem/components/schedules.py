@@ -1,21 +1,46 @@
 """This module contains the definitions for the schedules."""
 
-from typing import Any, Literal
+from typing import Literal
 
 from archetypal.idfclass.idf import IDF
 from pydantic import model_validator
 
-from epinterface.interface import ScheduleDayHourly, ScheduleWeekDaily, ScheduleYear
+from epinterface.interface import (
+    ScheduleDayHourly,
+    ScheduleTypeLimits,
+    ScheduleWeekDaily,
+    ScheduleYear,
+)
 from epinterface.sbem.common import NamedObject
 
 # TODO: handle schedule type limits in a consistent way once?
-ScheduleTypeLimit = Literal["Fraction", "Temperature"]
+ScheduleTypeLimitType = Literal["Fraction", "Temperature", "AnyNumber"]
+
+TypeLimits: dict[ScheduleTypeLimitType, ScheduleTypeLimits] = {
+    "Fraction": ScheduleTypeLimits(
+        Name="Fraction",
+        Unit_Type="Dimensionless",
+        Lower_Limit_Value=0,
+        Upper_Limit_Value=1,
+    ),
+    "Temperature": ScheduleTypeLimits(
+        Name="Temperature",
+        Unit_Type="Temperature",
+        Lower_Limit_Value=-270,
+        Upper_Limit_Value=1000,
+    ),
+    "AnyNumber": ScheduleTypeLimits(
+        Name="AnyNumber",
+        Lower_Limit_Value=-1000,
+        Upper_Limit_Value=1000,
+    ),
+}
 
 
 class DayComponent(NamedObject, extra="forbid"):
     """A day of the week with a schedule type limit and a list of values."""
 
-    Type: ScheduleTypeLimit
+    Type: ScheduleTypeLimitType
     Hour_00: float
     Hour_01: float
     Hour_02: float
@@ -197,7 +222,7 @@ class WeekComponent(NamedObject, extra="forbid"):
         return idf, week_sched.Name
 
     @property
-    def Type(self) -> ScheduleTypeLimit:
+    def Type(self) -> ScheduleTypeLimitType:
         """Get the type limit of the week."""
         return self.Monday.Type
 
@@ -250,7 +275,7 @@ class WeekComponent(NamedObject, extra="forbid"):
 class YearComponent(NamedObject, extra="forbid"):
     """A year with a schedule type limit and a list of repeated weeks."""
 
-    Type: ScheduleTypeLimit
+    Type: ScheduleTypeLimitType
     January: WeekComponent
     February: WeekComponent
     March: WeekComponent
@@ -306,23 +331,79 @@ class YearComponent(NamedObject, extra="forbid"):
             idf (IDF): The IDF object with the year added.
             year_name (str): The name of the year schedule.
         """
-        # because of the weird way eppy requires schedule:year input, we create a pass through dict
-        # before validating.
-        schedule_year_obj: dict[str, Any] = {
-            "Name": self.Name,
-            "Schedule_Type_Limits_Name": self.Type,
-        }
-        raise NotImplementedError
-        for i, week in enumerate(self.Weeks):
-            idf, week_name = week.Week.add_week_to_idf(idf, name_prefix)
-            schedule_year_obj[f"ScheduleWeek_Name_{i + 1}"] = week_name
-            schedule_year_obj[f"Start_Month_{i + 1}"] = week.StartMonth
-            schedule_year_obj[f"Start_Day_{i + 1}"] = week.StartDay
-            schedule_year_obj[f"End_Month_{i + 1}"] = week.EndMonth
-            schedule_year_obj[f"End_Day_{i + 1}"] = week.EndDay
-
-        year_sched = ScheduleYear(**schedule_year_obj)
+        year_sched = ScheduleYear(
+            Name=self.Name,
+            Schedule_Type_Limits_Name=self.Type,
+            ScheduleWeek_Name_1=self.January.Name,
+            Start_Month_1=1,
+            Start_Day_1=1,
+            End_Month_1=1,
+            End_Day_1=31,
+            ScheduleWeek_Name_2=self.February.Name,
+            Start_Month_2=2,
+            Start_Day_2=1,
+            End_Month_2=2,
+            End_Day_2=28,
+            ScheduleWeek_Name_3=self.March.Name,
+            Start_Month_3=3,
+            Start_Day_3=1,
+            End_Month_3=3,
+            End_Day_3=31,
+            ScheduleWeek_Name_4=self.April.Name,
+            Start_Month_4=4,
+            Start_Day_4=1,
+            End_Month_4=4,
+            End_Day_4=30,
+            ScheduleWeek_Name_5=self.May.Name,
+            Start_Month_5=5,
+            Start_Day_5=1,
+            End_Month_5=5,
+            End_Day_5=31,
+            ScheduleWeek_Name_6=self.June.Name,
+            Start_Month_6=6,
+            Start_Day_6=1,
+            End_Month_6=6,
+            End_Day_6=30,
+            ScheduleWeek_Name_7=self.July.Name,
+            Start_Month_7=7,
+            Start_Day_7=1,
+            End_Month_7=7,
+            End_Day_7=31,
+            ScheduleWeek_Name_8=self.August.Name,
+            Start_Month_8=8,
+            Start_Day_8=1,
+            End_Month_8=8,
+            End_Day_8=31,
+            ScheduleWeek_Name_9=self.September.Name,
+            Start_Month_9=9,
+            Start_Day_9=1,
+            End_Month_9=9,
+            End_Day_9=30,
+            ScheduleWeek_Name_10=self.October.Name,
+            Start_Month_10=10,
+            Start_Day_10=1,
+            End_Month_10=10,
+            End_Day_10=31,
+            ScheduleWeek_Name_11=self.November.Name,
+            Start_Month_11=11,
+            Start_Day_11=1,
+            End_Month_11=11,
+            End_Day_11=30,
+            ScheduleWeek_Name_12=self.December.Name,
+            Start_Month_12=12,
+            Start_Day_12=1,
+            End_Month_12=12,
+            End_Day_12=31,
+        )
         if name_prefix is not None:
             year_sched.Name = f"{name_prefix}_YEAR_{year_sched.Name}"
         idf = year_sched.add(idf)
+
+        if not idf.getobject("SCHEDULETYPELIMITS", self.Type):
+            if self.Type not in TypeLimits:
+                msg = f"Type {self.Type} not in TypeLimits, unsure how to add to IDF."
+                raise ValueError(msg)
+            lim = TypeLimits[self.Type]
+            lim.add(idf)
+
         return idf, year_sched.Name
