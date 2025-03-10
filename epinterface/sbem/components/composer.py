@@ -23,7 +23,7 @@ Start at root node.
 """
 
 
-class ComponentNameConstructor(BaseModel):
+class ComponentNameConstructor(BaseModel, extra="forbid"):
     """A constructor for the name of a component. based off of a list of source fields."""
 
     source_fields: list[str] = Field(default_factory=list)
@@ -116,6 +116,10 @@ def recursive_tree_dict_merge(d1: dict, d2: dict):
             d1[key] = value
 
 
+class BaseResolutionTree(BaseModel):
+    """A base class for Resolvers."""
+
+
 def construct_composer_model(  # noqa: C901
     g: nx.DiGraph,
     root_validator: type[NamedObject],
@@ -160,7 +164,7 @@ def construct_composer_model(  # noqa: C901
 
     # TODO: figure out how to abstract this so that the root node type passed in can be used to
     # give type safety assurances on the selector.get_component() method..
-    def handle_node(
+    def handle_node(  # noqa: C901
         g: nx.DiGraph, node: str, use_children: bool, validator: type[NamedObject]
     ):
         edges_starting_at_node = g.edges(node, data=True)
@@ -171,7 +175,9 @@ def construct_composer_model(  # noqa: C901
             )
         this_selector = ComponentNameConstructor | None, None
 
-        class BaseSelectorWithValidator(BaseModel, extra=extra_handling):
+        # TODO: lift some of this scope up so we don't have a bunch of classes which are not part of the same
+        # inheritance hierarchy.
+        class ResolutionTreeWithValidator(BaseResolutionTree, extra=extra_handling):
             ValClass: ClassVar[type[NamedObject]] = validator
             selector: ComponentNameConstructor | None
 
@@ -188,17 +194,20 @@ def construct_composer_model(  # noqa: C901
                 context: dict,
                 allow_unvalidated: bool = False,
                 db: Prisma | None = None,
+                do_validate_resolution: bool = True,
             ):
                 """Construct a component from the context dictionary, including executing subconstructions.
 
                 Args:
                     context (dict): The context dictionary.
-                    allow_unvalidated (bool): Whether to allow unvalidated components.
+                    allow_unvalidated (bool): Whether to allow unvalidated components during construction - necessary for partial overwrites.
                     db (Prisma | None): The database to use.
+                    do_validate_resolution (bool): Whether to validate that the resolution is guaranteed to return a component (assuming no db calls fail).  We skip this on children since they are allowed to be partial.
 
                 Returns:
                     component (NamedObject): The constructed component.
                 """
+                self.validate_successful_resolution(do_validate_resolution)
                 component_name = (
                     self.selector.construct_name(context)
                     if self.selector is not None
@@ -208,6 +217,8 @@ def construct_composer_model(  # noqa: C901
                 for field_name in self.model_dump():
                     field_selector = getattr(self, field_name)
                     if (
+                        # TODO: rewrite this check to use issubclass with BaseResolutionTree
+                        # but BaseResolutionTree will need updating so that it is generic enough to include get_component
                         not isinstance(field_selector, ComponentNameConstructor)
                         and field_selector is not None
                     ):
@@ -215,6 +226,7 @@ def construct_composer_model(  # noqa: C901
                             context=context,
                             allow_unvalidated=True,
                             db=db,
+                            do_validate_resolution=False,
                         )
 
                 if component_name is None:
@@ -240,6 +252,53 @@ def construct_composer_model(  # noqa: C901
                     component = self.ValClass(**data)
                 return component
 
+            def validate_successful_resolution(
+                self, raise_on_failure: bool = True
+            ) -> tuple[bool, list[str]]:
+                """Validate that the tree will always resolve to a valid component.
+
+                This is true if either (a) the selector is not None, or (b) all of its (required) children's successfully resolve,
+                meaning we will use a recursive computation.
+
+
+                Note: special handling is not yet implemented for the case where a child is nullable.
+
+                Note: special handling will be required if/when non-deep keys (e.g. float params) become targetable.
+                """
+                # Children can be incomplete if parent is not specified.
+                # so we circuit break if the parent has a selector.
+                if self.selector is not None:
+                    return True, []
+
+                children_to_check = [
+                    child for child in self.model_fields if child != "selector"
+                ]
+                is_valid = True
+                errors = []
+                for child in children_to_check:
+                    child_selector = getattr(self, child)
+                    if child_selector is None:
+                        is_valid = False
+                        msg = f"{child}:NoSelectorSpecified"
+                        errors.append(msg)
+                        continue
+                    if not issubclass(child_selector.__class__, BaseResolutionTree):
+                        msg = f"{child}:UnexpectedNonSelector[{type(child_selector)}]"
+                        is_valid = False
+                        errors.append(msg)
+                        continue
+                    child_is_valid, child_errors = (
+                        child_selector.validate_successful_resolution(
+                            raise_on_failure=False
+                        )
+                    )
+                    is_valid = is_valid and child_is_valid
+                    errors.extend([f"{child}:{error}" for error in child_errors])
+
+                if raise_on_failure and not is_valid:
+                    raise ValueError("\n".join(errors))
+                return is_valid, errors
+
         if use_children:
             children_model = create_model(
                 f"{node}Selector",
@@ -250,7 +309,7 @@ def construct_composer_model(  # noqa: C901
                 f"{node}Selector",
                 children=(children_model | None, None),
                 selector=this_selector,
-                __base__=BaseSelectorWithValidator,
+                __base__=ResolutionTreeWithValidator,
             )
         else:
             # we want to add a classvar to the model which stores the validator
@@ -259,7 +318,7 @@ def construct_composer_model(  # noqa: C901
                 f"{node}Selector",
                 **node_fields,
                 selector=this_selector,
-                __base__=BaseSelectorWithValidator,
+                __base__=ResolutionTreeWithValidator,
             )
 
     return handle_node(g, "root", use_children=use_children, validator=root_validator)

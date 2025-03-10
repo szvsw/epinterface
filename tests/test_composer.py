@@ -529,14 +529,6 @@ def test_zone_selector(preseeded_readonly_db: Prisma):
     )
 
 
-# TODO: test behavior when provided context dict to get_component is missing fields
-
-# TODO: test extra fields
-
-# TODO: test not found/fallbacks (either due to name not in db, or due to pre-fetch check that field value, e.g. typology="office" is valid)
-# TODO: test using 3 consecutive levels from top
-
-
 # etc
 def test_recursive_tree_dict_merger():
     """Test the recursive tree dict merger."""
@@ -645,3 +637,238 @@ def test_scoped_db_compositions_work(preseeded_readonly_db: Prisma):
     # 4. run the same zone composition on both dbs, one scoped, one unscoped
     # 5. ensure that the scoped db composition uses the mutated value, while the unscoped uses the original.
     pass
+
+
+def test_validate_successful_resolution():
+    """Test the validate_successful_resolution method."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    selector = SelectorModel(selector=ComponentNameConstructor(source_fields=["basic"]))
+
+    is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
+    assert is_valid, "\n".join(errors)
+    assert len(errors) == 0
+
+
+def test_validate_successful_resolution_with_one_level_of_children():
+    """Test the validate_successful_resolution method."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    selector = SelectorModel.model_validate({
+        "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+        "Operations": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+    })
+
+    is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
+    assert is_valid, "\n".join(errors)
+    assert len(errors) == 0
+
+
+def test_validate_successful_resolution_with_multiple_levels_of_children():
+    """Test the validate_successful_resolution method."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    selector = SelectorModel.model_validate({
+        "Envelope": {
+            "Assemblies": {
+                "selector": ComponentNameConstructor(source_fields=["basic"])
+            },
+            "Window": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+            "Infiltration": {
+                "selector": ComponentNameConstructor(source_fields=["basic"])
+            },
+        },
+        "Operations": {
+            "SpaceUse": {
+                "Equipment": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "Occupancy": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "WaterUse": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "Lighting": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "Thermostat": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+            },
+            "HVAC": {
+                "Ventilation": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "ConditioningSystems": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+            },
+            "DHW": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+        },
+    })
+
+    is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
+    assert is_valid, "\n".join(errors)
+    assert len(errors) == 0
+
+
+def test_validate_successful_resolution_with_multiple_mixed_levels_of_children():
+    """Test the validate_successful_resolution method."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    selector = SelectorModel.model_validate({
+        "Envelope": {
+            "selector": ComponentNameConstructor(source_fields=["basic"]),
+            "Window": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+            "Infiltration": {
+                "selector": ComponentNameConstructor(source_fields=["basic"])
+            },
+        },
+        "Operations": {
+            "selector": ComponentNameConstructor(source_fields=["basic"]),
+            "SpaceUse": {
+                "WaterUse": {
+                    "Schedule": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                },
+                "Lighting": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "Thermostat": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+            },
+            "HVAC": {
+                "Ventilation": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "ConditioningSystems": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+            },
+            "DHW": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+        },
+    })
+
+    is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
+    assert is_valid, "\n".join(errors)
+    assert len(errors) == 0
+
+
+def test_validate_successful_resolution_with_top_level_missing_selector():
+    """Test the validate_successful_resolution method."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    selector = SelectorModel.model_validate({
+        "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+    })
+
+    is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
+    error_message = "\n".join(errors)
+    assert not is_valid
+    error_message_contains = "Operations:NoSelectorSpecified"
+    assert error_message_contains == error_message
+    with pytest.raises(ValueError, match=error_message_contains):
+        selector.validate_successful_resolution()
+    with pytest.raises(ValueError, match=error_message_contains):
+        selector.get_component({"basic": "default_zone"})
+
+
+def test_validate_successful_resolution_with_low_level_missing_selector():
+    """Test the validate_successful_resolution method."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    selector = SelectorModel.model_validate({
+        "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+        "Operations": {
+            "SpaceUse": {
+                "Equipment": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+            },
+        },
+    })
+
+    is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
+    assert not is_valid
+    error_message_strs = [
+        "Operations:SpaceUse:Occupancy:NoSelectorSpecified",
+        "Operations:SpaceUse:Lighting:NoSelectorSpecified",
+        "Operations:SpaceUse:Thermostat:NoSelectorSpecified",
+        "Operations:SpaceUse:WaterUse:NoSelectorSpecified",
+        "Operations:HVAC:NoSelectorSpecified",
+        "Operations:DHW:NoSelectorSpecified",
+    ]
+    assert set(errors) == set(error_message_strs)
+    with pytest.raises(ValueError, match="\n".join(list(error_message_strs))):
+        selector.validate_successful_resolution()
+    with pytest.raises(ValueError, match="\n".join(list(error_message_strs))):
+        selector.get_component({"basic": "default_zone"})
+
+
+def test_bad_fields_in_constructor():
+    """Test that bad fields in the constructor raise a ValidationError."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    with pytest.raises(ValidationError, match="junk"):
+        SelectorModel.model_validate({
+            "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+            "junk": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+        })
+
+    with pytest.raises(ValidationError, match="junkyjunk"):
+        SelectorModel.model_validate({
+            "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+            "Operations": {
+                "selector": ComponentNameConstructor(source_fields=["basic"]),
+                "SpaceUse": {"junkyjunk": 2},
+            },
+        })
+
+    with pytest.raises(ValidationError, match="source_fields"):
+        SelectorModel.model_validate({
+            "Envelope": {"selector": {"source_fields": ["typology", "age"]}},
+            "Operations": {"selector": {"source_fields": "asdf"}},
+        })
+
+
+def test_bad_selector_in_dict():
+    """Test that a bad selector in a dict raises a ValidationError."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    with pytest.raises(ValidationError, match="Extra"):
+        SelectorModel.model_validate({
+            "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+            "Operations": {"selector": {"dfasdf": "asdf"}},
+        })
+
+
+def test_dict_for_component_name_constructor():
+    """Test that a dict for a component name constructor is valid."""
+    graph = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
+
+    sel = SelectorModel.model_validate({
+        "Envelope": {"selector": {"source_fields": ["typology", "age"]}},
+    })
+    assert sel.Envelope.selector.source_fields == ["typology", "age"]  # pyright: ignore [reportAttributeAccessIssue]
+
+
+# TODO: test field failures etc during get_component
+
+# TODO: test behavior when provided context dict to get_component is missing fields
+
+# TODO: test extra fields
+
+# TODO: test not found/fallbacks (either due to name not in db, or due to pre-fetch check that field value, e.g. typology="office" is valid)
+# TODO: test using 3 consecutive levels from top
