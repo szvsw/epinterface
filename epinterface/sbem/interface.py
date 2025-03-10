@@ -117,11 +117,10 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
         "Systems_assembly",
         "DHW_Constructor",
         "Ventilation_constructor",
-        # "Materials",
-        # "Construction",
-        # "Envelope assembly",
-        # "Windows",
-        # "Infiltration",
+        "Materials",
+        "Window_choices",
+        "Construction_components",
+        "Envelope_assembly",
     ]
     component_dfs_dict = {
         sheet: xls.parse(sheet, skiprows=1)
@@ -132,6 +131,8 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
     # Drop rows with NaNs because we want to be able to have
     # template rows in the sheet.
     for sheet, df in component_dfs_dict.items():
+        if sheet in ["Materials", "Construction_components"]:
+            continue
         mask = df.isna().any(axis=1)
         old_len = len(df)
         df = df[~mask]
@@ -142,6 +143,11 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
             msg = f"No data found in {sheet}."
             raise ValueError(msg)
         component_dfs_dict[sheet] = df
+
+    # remove any duplicate instances from materials
+    component_dfs_dict["Materials"] = component_dfs_dict["Materials"].drop_duplicates(
+        subset=["Name"]
+    )
 
     return component_dfs_dict
 
@@ -352,7 +358,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                         "IsOn": True,
                     }
                 )
-            return
+
             # # add operations
             # # Get the latest created HVAC, SpaceUse and DHW records
             # hvac = tx.hvac.find_first(order={"id": "desc"})
@@ -376,24 +382,24 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
             # add infiltration
             # get the infilitration and name columns from the envelope df
-            # infilitration = component_dfs_dict["Envelope"]["Infiltration", "Name"]
-            # infiltration_map = {}
-            # for _, row in infilitration.iterrows():
-            #     infiltration = tx.infiltration.create(
-            #         data={
-            #             "Name": row["Name"],
-            #             "IsOn": True,
-            #             "ConstantCoefficient": 0.0,
-            #             "TemperatureCoefficient": 0.0,
-            #             "WindVelocityCoefficient": 0.0,
-            #             "WindVelocitySquaredCoefficient": 0.0,
-            #             "AFNAirMassFlowCoefficientCrack": 0.0,
-            #             "AirChangesPerHour": row["Infiltration"],
-            #             "FlowPerExteriorSurfaceArea": 0.0,
-            #             "CalculationMethod": "AirChangesPerHour",
-            #         },
-            #     )
-            #     infiltration_map[row["Name"]] = infiltration.id
+            infiltration = component_dfs_dict["Envelope_assembly"][
+                ["Infiltration", "Name", "Infiltration_unit"]
+            ]
+            for _, row in infiltration.iterrows():
+                infiltration = tx.infiltration.create(
+                    data={
+                        "Name": row["Name"],
+                        "IsOn": True,
+                        "ConstantCoefficient": 0.0,
+                        "TemperatureCoefficient": 0.0,
+                        "WindVelocityCoefficient": 0.0,
+                        "WindVelocitySquaredCoefficient": 0.0,
+                        "AFNAirMassFlowCoefficientCrack": 0.0,
+                        "AirChangesPerHour": row["Infiltration"],
+                        "FlowPerExteriorSurfaceArea": 0.0,
+                        "CalculationMethod": row["Infiltration_unit"],
+                    },
+                )
 
             # add materials
             for _, row in component_dfs_dict["Materials"].iterrows():
@@ -407,34 +413,60 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                             "TemperatureCoefficientThermalConductivity"
                         ],
                         "Type": row["Type"],
-                        "Density": row["Density"],
-                        "Conductivity": row["Conductivity"],
-                        "SpecificHeat": row["SpecificHeat"],
+                        "Density": row["Density [kg/m3]"],
+                        "Conductivity": row["Conductivity [W/m.K]"],
+                        "SpecificHeat": row["SpecificHeat [J/kg.K]"],
                         "VisibleAbsorptance": row["VisibleAbsorptance"],
                     }
                 )
+            for _, row in component_dfs_dict["Window_choices"].iterrows():
+                window = tx.glazingconstructionsimple.create(
+                    data={
+                        "Name": row["Name"],
+                        "UValue": row["UValue"],
+                        "SHGF": row["SHGF"],
+                        "TVis": row["TVis"],
+                        "Type": row["Type"],
+                    }
+                )
 
-            # add construction assemblies - connenct to materials
-            for _, row in component_dfs_dict["Construction"].iterrows():
+            return
+            # add construction assemblies - connect to materials
+            for _, row in component_dfs_dict["Construction_components"].iterrows():
                 layers = []
                 # Iterate over the columns to extract materials and thicknesses
                 for i in range(1, len(row) // 2 + 1):
                     material_key = f"Material_{i}"
                     thickness_key = f"Thickness_{i}"
-                    if material_key in row and thickness_key in row:
-                        layers.append({
-                            "create": {
-                                "LayerOrder": i,
-                                "Thickness": row[thickness_key],
-                                "ConstructionMaterial": {
-                                    "connect": {"Name": row[material_key]}
-                                },
-                            }
-                        })
 
+                    has_material = material_key in row and pd.notna(row[material_key])
+                    has_thickness = thickness_key in row and pd.notna(
+                        row[thickness_key]
+                    )
+                    if has_material and has_thickness:
+                        # check if material is in the materials table
+                        if (
+                            row[material_key]
+                            not in component_dfs_dict["Materials"]["Name"]
+                        ):
+                            msg = f"Material {row[material_key]} not found in materials table."
+                            logger.error(msg)
+                            raise ValueError(msg)
+                        layers.append({
+                            "LayerOrder": i - 1,
+                            "Thickness": row[thickness_key],
+                            "ConstructionMaterial": {
+                                "connect": {"Name": row[material_key]}
+                            },
+                        })
+                print(layers)
                 # Create a ConstructionAssembly entry
                 tx.constructionassembly.create(
-                    data={"Name": row["Name"], "Type": row["Type"], "Layers": layers}
+                    data={
+                        "Name": row["Name"],
+                        "Type": row["Type"],
+                        "Layers": {"create": layers},
+                    }
                 )
 
             # add envelope assemblies - connect to construction assemblies
@@ -471,19 +503,6 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 )
 
             # add glazing constructions
-            window = component_dfs_dict["Construction"].loc[
-                component_dfs_dict["Construction"]["Type"] == "Window"
-            ]
-            for _, row in window.iterrows():
-                window = tx.glazingconstructionsimple.create(
-                    data={
-                        "Name": row["Name"],
-                        "UValue": row["UValue"],
-                        "SHGF": row["SHGC"],
-                        "TVis": row["TVis"],
-                        "Type": row["Glazing"],
-                    }
-                )
 
             # # add envelope - connect to envelope assemblies, glazing constructions, infiltration
             # for _, row in component_dfs_dict["Envelope"].iterrows():
