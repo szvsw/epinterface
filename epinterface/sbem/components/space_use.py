@@ -240,7 +240,7 @@ class WaterUseComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A water use object in the SBEM library."""
 
     FlowRatePerPerson: float = Field(
-        ..., title="Flow rate per person [m3/day/p]", ge=0, le=0.1
+        ..., title="Flow rate per person [m3/day/p]", ge=0, le=10
     )
     Schedule: YearComponent = Field(..., title="Water schedule")
 

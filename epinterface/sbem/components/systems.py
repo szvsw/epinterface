@@ -31,7 +31,7 @@ DistributionType = Literal["Hydronic", "Air", "Steam"]
 class ThermalSystemComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A thermal system object in the SBEM library."""
 
-    ConditioningType: Literal["Heating", "Cooling"]
+    ConditioningType: Literal["Heating", "Cooling", "HeatingAndCooling"]
     Fuel: FuelType
     SystemCOP: float = Field(
         ...,
@@ -56,7 +56,10 @@ class ThermalSystemComponent(NamedObject, MetadataMixin, extra="forbid"):
         Returns:
             heating_system_type (HeatingSystemType): The heating system type.
         """
-        if self.ConditioningType != "Heating":
+        if (
+            self.ConditioningType != "Heating"
+            and self.ConditioningType != "HeatingAndCooling"
+        ):
             msg = "Heating system type is only applicable to heating systems."
             raise ValueError(msg)
         # TODO: compute based off of CoP
@@ -71,7 +74,10 @@ class ThermalSystemComponent(NamedObject, MetadataMixin, extra="forbid"):
         Returns:
             cooling_system_type (CoolingSystemType): The cooling system type.
         """
-        if self.ConditioningType != "Cooling":
+        if (
+            self.ConditioningType != "Cooling"
+            and self.ConditioningType != "HeatingAndCooling"
+        ):
             msg = "Cooling system type is only applicable to cooling systems."
             raise ValueError(msg)
         # TODO: compute based off of CoP
@@ -104,10 +110,10 @@ class ConditioningSystemsComponent(NamedObject, MetadataMixin, extra="forbid"):
 
         Cannot have a heating system assigned to a cooling system and vice versa.
         """
-        if self.Heating and self.Heating.ConditioningType != "Heating":
+        if self.Heating and "heating" not in self.Heating.ConditioningType.lower():
             msg = "Heating system type is only applicable to heating systems."
             raise ValueError(msg)
-        if self.Cooling and self.Cooling.ConditioningType != "Cooling":
+        if self.Cooling and "cooling" not in self.Cooling.ConditioningType.lower():
             msg = "Cooling system type is only applicable to cooling systems."
             raise ValueError(msg)
 
@@ -115,7 +121,7 @@ class ConditioningSystemsComponent(NamedObject, MetadataMixin, extra="forbid"):
 
 
 VentilationType = Literal["Natural", "Mechanical", "Hybrid"]
-VentilationTechType = Literal["ERV", "HRV", "DCV", "None", "Custom"]
+VentilationTechType = Literal["ERV", "HRV", "DCV", "NoMechanicalVentilation", "Custom"]
 
 
 class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):

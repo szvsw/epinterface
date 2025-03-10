@@ -40,10 +40,20 @@ from epinterface.sbem.components.systems import (
     ZoneHVACComponent,
 )
 from epinterface.sbem.prisma.client import (
+    CONDITIONING_SYSTEMS_INCLUDE,
+    CONSTRUCTION_ASSEMBLY_INCLUDE,
+    DHW_INCLUDE,
+    ENVELOPE_ASSEMBLY_INCLUDE,
+    ENVELOPE_INCLUDE,
     EQUIPMENT_INCLUDE,
+    HVAC_INCLUDE,
     LIGHTING_INCLUDE,
     OCCUPANCY_INCLUDE,
+    SPACE_USE_INCLUDE,
+    THERMAL_SYSTEM_INCLUDE,
     THERMOSTAT_INCLUDE,
+    VENTILATION_INCLUDE,
+    WATER_USE_INCLUDE,
     YEAR_INCLUDE,
     delete_all,
 )
@@ -289,16 +299,19 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             ThermostatComponent.model_validate(thermostat, from_attributes=True)
 
         for _, row in component_dfs_dict["Water_flow"].iterrows():
-            tx.wateruse.create(
+            water_use = tx.wateruse.create(
                 data={
                     "Name": row["Name"],
                     "FlowRatePerPerson": row["DHW_flow_rate"],
                     "Schedule": {"connect": {"Name": row["Water_schedule"]}},
-                }
+                },
+                include=WATER_USE_INCLUDE,
             )
+            WaterUseComponent.model_validate(water_use, from_attributes=True)
+
         # space use
         for _, row in component_dfs_dict["Space_use_assembly"].iterrows():
-            tx.spaceuse.create(
+            space_use = tx.spaceuse.create(
                 data={
                     "Name": row["Name"],
                     "Occupancy": {"connect": {"Name": row["Occupancy"]}},
@@ -306,35 +319,43 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "Equipment": {"connect": {"Name": row["Equipment"]}},
                     "Thermostat": {"connect": {"Name": row["Setpoints"]}},
                     "WaterUse": {"connect": {"Name": row["WaterUse"]}},
-                }
+                },
+                include=SPACE_USE_INCLUDE,
             )
+            ZoneSpaceUseComponent.model_validate(space_use, from_attributes=True)
 
         # # add cooling/heating systems
         # # TODO: think about what happens when a heating and cooling system have the same name
         for _, row in component_dfs_dict["Conditioning_constructor"].iterrows():
-            tx.thermalsystem.create(
+            thermal_system = tx.thermalsystem.create(
                 data={
                     "Name": row["Name"],
                     "ConditioningType": row["Type"],
                     "Fuel": row["Fuel"],
                     "SystemCOP": row["COP_equipment"],
                     "DistributionCOP": row["Distribution_efficiency"],
-                }
+                },
+                include=THERMAL_SYSTEM_INCLUDE,
             )
+            ThermalSystemComponent.model_validate(thermal_system, from_attributes=True)
 
         # add conditioning systems
         for _, row in component_dfs_dict["Systems_assembly"].iterrows():
-            tx.conditioningsystems.create(
+            conditioning_system = tx.conditioningsystems.create(
                 data={
                     "Name": row["Name"],
                     "Heating": {"connect": {"Name": row["Heating"]}},
                     "Cooling": {"connect": {"Name": row["Cooling"]}},
-                }
+                },
+                include=CONDITIONING_SYSTEMS_INCLUDE,
+            )
+            ConditioningSystemsComponent.model_validate(
+                conditioning_system, from_attributes=True
             )
 
         # add ventilation
         for _, row in component_dfs_dict["Ventilation_constructor"].iterrows():
-            tx.ventilation.create(
+            ventilation = tx.ventilation.create(
                 data={
                     "Name": row["Name"],
                     "Rate": row["Rate"],
@@ -342,22 +363,25 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "Type": row["Ventilation_type"],
                     "TechType": row["Tech_type"],
                     "Schedule": {"connect": {"Name": row["Window_schedule"]}},
-                }
+                },
+                include=VENTILATION_INCLUDE,
             )
-
+            VentilationComponent.model_validate(ventilation, from_attributes=True)
         # add hvac
         for _, row in component_dfs_dict["Systems_assembly"].iterrows():
-            tx.hvac.create(
+            hvac = tx.hvac.create(
                 data={
                     "Name": row["Name"],
                     "ConditioningSystems": {"connect": {"Name": row["Name"]}},
                     "Ventilation": {"connect": {"Name": row["Ventilation"]}},
-                }
+                },
+                include=HVAC_INCLUDE,
             )
+            ZoneHVACComponent.model_validate(hvac, from_attributes=True)
 
         # add dhw
         for _, row in component_dfs_dict["DHW_Constructor"].iterrows():
-            tx.dhw.create(
+            dhw = tx.dhw.create(
                 data={
                     "Name": row["Name"],
                     "SystemCOP": row["System_COP"],
@@ -366,12 +390,14 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "FuelType": row["DHW_energy_source"],
                     "DistributionCOP": row["Distribution_efficiency"],
                     "IsOn": True,
-                }
+                },
+                include=DHW_INCLUDE,
             )
+            DHWComponent.model_validate(dhw, from_attributes=True)
 
         # add materials
         for _, row in component_dfs_dict["Materials"].iterrows():
-            tx.constructionmaterial.create(
+            mat = tx.constructionmaterial.create(
                 data={
                     "Name": row["Name"],
                     "Roughness": row["Roughness"],
@@ -387,15 +413,20 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "VisibleAbsorptance": row["VisibleAbsorptance"],
                 }
             )
+            ConstructionMaterialComponent.model_validate(mat, from_attributes=True)
+
         for _, row in component_dfs_dict["Window_choices"].iterrows():
-            tx.glazingconstructionsimple.create(
+            glazing = tx.glazingconstructionsimple.create(
                 data={
                     "Name": row["Name"],
                     "UValue": row["UValue"],
                     "SHGF": row["SHGF"],
                     "TVis": row["TVis"],
                     "Type": row["Type"],
-                }
+                },
+            )
+            GlazingConstructionSimpleComponent.model_validate(
+                glazing, from_attributes=True
             )
 
         # add construction assemblies - connect to materials
@@ -419,18 +450,22 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                         },
                     })
             # Create a ConstructionAssembly entry
-            tx.constructionassembly.create(
+            construction_assembly = tx.constructionassembly.create(
                 data={
                     "Name": row["Name"],
                     "Type": row["Type"],
                     "Layers": {"create": layers},
-                }
+                },
+                include=CONSTRUCTION_ASSEMBLY_INCLUDE,
+            )
+            ConstructionAssemblyComponent.model_validate(
+                construction_assembly, from_attributes=True
             )
 
         # add envelope assemblies - connect to construction assemblies
         # TODO: update with changes to excel
         for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
-            tx.envelopeassembly.create(
+            envelope_assembly = tx.envelopeassembly.create(
                 data={
                     "Name": row["Name"],
                     "InternalMassExposedAreaPerArea": row["InternalMassFraction"],
@@ -455,12 +490,16 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                         "connect": {"Name": row["GroundWall"]}  # Basement wall
                     },
                     "InternalMassAssembly": {"connect": {"Name": row["InternalMass"]}},
-                }
+                },
+                include=ENVELOPE_ASSEMBLY_INCLUDE,
+            )
+            EnvelopeAssemblyComponent.model_validate(
+                envelope_assembly, from_attributes=True
             )
 
         # add envelope - connect to envelope assemblies, glazing constructions, infiltration
         for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
-            tx.envelope.create(
+            envelope = tx.envelope.create(
                 data={
                     "Name": row["Name"],
                     "Assemblies": {"connect": {"Name": row["Name"]}},
@@ -483,5 +522,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                         }
                     },
                     "Window": {"connect": {"Name": row["Windows"]}},
-                }
+                },
+                include=ENVELOPE_INCLUDE,
             )
+            ZoneEnvelopeComponent.model_validate(envelope, from_attributes=True)
