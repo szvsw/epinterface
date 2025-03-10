@@ -191,8 +191,7 @@ def test_add_water_to_idf_zone(idf: IDF):
     pass
 
 
-# @pytest.mark.skip(reason="Not implemented")
-def test_add_loads_to_idf_zone(idf: IDF, schedule: YearComponent):
+def test_add_space_use_to_idf_zone(idf: IDF, schedule: YearComponent):
     """Test the add_loads_to_idf_zone method."""
     zone_name = "default_zone"
 
@@ -333,4 +332,5 @@ def test_add_loads_to_idf_zone(idf: IDF, schedule: YearComponent):
     # assert idf.getobject("SCHEDULE:YEAR", expected_water_schedule_name) is not None
 
 
-# TODO: test with spaces in names
+# TODO: test with spaces/invalid chars in names
+# TODO: test with incorrect schedule types
