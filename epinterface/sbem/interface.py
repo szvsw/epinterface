@@ -107,12 +107,12 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
         "Day_schedules",
         "Week_schedules",
         "Year_schedules",
-        # "Occupancy",
-        # "Lighting",
-        # "Equipment",
-        # "Thermostat",
-        # "Water flow",
-        # "Space use assembly",
+        "Occupancy",
+        "Lighting",
+        "Power",
+        "Setpoints",
+        "Water_flow",
+        "Space_use_assembly",
         # "Conditioning",
         # "HVAC",
         # "DHW",
@@ -224,15 +224,14 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     }
                 )
 
-            return
             for _, row in component_dfs_dict["Occupancy"].iterrows():
                 tx.occupancy.create(
                     data={
                         "Name": row["Name"],
-                        "PeopleDensity": row["Occupancy"],
+                        "PeopleDensity": row["Occupant_density"],
                         "IsOn": True,
                         "MetabolicRate": row["MetabolicRate"],
-                        "Schedule": {"connect": {"Name": row["Schedule"]}},
+                        "Schedule": {"connect": {"Name": row["Occupant_schedule"]}},
                     }
                 )
 
@@ -240,60 +239,60 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 tx.lighting.create(
                     data={
                         "Name": row["Name"],
-                        "PowerDensity": row["PowerDensity"],
+                        "PowerDensity": row["Lighting_power_density"],
                         "DimmingType": row["DimmingType"],
                         "IsOn": True,
-                        "Schedule": {"connect": {"Name": row["Schedule"]}},
+                        "Schedule": {"connect": {"Name": row["Lighting_schedule"]}},
                     }
                 )
 
-            for _, row in component_dfs_dict["Equipment"].iterrows():
+            for _, row in component_dfs_dict["Power"].iterrows():
                 tx.equipment.create(
                     data={
                         "Name": row["Name"],
-                        "PowerDensity": row["PowerDensity"],
+                        "PowerDensity": row["Equipment_power_density"],
                         "IsOn": True,
-                        "Schedule": {"connect": {"Name": row["Schedule"]}},
+                        "Schedule": {"connect": {"Name": row["Equipment_schedule"]}},
                     }
                 )
 
-            for _, row in component_dfs_dict["Thermostat"].iterrows():
+            for _, row in component_dfs_dict["Setpoints"].iterrows():
                 tx.thermostat.create(
                     data={
                         "Name": row["Name"],
-                        "HeatingSetpoint": row["HeatingSetpoint"],
-                        "CoolingSetpoint": row["CoolingSetpoint"],
+                        "HeatingSetpoint": row["Heating_setpoint"],
+                        "CoolingSetpoint": row["Cooling_setpoint"],
                         "IsOn": True,
                         "HeatingSchedule": {
-                            "connect": {"Name": row["HeatingSchedule"]}
+                            "connect": {"Name": row["Heating_schedule"]}
                         },
                         "CoolingSchedule": {
-                            "connect": {"Name": row["CoolingSchedule"]}
+                            "connect": {"Name": row["Cooling_schedule"]}
                         },
                     }
                 )
 
-            for _, row in component_dfs_dict["WaterUse"].iterrows():
+            for _, row in component_dfs_dict["Water_flow"].iterrows():
                 tx.wateruse.create(
                     data={
                         "Name": row["Name"],
-                        "FlowRatePerPerson": row["FlowRate"],
-                        "Schedule": {"connect": {"Name": row["Schedule"]}},
+                        "FlowRatePerPerson": row["DHW_flow_rate"],
+                        "Schedule": {"connect": {"Name": row["Water_schedule"]}},
                     }
                 )
-
             # space use
-            for _, row in component_dfs_dict["Space use assembly"].iterrows():
+            for _, row in component_dfs_dict["Space_use_assembly"].iterrows():
                 tx.spaceuse.create(
                     data={
                         "Name": row["Name"],
                         "Occupancy": {"connect": {"Name": row["Occupancy"]}},
                         "Lighting": {"connect": {"Name": row["Lighting"]}},
                         "Equipment": {"connect": {"Name": row["Equipment"]}},
-                        "Thermostat": {"connect": {"Name": row["Thermostat"]}},
+                        "Thermostat": {"connect": {"Name": row["Setpoints"]}},
                         "WaterUse": {"connect": {"Name": row["WaterUse"]}},
                     }
                 )
+            return
 
             # # add cooling/heating systems
             # # TODO: think about what happens when a heating and cooling system have the same name
@@ -515,7 +514,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
 
 if __name__ == "__main__":
-    path_to_excel = Path("tests/data/template_tester_v2.xlsx")
+    path_to_excel = Path("tests/data/template_tester_v3.xlsx")
     from epinterface.sbem.prisma.client import PrismaSettings
 
     logging.basicConfig(level=logging.INFO)
