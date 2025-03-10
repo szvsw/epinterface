@@ -636,7 +636,7 @@ def test_overwriting_a_none_key_with_dict():
     assert d1 == {"a": {"b": {"c": 3}}}
 
 
-@pytest.mark.xfail(reason="not yet implemented")
+@pytest.mark.skip(reason="not yet implemented")
 def test_scoped_db_compositions_work(preseeded_readonly_db: Prisma):
     """Test that scoped db compositions work."""
     # 1. copy the preseeded_readonly_db to a new path in the same directory
