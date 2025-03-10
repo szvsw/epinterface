@@ -113,10 +113,10 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
         "Setpoints",
         "Water_flow",
         "Space_use_assembly",
-        # "Conditioning",
-        # "HVAC",
-        # "DHW",
-        # "Ventilation",
+        "Conditioning_constructor",
+        "Systems_assembly",
+        "DHW_Constructor",
+        "Ventilation_constructor",
         # "Materials",
         # "Construction",
         # "Envelope assembly",
@@ -292,79 +292,67 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                         "WaterUse": {"connect": {"Name": row["WaterUse"]}},
                     }
                 )
-            return
 
             # # add cooling/heating systems
             # # TODO: think about what happens when a heating and cooling system have the same name
-            # for system_type in ["Heating", "Cooling"]:
-            #     for _, row in (
-            #         component_dfs_dict["Conditioning"]
-            #         .query(f'Type == "{system_type}"')
-            #         .iterrows()
-            #     ):
-            #         tx.thermalsystem.create(
-            #             data={
-            #                 "Name": row["Name"],
-            #                 "ConditioningType": system_type,
-            #                 "Fuel": row["Fuel"],
-            #                 "SystemCOP": row["Efficiency"],
-            #                 "DistributionCOP": row["DistributionEfficiency"],
-            #             }
-            #         )
-
-            # # add conditioning systems
-            # for _, row in component_dfs_dict["Conditioning"].iterrows():
-            #     system = tx.thermalsystem.create(
-            #         data={
-            #             "Name": row["Name"],
-            #             "ConditioningType": row["Type"],  # "Heating" or "Cooling"
-            #             "Fuel": row["Fuel"],
-            #             "SystemCOP": row["Efficiency"],
-            #             "DistributionCOP": row["DistributionEfficiency"],
-            #         }
-            #     )
-
-            # # add ventilation
-            # for _, row in component_dfs_dict["Ventilation"].iterrows():
-            #     system = tx.ventilation.create(
-            #         data={
-            #             "Name": row["Name"],
-            #             "Rate": row["Rate"],
-            #             "MinFreshAir": row["MinFreshAir"],
-            #             "Type": row["Type"],
-            #             "TechType": row["TechType"],
-            #             "Schedule": {"connect": {"Name": row["Schedule"]}},
-            #         }
-            #     )
-
-            # # add hvac
-            # for _, row in component_dfs_dict["HVAC"].iterrows():
-            #     if (
-            #         row["Name"] in conditioning_map
-            #         and row["Ventilation"] in ventilation_map
-            #     ):
-            #         tx.hvac.create(
-            #             data={
-            #                 "Name": row["Name"],
-            #                 "ConditioningSystemsId": conditioning_map[row["Name"]],
-            #                 "VentilationId": ventilation_map[row["Ventilation"]],
-            #             }
-            #         )
-
-            # add dhw
-            for _, row in component_dfs_dict["DHW"].iterrows():
-                tx.dhw.create(
+            for _, row in component_dfs_dict["Conditioning_constructor"].iterrows():
+                tx.thermalsystem.create(
                     data={
                         "Name": row["Name"],
-                        "SystemCOP": row["SystemCOP"],
-                        "WaterTemperatureInlet": row["WaterTemperatureInlet"],
-                        "WaterSupplyTemperature": row["WaterSupplyTemperature"],
-                        "FuelType": row["FuelType"],
-                        "DistributionCOP": row["DistributionEfficiency"],
-                        "IsOn": True,
+                        "ConditioningType": row["Type"],
+                        "Fuel": row["Fuel"],
+                        "SystemCOP": row["COP_equipment"],
+                        "DistributionCOP": row["Distribution_efficiency"],
                     }
                 )
 
+            # add conditioning systems
+            for _, row in component_dfs_dict["Systems_assembly"].iterrows():
+                tx.conditioningsystems.create(
+                    data={
+                        "Name": row["Name"],
+                        "Heating": {"connect": {"Name": row["Heating"]}},
+                        "Cooling": {"connect": {"Name": row["Cooling"]}},
+                    }
+                )
+
+            # add ventilation
+            for _, row in component_dfs_dict["Ventilation_constructor"].iterrows():
+                system = tx.ventilation.create(
+                    data={
+                        "Name": row["Name"],
+                        "Rate": row["Rate"],
+                        "MinFreshAir": row["Min_fresh_air"],
+                        "Type": row["Ventilation_type"],
+                        "TechType": row["Tech_type"],
+                        "Schedule": {"connect": {"Name": row["Window_schedule"]}},
+                    }
+                )
+
+            # add hvac
+            for _, row in component_dfs_dict["Systems_assembly"].iterrows():
+                tx.hvac.create(
+                    data={
+                        "Name": row["Name"],
+                        "ConditioningSystems": {"connect": {"Name": row["Name"]}},
+                        "Ventilation": {"connect": {"Name": row["Ventilation"]}},
+                    }
+                )
+
+            # add dhw
+            for _, row in component_dfs_dict["DHW_Constructor"].iterrows():
+                tx.dhw.create(
+                    data={
+                        "Name": row["Name"],
+                        "SystemCOP": row["System_COP"],
+                        "WaterTemperatureInlet": row["Water_temperature_inlet"],
+                        "WaterSupplyTemperature": row["Water_supply_temperature"],
+                        "FuelType": row["DHW_energy_source"],
+                        "DistributionCOP": row["Distribution_efficiency"],
+                        "IsOn": True,
+                    }
+                )
+            return
             # # add operations
             # # Get the latest created HVAC, SpaceUse and DHW records
             # hvac = tx.hvac.find_first(order={"id": "desc"})
