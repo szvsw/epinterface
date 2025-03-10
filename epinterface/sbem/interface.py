@@ -1,6 +1,7 @@
 """A module for parsing SBEM template data and generating EnergyPlus objects."""
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +101,9 @@ def load_excel_to_dict(base_path: Path, sheet_name: str) -> dict[str, Any]:
     return {d["Name"]: d for d in data}
 
 
+# TODO: consider adding validations for every single component using deep fetchers
+# within the transaction so that nicer errors are raised when the data is going to be loaded.
+# TODO: consider using batch adds rather than looping adds.
 def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
     """Parse an excel file and return dictionary of dataframes."""
     xls = pd.ExcelFile(path)
@@ -132,8 +136,9 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
     # template rows in the sheet.
     for sheet, df in component_dfs_dict.items():
         if sheet in ["Materials", "Construction_components"]:
-            continue
-        mask = df.isna().any(axis=1)
+            mask = df["Name"].isna()
+        else:
+            mask = df.isna().any(axis=1)
         old_len = len(df)
         df = df[~mask]
         new_len = len(df)
@@ -154,379 +159,317 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
 
 def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C901
     """Add an excel file to the database."""
-    from datetime import timedelta
-
     """Add an excel file to the database."""
-    with db:
-        if erase_db:
-            delete_all()
+    if erase_db:
+        delete_all()
 
-        component_dfs_dict = excel_parser(path)
-        with db.tx(max_wait=timedelta(seconds=10), timeout=timedelta(minutes=1)) as tx:
-            for _, row in component_dfs_dict["Day_schedules"].iterrows():
-                tx.day.create(
-                    data={
-                        "Name": str(row["Day_schedule_name"]),
-                        "Type": str(row["Type"]),
-                        "Hour_00": float(row["Hour0"]),
-                        "Hour_01": float(row["Hour1"]),
-                        "Hour_02": float(row["Hour2"]),
-                        "Hour_03": float(row["Hour3"]),
-                        "Hour_04": float(row["Hour4"]),
-                        "Hour_05": float(row["Hour5"]),
-                        "Hour_06": float(row["Hour6"]),
-                        "Hour_07": float(row["Hour7"]),
-                        "Hour_08": float(row["Hour8"]),
-                        "Hour_09": float(row["Hour9"]),
-                        "Hour_10": float(row["Hour10"]),
-                        "Hour_11": float(row["Hour11"]),
-                        "Hour_12": float(row["Hour12"]),
-                        "Hour_13": float(row["Hour13"]),
-                        "Hour_14": float(row["Hour14"]),
-                        "Hour_15": float(row["Hour15"]),
-                        "Hour_16": float(row["Hour16"]),
-                        "Hour_17": float(row["Hour17"]),
-                        "Hour_18": float(row["Hour18"]),
-                        "Hour_19": float(row["Hour19"]),
-                        "Hour_20": float(row["Hour20"]),
-                        "Hour_21": float(row["Hour21"]),
-                        "Hour_22": float(row["Hour22"]),
-                        "Hour_23": float(row["Hour23"]),
-                    }
-                )
+    component_dfs_dict = excel_parser(path)
+    with db.tx(max_wait=timedelta(seconds=10), timeout=timedelta(minutes=1)) as tx:
+        for _, row in component_dfs_dict["Day_schedules"].iterrows():
+            tx.day.create(
+                data={
+                    "Name": str(row["Day_schedule_name"]),
+                    "Type": str(row["Type"]),
+                    "Hour_00": float(row["Hour0"]),
+                    "Hour_01": float(row["Hour1"]),
+                    "Hour_02": float(row["Hour2"]),
+                    "Hour_03": float(row["Hour3"]),
+                    "Hour_04": float(row["Hour4"]),
+                    "Hour_05": float(row["Hour5"]),
+                    "Hour_06": float(row["Hour6"]),
+                    "Hour_07": float(row["Hour7"]),
+                    "Hour_08": float(row["Hour8"]),
+                    "Hour_09": float(row["Hour9"]),
+                    "Hour_10": float(row["Hour10"]),
+                    "Hour_11": float(row["Hour11"]),
+                    "Hour_12": float(row["Hour12"]),
+                    "Hour_13": float(row["Hour13"]),
+                    "Hour_14": float(row["Hour14"]),
+                    "Hour_15": float(row["Hour15"]),
+                    "Hour_16": float(row["Hour16"]),
+                    "Hour_17": float(row["Hour17"]),
+                    "Hour_18": float(row["Hour18"]),
+                    "Hour_19": float(row["Hour19"]),
+                    "Hour_20": float(row["Hour20"]),
+                    "Hour_21": float(row["Hour21"]),
+                    "Hour_22": float(row["Hour22"]),
+                    "Hour_23": float(row["Hour23"]),
+                }
+            )
 
-            for _, row in component_dfs_dict["Week_schedules"].iterrows():
-                tx.week.create(
-                    data={
-                        "Name": row["Week_schedules"],
-                        "Monday": {"connect": {"Name": row["Mon"]}},
-                        "Tuesday": {"connect": {"Name": row["Tue"]}},
-                        "Wednesday": {"connect": {"Name": row["Wed"]}},
-                        "Thursday": {"connect": {"Name": row["Thur"]}},
-                        "Friday": {"connect": {"Name": row["Fri"]}},
-                        "Saturday": {"connect": {"Name": row["Sat"]}},
-                        "Sunday": {"connect": {"Name": row["Sun"]}},
+        for _, row in component_dfs_dict["Week_schedules"].iterrows():
+            tx.week.create(
+                data={
+                    "Name": row["Week_schedules"],
+                    "Monday": {"connect": {"Name": row["Mon"]}},
+                    "Tuesday": {"connect": {"Name": row["Tue"]}},
+                    "Wednesday": {"connect": {"Name": row["Wed"]}},
+                    "Thursday": {"connect": {"Name": row["Thur"]}},
+                    "Friday": {"connect": {"Name": row["Fri"]}},
+                    "Saturday": {"connect": {"Name": row["Sat"]}},
+                    "Sunday": {"connect": {"Name": row["Sun"]}},
+                },
+            )
+
+        # add year: note that your will need to connnnect to weeks
+        for _, row in component_dfs_dict["Year_schedules"].iterrows():
+            tx.year.create(
+                data={
+                    "Name": row["Year_schedules"],
+                    "Type": row["Schedule_type"],
+                    "January": {"connect": {"Name": row["Jan"]}},
+                    "February": {"connect": {"Name": row["Feb"]}},
+                    "March": {"connect": {"Name": row["Mar"]}},
+                    "April": {"connect": {"Name": row["Apr"]}},
+                    "May": {"connect": {"Name": row["May"]}},
+                    "June": {"connect": {"Name": row["Jun"]}},
+                    "July": {"connect": {"Name": row["Jul"]}},
+                    "August": {"connect": {"Name": row["Aug"]}},
+                    "September": {"connect": {"Name": row["Sep"]}},
+                    "October": {"connect": {"Name": row["Oct"]}},
+                    "November": {"connect": {"Name": row["Nov"]}},
+                    "December": {"connect": {"Name": row["Dec"]}},
+                }
+            )
+
+        for _, row in component_dfs_dict["Occupancy"].iterrows():
+            tx.occupancy.create(
+                data={
+                    "Name": row["Name"],
+                    "PeopleDensity": row["Occupant_density"],
+                    "IsOn": True,
+                    "MetabolicRate": row["MetabolicRate"],
+                    "Schedule": {"connect": {"Name": row["Occupant_schedule"]}},
+                }
+            )
+
+        for _, row in component_dfs_dict["Lighting"].iterrows():
+            tx.lighting.create(
+                data={
+                    "Name": row["Name"],
+                    "PowerDensity": row["Lighting_power_density"],
+                    "DimmingType": row["DimmingType"],
+                    "IsOn": True,
+                    "Schedule": {"connect": {"Name": row["Lighting_schedule"]}},
+                }
+            )
+
+        for _, row in component_dfs_dict["Power"].iterrows():
+            tx.equipment.create(
+                data={
+                    "Name": row["Name"],
+                    "PowerDensity": row["Equipment_power_density"],
+                    "IsOn": True,
+                    "Schedule": {"connect": {"Name": row["Equipment_schedule"]}},
+                }
+            )
+
+        for _, row in component_dfs_dict["Setpoints"].iterrows():
+            tx.thermostat.create(
+                data={
+                    "Name": row["Name"],
+                    "HeatingSetpoint": row["Heating_setpoint"],
+                    "CoolingSetpoint": row["Cooling_setpoint"],
+                    "IsOn": True,
+                    "HeatingSchedule": {"connect": {"Name": row["Heating_schedule"]}},
+                    "CoolingSchedule": {"connect": {"Name": row["Cooling_schedule"]}},
+                }
+            )
+
+        for _, row in component_dfs_dict["Water_flow"].iterrows():
+            tx.wateruse.create(
+                data={
+                    "Name": row["Name"],
+                    "FlowRatePerPerson": row["DHW_flow_rate"],
+                    "Schedule": {"connect": {"Name": row["Water_schedule"]}},
+                }
+            )
+        # space use
+        for _, row in component_dfs_dict["Space_use_assembly"].iterrows():
+            tx.spaceuse.create(
+                data={
+                    "Name": row["Name"],
+                    "Occupancy": {"connect": {"Name": row["Occupancy"]}},
+                    "Lighting": {"connect": {"Name": row["Lighting"]}},
+                    "Equipment": {"connect": {"Name": row["Equipment"]}},
+                    "Thermostat": {"connect": {"Name": row["Setpoints"]}},
+                    "WaterUse": {"connect": {"Name": row["WaterUse"]}},
+                }
+            )
+
+        # # add cooling/heating systems
+        # # TODO: think about what happens when a heating and cooling system have the same name
+        for _, row in component_dfs_dict["Conditioning_constructor"].iterrows():
+            tx.thermalsystem.create(
+                data={
+                    "Name": row["Name"],
+                    "ConditioningType": row["Type"],
+                    "Fuel": row["Fuel"],
+                    "SystemCOP": row["COP_equipment"],
+                    "DistributionCOP": row["Distribution_efficiency"],
+                }
+            )
+
+        # add conditioning systems
+        for _, row in component_dfs_dict["Systems_assembly"].iterrows():
+            tx.conditioningsystems.create(
+                data={
+                    "Name": row["Name"],
+                    "Heating": {"connect": {"Name": row["Heating"]}},
+                    "Cooling": {"connect": {"Name": row["Cooling"]}},
+                }
+            )
+
+        # add ventilation
+        for _, row in component_dfs_dict["Ventilation_constructor"].iterrows():
+            tx.ventilation.create(
+                data={
+                    "Name": row["Name"],
+                    "Rate": row["Rate"],
+                    "MinFreshAir": row["Min_fresh_air"],
+                    "Type": row["Ventilation_type"],
+                    "TechType": row["Tech_type"],
+                    "Schedule": {"connect": {"Name": row["Window_schedule"]}},
+                }
+            )
+
+        # add hvac
+        for _, row in component_dfs_dict["Systems_assembly"].iterrows():
+            tx.hvac.create(
+                data={
+                    "Name": row["Name"],
+                    "ConditioningSystems": {"connect": {"Name": row["Name"]}},
+                    "Ventilation": {"connect": {"Name": row["Ventilation"]}},
+                }
+            )
+
+        # add dhw
+        for _, row in component_dfs_dict["DHW_Constructor"].iterrows():
+            tx.dhw.create(
+                data={
+                    "Name": row["Name"],
+                    "SystemCOP": row["System_COP"],
+                    "WaterTemperatureInlet": row["Water_temperature_inlet"],
+                    "WaterSupplyTemperature": row["Water_supply_temperature"],
+                    "FuelType": row["DHW_energy_source"],
+                    "DistributionCOP": row["Distribution_efficiency"],
+                    "IsOn": True,
+                }
+            )
+
+        # add materials
+        for _, row in component_dfs_dict["Materials"].iterrows():
+            tx.constructionmaterial.create(
+                data={
+                    "Name": row["Name"],
+                    "Roughness": row["Roughness"],
+                    "ThermalAbsorptance": row["ThermalAbsorptance"],
+                    "SolarAbsorptance": row["SolarAbsorptance"],
+                    "TemperatureCoefficientThermalConductivity": row[
+                        "TemperatureCoefficientThermalConductivity"
+                    ],
+                    "Type": row["Type"],
+                    "Density": row["Density [kg/m3]"],
+                    "Conductivity": row["Conductivity [W/m.K]"],
+                    "SpecificHeat": row["SpecificHeat [J/kg.K]"],
+                    "VisibleAbsorptance": row["VisibleAbsorptance"],
+                }
+            )
+        for _, row in component_dfs_dict["Window_choices"].iterrows():
+            tx.glazingconstructionsimple.create(
+                data={
+                    "Name": row["Name"],
+                    "UValue": row["UValue"],
+                    "SHGF": row["SHGF"],
+                    "TVis": row["TVis"],
+                    "Type": row["Type"],
+                }
+            )
+
+        # add construction assemblies - connect to materials
+        for _, row in component_dfs_dict["Construction_components"].iterrows():
+            if "window" in row["Type"].lower():
+                continue
+            layers = []
+            # Iterate over the columns to extract materials and thicknesses
+            for i in range(1, len(row) // 2 + 1):
+                material_key = f"Material_{i}"
+                thickness_key = f"Thickness_{i}"
+
+                has_material = material_key in row and pd.notna(row[material_key])
+                has_thickness = thickness_key in row and pd.notna(row[thickness_key])
+                if has_material and has_thickness:
+                    layers.append({
+                        "LayerOrder": i - 1,
+                        "Thickness": row[thickness_key],
+                        "ConstructionMaterial": {
+                            "connect": {"Name": row[material_key]}
+                        },
+                    })
+            # Create a ConstructionAssembly entry
+            tx.constructionassembly.create(
+                data={
+                    "Name": row["Name"],
+                    "Type": row["Type"],
+                    "Layers": {"create": layers},
+                }
+            )
+
+        # add envelope assemblies - connect to construction assemblies
+        # TODO: update with changes to excel
+        for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
+            tx.envelopeassembly.create(
+                data={
+                    "Name": row["Name"],
+                    "InternalMassExposedAreaPerArea": row["InternalMassFraction"],
+                    "GroundIsAdiabatic": False,
+                    "RoofIsAdiabatic": False,
+                    "FacadeIsAdiabatic": False,
+                    "SlabIsAdiabatic": False,
+                    "PartitionIsAdiabatic": False,
+                    "RoofAssembly": {"connect": {"Name": row["Roof"]}},
+                    "FacadeAssembly": {"connect": {"Name": row["Facade"]}},
+                    "SlabAssembly": {
+                        "connect": {"Name": row["Slab"]}
+                    },  # FLOOR CEILING SYSTEM!!!!
+                    "PartitionAssembly": {"connect": {"Name": row["Partition"]}},
+                    "ExternalFloorAssembly": {
+                        "connect": {"Name": row["ExternalFloor"]}
                     },
-                )
-
-            # add year: note that your will need to connnnect to weeks
-            for _, row in component_dfs_dict["Year_schedules"].iterrows():
-                tx.year.create(
-                    data={
-                        "Name": row["Year_schedules"],
-                        "Type": row["Schedule_type"],
-                        "January": {"connect": {"Name": row["Jan"]}},
-                        "February": {"connect": {"Name": row["Feb"]}},
-                        "March": {"connect": {"Name": row["Mar"]}},
-                        "April": {"connect": {"Name": row["Apr"]}},
-                        "May": {"connect": {"Name": row["May"]}},
-                        "June": {"connect": {"Name": row["Jun"]}},
-                        "July": {"connect": {"Name": row["Jul"]}},
-                        "August": {"connect": {"Name": row["Aug"]}},
-                        "September": {"connect": {"Name": row["Sep"]}},
-                        "October": {"connect": {"Name": row["Oct"]}},
-                        "November": {"connect": {"Name": row["Nov"]}},
-                        "December": {"connect": {"Name": row["Dec"]}},
-                    }
-                )
-
-            for _, row in component_dfs_dict["Occupancy"].iterrows():
-                tx.occupancy.create(
-                    data={
-                        "Name": row["Name"],
-                        "PeopleDensity": row["Occupant_density"],
-                        "IsOn": True,
-                        "MetabolicRate": row["MetabolicRate"],
-                        "Schedule": {"connect": {"Name": row["Occupant_schedule"]}},
-                    }
-                )
-
-            for _, row in component_dfs_dict["Lighting"].iterrows():
-                tx.lighting.create(
-                    data={
-                        "Name": row["Name"],
-                        "PowerDensity": row["Lighting_power_density"],
-                        "DimmingType": row["DimmingType"],
-                        "IsOn": True,
-                        "Schedule": {"connect": {"Name": row["Lighting_schedule"]}},
-                    }
-                )
-
-            for _, row in component_dfs_dict["Power"].iterrows():
-                tx.equipment.create(
-                    data={
-                        "Name": row["Name"],
-                        "PowerDensity": row["Equipment_power_density"],
-                        "IsOn": True,
-                        "Schedule": {"connect": {"Name": row["Equipment_schedule"]}},
-                    }
-                )
-
-            for _, row in component_dfs_dict["Setpoints"].iterrows():
-                tx.thermostat.create(
-                    data={
-                        "Name": row["Name"],
-                        "HeatingSetpoint": row["Heating_setpoint"],
-                        "CoolingSetpoint": row["Cooling_setpoint"],
-                        "IsOn": True,
-                        "HeatingSchedule": {
-                            "connect": {"Name": row["Heating_schedule"]}
-                        },
-                        "CoolingSchedule": {
-                            "connect": {"Name": row["Cooling_schedule"]}
-                        },
-                    }
-                )
-
-            for _, row in component_dfs_dict["Water_flow"].iterrows():
-                tx.wateruse.create(
-                    data={
-                        "Name": row["Name"],
-                        "FlowRatePerPerson": row["DHW_flow_rate"],
-                        "Schedule": {"connect": {"Name": row["Water_schedule"]}},
-                    }
-                )
-            # space use
-            for _, row in component_dfs_dict["Space_use_assembly"].iterrows():
-                tx.spaceuse.create(
-                    data={
-                        "Name": row["Name"],
-                        "Occupancy": {"connect": {"Name": row["Occupancy"]}},
-                        "Lighting": {"connect": {"Name": row["Lighting"]}},
-                        "Equipment": {"connect": {"Name": row["Equipment"]}},
-                        "Thermostat": {"connect": {"Name": row["Setpoints"]}},
-                        "WaterUse": {"connect": {"Name": row["WaterUse"]}},
-                    }
-                )
-
-            # # add cooling/heating systems
-            # # TODO: think about what happens when a heating and cooling system have the same name
-            for _, row in component_dfs_dict["Conditioning_constructor"].iterrows():
-                tx.thermalsystem.create(
-                    data={
-                        "Name": row["Name"],
-                        "ConditioningType": row["Type"],
-                        "Fuel": row["Fuel"],
-                        "SystemCOP": row["COP_equipment"],
-                        "DistributionCOP": row["Distribution_efficiency"],
-                    }
-                )
-
-            # add conditioning systems
-            for _, row in component_dfs_dict["Systems_assembly"].iterrows():
-                tx.conditioningsystems.create(
-                    data={
-                        "Name": row["Name"],
-                        "Heating": {"connect": {"Name": row["Heating"]}},
-                        "Cooling": {"connect": {"Name": row["Cooling"]}},
-                    }
-                )
-
-            # add ventilation
-            for _, row in component_dfs_dict["Ventilation_constructor"].iterrows():
-                system = tx.ventilation.create(
-                    data={
-                        "Name": row["Name"],
-                        "Rate": row["Rate"],
-                        "MinFreshAir": row["Min_fresh_air"],
-                        "Type": row["Ventilation_type"],
-                        "TechType": row["Tech_type"],
-                        "Schedule": {"connect": {"Name": row["Window_schedule"]}},
-                    }
-                )
-
-            # add hvac
-            for _, row in component_dfs_dict["Systems_assembly"].iterrows():
-                tx.hvac.create(
-                    data={
-                        "Name": row["Name"],
-                        "ConditioningSystems": {"connect": {"Name": row["Name"]}},
-                        "Ventilation": {"connect": {"Name": row["Ventilation"]}},
-                    }
-                )
-
-            # add dhw
-            for _, row in component_dfs_dict["DHW_Constructor"].iterrows():
-                tx.dhw.create(
-                    data={
-                        "Name": row["Name"],
-                        "SystemCOP": row["System_COP"],
-                        "WaterTemperatureInlet": row["Water_temperature_inlet"],
-                        "WaterSupplyTemperature": row["Water_supply_temperature"],
-                        "FuelType": row["DHW_energy_source"],
-                        "DistributionCOP": row["Distribution_efficiency"],
-                        "IsOn": True,
-                    }
-                )
-
-            # # add operations
-            # # Get the latest created HVAC, SpaceUse and DHW records
-            # hvac = tx.hvac.find_first(order={"id": "desc"})
-            # space_use = tx.spaceuse.find_first(order={"id": "desc"})
-            # dhw = tx.dhw.find_first(order={"id": "desc"})
-
-            # if not hvac or not space_use or not dhw:
-            #     msg = "Missing HVAC, SpaceUse or DHW records."
-            #     logger.error(msg)
-            #     raise ValueError(msg)
-
-            # # Create the Operations item
-            # tx.operations.create(
-            #     data={
-            #         "Name": f"{hvac.Name}_{space_use.Name}_{dhw.Name}",
-            #         "SpaceUseId": space_use.id,
-            #         "HVACId": hvac.id,
-            #         "DHWId": dhw.id,
-            #     }
-            # )
-
-            # add infiltration
-            # get the infilitration and name columns from the envelope df
-            infiltration = component_dfs_dict["Envelope_assembly"][
-                ["Infiltration", "Name", "Infiltration_unit"]
-            ]
-            for _, row in infiltration.iterrows():
-                infiltration = tx.infiltration.create(
-                    data={
-                        "Name": row["Name"],
-                        "IsOn": True,
-                        "ConstantCoefficient": 0.0,
-                        "TemperatureCoefficient": 0.0,
-                        "WindVelocityCoefficient": 0.0,
-                        "WindVelocitySquaredCoefficient": 0.0,
-                        "AFNAirMassFlowCoefficientCrack": 0.0,
-                        "AirChangesPerHour": row["Infiltration"],
-                        "FlowPerExteriorSurfaceArea": 0.0,
-                        "CalculationMethod": row["Infiltration_unit"],
+                    "GroundSlabAssembly": {
+                        "connect": {"Name": row["GroundFloor"]}
+                    },  # FOUNDATION!!!!
+                    "GroundWallAssembly": {
+                        "connect": {"Name": row["GroundWall"]}  # Basement wall
                     },
-                )
+                    "InternalMassAssembly": {"connect": {"Name": row["InternalMass"]}},
+                }
+            )
 
-            # add materials
-            for _, row in component_dfs_dict["Materials"].iterrows():
-                tx.constructionmaterial.create(
-                    data={
-                        "Name": row["Name"],
-                        "Roughness": row["Roughness"],
-                        "ThermalAbsorptance": row["ThermalAbsorptance"],
-                        "SolarAbsorptance": row["SolarAbsorptance"],
-                        "TemperatureCoefficientThermalConductivity": row[
-                            "TemperatureCoefficientThermalConductivity"
-                        ],
-                        "Type": row["Type"],
-                        "Density": row["Density [kg/m3]"],
-                        "Conductivity": row["Conductivity [W/m.K]"],
-                        "SpecificHeat": row["SpecificHeat [J/kg.K]"],
-                        "VisibleAbsorptance": row["VisibleAbsorptance"],
-                    }
-                )
-            for _, row in component_dfs_dict["Window_choices"].iterrows():
-                window = tx.glazingconstructionsimple.create(
-                    data={
-                        "Name": row["Name"],
-                        "UValue": row["UValue"],
-                        "SHGF": row["SHGF"],
-                        "TVis": row["TVis"],
-                        "Type": row["Type"],
-                    }
-                )
-
-            return
-            # add construction assemblies - connect to materials
-            for _, row in component_dfs_dict["Construction_components"].iterrows():
-                layers = []
-                # Iterate over the columns to extract materials and thicknesses
-                for i in range(1, len(row) // 2 + 1):
-                    material_key = f"Material_{i}"
-                    thickness_key = f"Thickness_{i}"
-
-                    has_material = material_key in row and pd.notna(row[material_key])
-                    has_thickness = thickness_key in row and pd.notna(
-                        row[thickness_key]
-                    )
-                    if has_material and has_thickness:
-                        # check if material is in the materials table
-                        if (
-                            row[material_key]
-                            not in component_dfs_dict["Materials"]["Name"]
-                        ):
-                            msg = f"Material {row[material_key]} not found in materials table."
-                            logger.error(msg)
-                            raise ValueError(msg)
-                        layers.append({
-                            "LayerOrder": i - 1,
-                            "Thickness": row[thickness_key],
-                            "ConstructionMaterial": {
-                                "connect": {"Name": row[material_key]}
-                            },
-                        })
-                print(layers)
-                # Create a ConstructionAssembly entry
-                tx.constructionassembly.create(
-                    data={
-                        "Name": row["Name"],
-                        "Type": row["Type"],
-                        "Layers": {"create": layers},
-                    }
-                )
-
-            # add envelope assemblies - connect to construction assemblies
-            # TODO: update with changes to excel
-            for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
-                tx.envelopeassembly.create(
-                    data={
-                        "Name": row["Name"],
-                        "InternalMassExposedAreaPerArea": 0,
-                        "GroundIsAdiabatic": True,
-                        "RoofIsAdiabatic": True,
-                        "FacadeIsAdiabatic": True,
-                        "SlabIsAdiabatic": True,
-                        "PartitionIsAdiabatic": True,
-                        "RoofAssembly": {"connect": {"Name": row["RoofAssembly"]}},
-                        "FacadeAssembly": {"connect": {"Name": row["FacadeAssembly"]}},
-                        "SlabAssembly": {"connect": {"Name": row["SlabAssembly"]}},
-                        "PartitionAssembly": {
-                            "connect": {"Name": row["PartitionAssembly"]}
-                        },
-                        "ExternalFloorAssembly": {
-                            "connect": {"Name": row["ExternalFloorAssembly"]}
-                        },
-                        "GroundSlabAssembly": {
-                            "connect": {"Name": row["GroundSlabAssembly"]}
-                        },
-                        "GroundWallAssembly": {
-                            "connect": {"Name": row["GroundWallAssembly"]}
-                        },
-                        # "InternalMassAssembly": {
-                        #     "connect": {"Name": row["InternalMassAssembly"]}
-                        # },
-                    }
-                )
-
-            # add glazing constructions
-
-            # # add envelope - connect to envelope assemblies, glazing constructions, infiltration
-            # for _, row in component_dfs_dict["Envelope"].iterrows():
-            #     tx.envelope.create(
-            #         data={
-            #             "Name": row["Name"],
-            #             "Assemblies": {
-            #                 "connect": {"Name": row["Assemblies"]}
-            #             },
-            #             "Infiltration": {"connect": {"Name": row["Infiltration"]}},
-            #             "Window": {"connect": {"Name": row["Window"]}},
-            #         }
-            #     )
-
-        # add model validation to each component
-
-
-if __name__ == "__main__":
-    path_to_excel = Path("tests/data/template_tester_v3.xlsx")
-    from epinterface.sbem.prisma.client import PrismaSettings
-
-    logging.basicConfig(level=logging.INFO)
-
-    db_path = Path("test.db")
-    settings = PrismaSettings.New(database_path=db_path, if_exists="migrate")
-    db = settings.db
-    add_excel_to_db(path_to_excel, db, erase_db=True)
+        # add envelope - connect to envelope assemblies, glazing constructions, infiltration
+        for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
+            tx.envelope.create(
+                data={
+                    "Name": row["Name"],
+                    "Assemblies": {"connect": {"Name": row["Name"]}},
+                    "Infiltration": {
+                        "create": {
+                            "Name": row["Name"],
+                            "IsOn": True,
+                            "ConstantCoefficient": 0.0,
+                            "TemperatureCoefficient": 0.0,
+                            "WindVelocityCoefficient": 0.0,
+                            "WindVelocitySquaredCoefficient": 0.0,
+                            "AFNAirMassFlowCoefficientCrack": 0.0,
+                            "AirChangesPerHour": row["Infiltration"]
+                            if row["Infiltration_unit"] == "AirChanges/Hour"
+                            else 0,
+                            "FlowPerExteriorSurfaceArea": row["Infiltration"]
+                            if row["Infiltration_unit"] == "Flow/ExteriorArea"
+                            else 0,
+                            "CalculationMethod": row["Infiltration_unit"],
+                        }
+                    },
+                    "Window": {"connect": {"Name": row["Windows"]}},
+                }
+            )

@@ -142,3 +142,50 @@ def template(path: Path):
     template_yaml = model.create_data_entry_template()
     with open(path, "w") as f:
         f.write(template_yaml)
+
+
+@cli.command(help="Convert an excel file to a database file.")
+@click.option(
+    "--excel-path",
+    type=click.Path(
+        exists=True,
+        path_type=Path,
+    ),
+    prompt="Enter the path to the excel file to convert (should have a .xlsx suffix).",
+    help="The excel file should be a template excel file.  See https://github.com/mitsustainabledesignlab/epinterface for more info.",
+)
+@click.option(
+    "--db-path",
+    type=click.Path(
+        exists=False,
+        path_type=Path,
+    ),
+    default="components.db",
+    prompt="Enter the path to the database file to create (should have a .db suffix).",
+    help="The database file will be created at the given path.  If the file already exists, an error will be raised.",
+)
+def convert(excel_path: Path, db_path: Path):
+    """Convert an excel file to a database file."""
+    from epinterface.sbem.interface import add_excel_to_db
+    from epinterface.sbem.prisma.client import PrismaSettings
+
+    if excel_path.suffix != ".xlsx":
+        msg = "Error: The excel file should have a .xlsx suffix."
+        click.echo(msg, err=True)
+        sys.exit(1)
+    if db_path.suffix != ".db":
+        msg = "Error: The database file should have a .db suffix."
+        click.echo(msg, err=True)
+        sys.exit(1)
+
+    settings = PrismaSettings.New(
+        database_path=db_path, if_exists="raise", auto_register=True
+    )
+    try:
+        with settings.db:
+            add_excel_to_db(excel_path, settings.db, erase_db=True)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(f"Database available at {db_path}.")
