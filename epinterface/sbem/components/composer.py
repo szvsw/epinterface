@@ -7,16 +7,11 @@ import networkx as nx
 from pydantic import BaseModel, Field, create_model
 
 from epinterface.sbem.common import NamedObject
-from epinterface.sbem.components.zones import ZoneComponent
-
-# Input a row of key/value pairs.
-
-# compound action: concat the values of requested keys with a separator; there can also be an aggregate action and a breakpoint action which can be used as a tansform of the value, e.g. certain keys might get mapped onto the same value, e.g. high and medium both get mapped onto not_low
 
 """Tree construction:
 
-Every node in the tree may or may not have a compound action specified.
---> If it is specified, then we will select the deep tree for the requested compounded key.  There will be options for if the key is not found ( e.g. fallbacks or raises.)
+Every node in the tree may or may not have a selector action specified.
+--> If it is specified, then we will select the deep tree for the requested compounded key from the datasource.  There will be options for if the key is not found ( e.g. fallbacks or raises.)
 --> if it is specified, it will be loaded before it's children, but it's children (may) overwrite if specified.
 --> If it is not specified, then it's children must be specified to avoid construction failure.
 
@@ -26,46 +21,6 @@ Handle node, then handle its children.
 Base case:
 Start at root node.
 """
-
-
-FieldT = TypeVar("FieldT", str, float, int, bool)
-FieldT2 = TypeVar("FieldT2", str, float, int, bool)
-
-NumericalFieldT = TypeVar("NumericalFieldT", float, int)
-
-
-# class NamedData(BaseModel, Generic[FieldT]):
-#     name: str
-
-#     def pick(self, x: dict[str, FieldT | Any]) -> FieldT:
-#         if self.name not in x:
-#             raise ValueError(f"{self.name} is not in the dictionary.")
-#         return x[self.name]
-
-
-# class TransformedSemanticField(NamedData, ABC, Generic[FieldT, FieldT2]):
-#     field: NamedData[FieldT]
-
-#     @abstractmethod
-#     def transform(self, x: FieldT) -> FieldT2:
-#         pass
-
-
-# class MappedField(Generic[FieldT, FieldT2], TransformedSemanticField[FieldT, FieldT2]):
-#     str_map: dict[FieldT, FieldT2]
-#     default: FieldT2 | None = None
-
-#     def transform(self, x: FieldT) -> FieldT2:
-#         if x not in self.str_map and self.default is None:
-#             msg = f"{self.field.name} has no default value and `{x}` is not in the str_map."
-#             raise ValueError(msg)
-#         elif x not in self.str_map and self.default is not None:
-#             return self.default
-#         return self.str_map[x]
-
-
-# class CompoundKey(BaseModel):
-#     fields: list[NamedData]
 
 
 class ComponentNameConstructor(BaseModel):
@@ -182,6 +137,8 @@ def construct_composer_model(  # noqa: C901
     Returns:
         A pydantic model that can be used to execute component mapping and composition.
     """
+    from prisma import Prisma
+
     from epinterface.sbem.prisma.client import deep_fetcher
 
     # Cache to avoid recomputing the same field types - e.g. once
@@ -191,19 +148,11 @@ def construct_composer_model(  # noqa: C901
 
     def get_field_type_for_edge(
         g: nx.DiGraph,
-        target_node_name: str,
+        target_node_name: str,  # TODO: this will cause infinite recursion when a parent and child have named fields in common.
         target_node_type: type[NamedObject],
         use_children: bool,
     ):
         if target_node_type not in resolved_field_types:
-            # target_node = g.nodes[target_node_name]
-            # target_node_is_leaf = len(list(g.successors(target_node_name))) == 0
-            # if target_node_is_leaf:
-            #     resolved_field_types[target_node_type] = ComponentNameConstructor
-            # else:
-            #     resolved_field_types[target_node_type] = handle_node(
-            #         g, target_node_name, use_children
-            #     )
             resolved_field_types[target_node_type] = handle_node(
                 g, target_node_name, use_children, target_node_type
             )
@@ -220,25 +169,36 @@ def construct_composer_model(  # noqa: C901
             node_fields[child_name] = get_field_type_for_edge(
                 g, child_name, data["data"]["type"], use_children=use_children
             )
-        # this_selector = (
-        #     (ComponentNameConstructor | None, None)
-        #     if node != "root"
-        #     else (ComponentNameConstructor, ...)
-        # )
         this_selector = ComponentNameConstructor | None, None
 
         class BaseSelectorWithValidator(BaseModel, extra=extra_handling):
             ValClass: ClassVar[type[NamedObject]] = validator
             selector: ComponentNameConstructor | None
 
-            # TODO: we should allow fetching from in mem caches
+            # TODO: we should allow fetching from in mem caches or other sources
             # so that this becomes abstracted and decoupled from the
             # database logic.
             @classmethod
             def get_deep_fetcher(cls):
+                """Get the deep fetcher for the component corresponding to the selected validator."""
                 return deep_fetcher.get_deep_fetcher(cls.ValClass)
 
-            def get_component(self, context: dict, allow_unvalidated: bool = False):
+            def get_component(
+                self,
+                context: dict,
+                allow_unvalidated: bool = False,
+                db: Prisma | None = None,
+            ):
+                """Construct a component from the context dictionary, including executing subconstructions.
+
+                Args:
+                    context (dict): The context dictionary.
+                    allow_unvalidated (bool): Whether to allow unvalidated components.
+                    db (Prisma | None): The database to use.
+
+                Returns:
+                    component (NamedObject): The constructed component.
+                """
                 component_name = (
                     self.selector.construct_name(context)
                     if self.selector is not None
@@ -254,6 +214,7 @@ def construct_composer_model(  # noqa: C901
                         children_components[field_name] = field_selector.get_component(
                             context=context,
                             allow_unvalidated=True,
+                            db=db,
                         )
 
                 if component_name is None:
@@ -269,7 +230,9 @@ def construct_composer_model(  # noqa: C901
                             raise
                 else:
                     fetcher = self.get_deep_fetcher()
-                    _record, component_base = fetcher.get_deep_object(component_name)
+                    _record, component_base = fetcher.get_deep_object(
+                        component_name, db=db
+                    )
                     data = component_base.model_dump(exclude_none=True)
 
                     recursive_tree_dict_merge(data, children_components)
@@ -300,142 +263,3 @@ def construct_composer_model(  # noqa: C901
             )
 
     return handle_node(g, "root", use_children=use_children, validator=root_validator)
-
-
-if __name__ == "__main__":
-    import yaml
-
-    root_node_class = ZoneComponent
-    g = construct_graph(root_node_class)
-
-    SelectorModel = construct_composer_model(
-        g,
-        root_validator=root_node_class,
-        use_children=False,
-    )
-
-    ma_selector = SelectorModel(
-        **{
-            "Envelope": {
-                "Infiltration": {
-                    "selector": ComponentNameConstructor(
-                        source_fields=["weatherization"]
-                    )
-                },
-                "Window": {
-                    "selector": ComponentNameConstructor(source_fields=["windows"])
-                },
-                "Assemblies": {
-                    "selector": ComponentNameConstructor(
-                        source_fields=[
-                            "roof_and_attic",
-                            "basement",
-                            "wall_insulation",
-                        ]
-                    ),
-                },
-            },
-            "Operations": {
-                "SpaceUse": {
-                    "Occupancy": {
-                        "selector": ComponentNameConstructor(
-                            source_fields=["typology", "age"]
-                        ),
-                    },
-                    "Lighting": {
-                        "selector": ComponentNameConstructor(
-                            source_fields=["typology", "lighting_type"]
-                        ),
-                    },
-                    "Equipment": {
-                        "selector": ComponentNameConstructor(
-                            source_fields=["typology", "age", "equipment_type"]
-                        ),
-                    },
-                    "WaterUse": {
-                        "selector": ComponentNameConstructor(
-                            source_fields=["typology"]
-                        ),
-                    },
-                    "Thermostat": {
-                        "selector": ComponentNameConstructor(
-                            source_fields=[
-                                "typology",
-                                "age",
-                                "thermostat_controls",
-                            ]
-                        ),
-                    },
-                },
-                "DHW": {
-                    "selector": ComponentNameConstructor(
-                        source_fields=["hot_water_system"]
-                    ),
-                },
-                "HVAC": {
-                    "Ventilation": {
-                        "selector": ComponentNameConstructor(
-                            source_fields=[
-                                "typology",
-                                "age",
-                                "distribution_system_insulation",
-                            ]
-                        ),
-                    },
-                    "ConditioningSystems": {
-                        "Cooling": {
-                            "selector": ComponentNameConstructor(
-                                source_fields=[
-                                    "cooling_system",
-                                    "distribution_system_insulation",
-                                ]
-                            ),
-                        },
-                        "Heating": {
-                            "selector": ComponentNameConstructor(
-                                source_fields=[
-                                    "heating_system",
-                                    "distribution_system_insulation",
-                                ]
-                            ),
-                        },
-                    },
-                },
-            },
-        },
-        selector=ComponentNameConstructor(),
-    )
-    print(
-        yaml.safe_dump(ma_selector.model_dump(mode="json", exclude_none=True), indent=2)
-    )
-
-    # for node in g.nodes:
-    #     if node == "root":
-    #         continue
-    #     path_to_root = nx.shortest_path(g, "root", node)[1:]
-    #     sel = reduce(
-    #         lambda x, y: getattr(x, y) if hasattr(x, y) else None,
-    #         path_to_root,
-    #         ma_selector,
-    #     )
-    #     if sel is not None:
-    #         print(sel.selector if hasattr(sel, "selector") else "None")
-    #     else:
-    #         print("None")
-    # print(ma_selector.ValClass)
-    # key = "Operations"
-    # key2 = "SpaceUse"
-    # key3 = "Occupancy"
-    # print(getattr(getattr(getattr(ma_selector, key), key2), key3))
-    from pathlib import Path
-
-    from epinterface.sbem.prisma.client import prisma_settings
-
-    prisma_settings.database_path = Path("massachusetts.db")
-
-    with prisma_settings.db:
-        # db = prisma_settings.db
-
-        # db.connect()
-        print(ma_selector.get_component({"typology": "office", "age": 10}))
-        # db.disconnect()

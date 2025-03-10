@@ -634,3 +634,14 @@ def test_overwriting_a_none_key_with_dict():
     d2 = {"a": {"b": {"c": 3}}}
     recursive_tree_dict_merge(d1, d2)
     assert d1 == {"a": {"b": {"c": 3}}}
+
+
+@pytest.mark.xfail(reason="not yet implemented")
+def test_scoped_db_compositions_work(preseeded_readonly_db: Prisma):
+    """Test that scoped db compositions work."""
+    # 1. copy the preseeded_readonly_db to a new path in the same directory
+    # 2. create and connect to a new db instance
+    # 3. mutate the value of something like equipment power density
+    # 4. run the same zone composition on both dbs, one scoped, one unscoped
+    # 5. ensure that the scoped db composition uses the mutated value, while the unscoped uses the original.
+    pass

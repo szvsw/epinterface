@@ -395,18 +395,32 @@ ZoneT = TypeVar("ZoneT", bound=BaseZone)
 
 @dataclass
 class Link(Generic[BaseT, IncludeT, ValidatorT]):
-    """Link to a deep object."""
+    """The Link class is used to link a prisma model to an SBEM NamedObject validator class."""
 
     prisma_model: type[BaseT]
     include: IncludeT
     validator: type[ValidatorT]
 
-    def get_deep_object(self, name: str) -> tuple[BaseT, ValidatorT]:
-        """Get a deep object by name."""
+    def get_deep_object(
+        self, name: str, db: Prisma | None = None
+    ) -> tuple[BaseT, ValidatorT]:
+        """Get a deep object by name.
+
+        Note that you can pass a different database to use in case you need to load from
+        multiple different databases in the same process, which requires setting auto_register=False on at least
+        one of them.
+
+        Args:
+            name (str): The name of the object to get.
+            db (Prisma | None): The database to use. If None, the default database will be used.
+
+        Returns:
+            tuple[BaseT, ValidatorT]: A tuple containing the base object and the validator object.
+        """
         # It would be great if we could disable the type checker for this line,
         # but right now the BaseT / IncludeT are not constrained to only allow certain combinations.
 
-        record = self.prisma_model.prisma().find_unique_or_raise(
+        record = self.prisma_model.prisma(db).find_unique_or_raise(
             where={"Name": name},
             include=self.include,  # pyright: ignore [reportArgumentType]
         )

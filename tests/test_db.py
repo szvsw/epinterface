@@ -307,3 +307,21 @@ def test_deep_fetch_zone(preseeded_readonly_db: Prisma):
 
     assert zone_comp.Envelope == expected_envelope_comp
     assert zone_comp.Operations == expected_operations_comp
+
+
+def test_deep_fetch_zone_with_second_db(preseeded_readonly_db: Prisma):
+    """Test the deep fetch of a zone object with a second database does not conflict with the  first.."""
+    assert preseeded_readonly_db.is_registered()
+
+    ds = preseeded_readonly_db._datasource
+    assert ds is not None
+    url = ds["url"]
+    fp = url.split("file:")[-1]
+    new_db = PrismaSettings.New(
+        database_path=Path(fp), if_exists="ignore", auto_register=False
+    ).db
+    with new_db:
+        zone, zone_comp = deep_fetcher.Zone.get_deep_object("default_zone", db=new_db)
+        assert zone_comp.Name == zone.Name
+        assert zone_comp.Envelope.Name == zone.Envelope.Name
+        assert zone_comp.Operations.Name == zone.Operations.Name
