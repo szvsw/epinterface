@@ -87,24 +87,18 @@ def create_schedule(db: Prisma, name_prefix: str):
             data={
                 "Name": f"{name_prefix}_Year",
                 "Type": "Fraction",
-                "Weeks": {
-                    "create": [
-                        {
-                            "Week": {"connect": {"id": week_a.id}},  # pyright: ignore [reportArgumentType]
-                            "StartDay": 1,
-                            "StartMonth": 1,
-                            "EndDay": 30,
-                            "EndMonth": 6,
-                        },
-                        {
-                            "Week": {"connect": {"id": week_b.id}},
-                            "StartDay": 1,
-                            "StartMonth": 7,
-                            "EndDay": 31,
-                            "EndMonth": 12,
-                        },
-                    ]
-                },
+                "January": {"connect": {"id": week_a.id}},
+                "February": {"connect": {"id": week_a.id}},
+                "March": {"connect": {"id": week_a.id}},
+                "April": {"connect": {"id": week_a.id}},
+                "May": {"connect": {"id": week_a.id}},
+                "June": {"connect": {"id": week_a.id}},
+                "July": {"connect": {"id": week_b.id}},
+                "August": {"connect": {"id": week_b.id}},
+                "September": {"connect": {"id": week_b.id}},
+                "October": {"connect": {"id": week_b.id}},
+                "November": {"connect": {"id": week_b.id}},
+                "December": {"connect": {"id": week_b.id}},
             }
         )
 

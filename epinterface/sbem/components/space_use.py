@@ -147,6 +147,7 @@ class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
         name_prefix = (
             f"{target_zone_or_zone_list_name}_{self.Name.replace(' ', '_')}_LIGHTS"
         )
+        raise NotImplementedError
         idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=name_prefix)
         lights = Lights(
             Name=name_prefix,
@@ -193,6 +194,7 @@ class EquipmentComponent(NamedObject, MetadataMixin, extra="forbid"):
         name_prefix = (
             f"{target_zone_or_zone_list_name}_{self.Name.replace(' ', '_')}_EQUIPMENT"
         )
+        raise NotImplementedError
         idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=name_prefix)
         equipment = ElectricEquipment(
             Name=name_prefix,
@@ -297,113 +299,3 @@ class ZoneSpaceUseComponent(NamedObject, MetadataMixin, extra="forbid"):
         # idf = self.Thermostat.add_thermostat_to_idf_zone(idf, target_zone_name)
         # raise NotImplementedError
         return idf
-
-
-if __name__ == "__main__":
-    from archetypal.idfclass import IDF
-
-    from epinterface.sbem.components.schedules import (
-        DayComponent,
-        RepeatedWeekComponent,
-        WeekComponent,
-        YearComponent,
-    )
-
-    day = DayComponent(
-        Name="low_day",
-        Type="Fraction",
-        Hour_00=0,
-        Hour_01=0,
-        Hour_02=0,
-        Hour_03=0,
-        Hour_04=0,
-        Hour_05=0,
-        Hour_06=0,
-        Hour_07=0,
-        Hour_08=0,
-        Hour_09=0,
-        Hour_10=0,
-        Hour_11=0,
-        Hour_12=0,
-        Hour_13=0,
-        Hour_14=0,
-        Hour_15=0,
-        Hour_16=0,
-        Hour_17=0,
-        Hour_18=0,
-        Hour_19=0,
-        Hour_20=0,
-        Hour_21=0,
-        Hour_22=0,
-        Hour_23=0,
-    )
-    week = WeekComponent(
-        Name="Week",
-        Monday=day,
-        Tuesday=day,
-        Wednesday=day,
-        Thursday=day,
-        Friday=day,
-        Saturday=day,
-        Sunday=day,
-    )
-    repeated_week = RepeatedWeekComponent(
-        Week=week,
-        StartDay=1,
-        StartMonth=1,
-        EndDay=31,
-        EndMonth=12,
-    )
-    year = YearComponent(
-        Name="Year",
-        Weeks=[repeated_week],
-        Type="Fraction",
-    )
-
-    lighting = LightingComponent(
-        Name="some_combo",
-        PowerDensity=10,
-        Schedule=year,
-        IsOn=True,
-        DimmingType="Off",
-    )
-    occupancy = OccupancyComponent(
-        Name="some_combo",
-        PeopleDensity=1,
-        Schedule=year,
-        IsOn=True,
-    )
-    equipment = EquipmentComponent(
-        Name="some_combo",
-        PowerDensity=10,
-        Schedule=year,
-        IsOn=True,
-    )
-    thermostat = ThermostatComponent(
-        Name="some_combo",
-        IsOn=True,
-        HeatingSetpoint=20,
-        HeatingSchedule=year,
-        CoolingSetpoint=20,
-        CoolingSchedule=year,
-    )
-    water_use = WaterUseComponent(
-        Name="WaterUse",
-        FlowRatePerPerson=0.01,
-        Schedule=year,
-    )
-
-    zone_space_use = ZoneSpaceUseComponent(
-        Name="ZoneSpaceUse",
-        Lighting=lighting,
-        Occupancy=occupancy,
-        Equipment=equipment,
-        Thermostat=thermostat,
-        WaterUse=water_use,
-    )
-
-    idf = IDF(as_version="22.2.0")
-    idf = zone_space_use.add_loads_to_idf_zone(idf, "Zone")
-    for obj_type in idf.idfobjects:
-        for obj in idf.idfobjects[obj_type]:
-            print(obj)

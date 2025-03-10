@@ -484,20 +484,19 @@ model Week {
   SundayId    String
   Sunday      Day    @relation("Sunday", fields: [SundayId], references: [id])
 
-  RepeatedWeeks RepeatedWeek[]
-}
-
-model RepeatedWeek {
-  id         String @id @default(uuid())
-  StartDay   Int
-  StartMonth Int
-  EndDay     Int
-  EndMonth   Int
-
-  WeekId String
-  Week   Week   @relation(fields: [WeekId], references: [id])
-  YearId String
-  Year   Year   @relation(fields: [YearId], references: [id])
+  // referenced by
+  JanuaryForYear   Year[] @relation("January")
+  FebruaryForYear  Year[] @relation("February")
+  MarchForYear     Year[] @relation("March")
+  AprilForYear     Year[] @relation("April")
+  MayForYear       Year[] @relation("May")
+  JuneForYear      Year[] @relation("June")
+  JulyForYear      Year[] @relation("July")
+  AugustForYear    Year[] @relation("August")
+  SeptemberForYear Year[] @relation("September")
+  OctoberForYear   Year[] @relation("October")
+  NovemberForYear  Year[] @relation("November")
+  DecemberForYear  Year[] @relation("December")
 }
 
 model Year {
@@ -505,7 +504,41 @@ model Year {
   Name String @unique
   Type String
 
-  Weeks RepeatedWeek[]
+  JanuaryId String
+  January   Week   @relation("January", fields: [JanuaryId], references: [id])
+
+  FebruaryId String
+  February   Week   @relation("February", fields: [FebruaryId], references: [id])
+
+  MarchId String
+  March   Week   @relation("March", fields: [MarchId], references: [id])
+
+  AprilId String
+  April   Week   @relation("April", fields: [AprilId], references: [id])
+
+  MayId String
+  May   Week   @relation("May", fields: [MayId], references: [id])
+
+  JuneId String
+  June   Week   @relation("June", fields: [JuneId], references: [id])
+
+  JulyId String
+  July   Week   @relation("July", fields: [JulyId], references: [id])
+
+  AugustId String
+  August   Week   @relation("August", fields: [AugustId], references: [id])
+
+  SeptemberId String
+  September   Week   @relation("September", fields: [SeptemberId], references: [id])
+
+  OctoberId String
+  October   Week   @relation("October", fields: [OctoberId], references: [id])
+
+  NovemberId String
+  November   Week   @relation("November", fields: [NovemberId], references: [id])
+
+  DecemberId String
+  December   Week   @relation("December", fields: [DecemberId], references: [id])
 
   Occupancies        Occupancy[]   @relation("OccupancySchedule")
   Lightings          Lighting[]    @relation("LightingSchedule")

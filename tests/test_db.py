@@ -128,9 +128,8 @@ def test_deep_fetch_ventilation(preseeded_readonly_db: Prisma):
     hvac, hvac_comp = deep_fetcher.HVAC.get_deep_object("cold_office")
     assert hvac_comp.ConditioningSystems.Heating is not None
     assert hvac_comp.ConditioningSystems.Cooling is not None
-    assert (
-        hvac_comp.Ventilation.Schedule.Weeks[0].Week.Name == "Ventilation_RegularWeek"
-    )
+    assert hvac_comp.Ventilation.Schedule.January.Name == "Ventilation_RegularWeek"
+    assert hvac_comp.Ventilation.Schedule.December.Name == "Ventilation_All_Monday"
 
 
 def test_deep_fetch_thermal_system(preseeded_readonly_db: Prisma):

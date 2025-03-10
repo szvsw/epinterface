@@ -76,7 +76,6 @@ try:
         Lighting,
         Occupancy,
         Operations,
-        RepeatedWeek,
         SpaceUse,
         ThermalSystem,
         Thermostat,
@@ -117,7 +116,6 @@ try:
         LightingInclude,
         OccupancyInclude,
         OperationsInclude,
-        RepeatedWeekInclude,
         SpaceUseInclude,
         ThermalSystemInclude,
         ThermostatInclude,
@@ -244,14 +242,19 @@ WEEK_INCLUDE: WeekInclude = {
     "Saturday": True,
     "Sunday": True,
 }
-REPEATED_WEEK_INCLUDE: RepeatedWeekInclude = {
-    "Week": {"include": WEEK_INCLUDE},
-}
 YEAR_INCLUDE: YearInclude = {
-    "Weeks": {
-        "include": REPEATED_WEEK_INCLUDE,
-        "order_by": [{"StartMonth": "asc"}, {"StartDay": "asc"}],
-    },
+    "January": {"include": WEEK_INCLUDE},
+    "February": {"include": WEEK_INCLUDE},
+    "March": {"include": WEEK_INCLUDE},
+    "April": {"include": WEEK_INCLUDE},
+    "May": {"include": WEEK_INCLUDE},
+    "June": {"include": WEEK_INCLUDE},
+    "July": {"include": WEEK_INCLUDE},
+    "August": {"include": WEEK_INCLUDE},
+    "September": {"include": WEEK_INCLUDE},
+    "October": {"include": WEEK_INCLUDE},
+    "November": {"include": WEEK_INCLUDE},
+    "December": {"include": WEEK_INCLUDE},
 }
 LIGHTING_INCLUDE: LightingInclude = {
     "Schedule": {"include": YEAR_INCLUDE},
@@ -626,7 +629,6 @@ def delete_all():
     ThermalSystem.prisma().delete_many()
     DHW.prisma().delete_many()
     Ventilation.prisma().delete_many()
-    RepeatedWeek.prisma().delete_many()
     Year.prisma().delete_many()
     Week.prisma().delete_many()
     Day.prisma().delete_many()

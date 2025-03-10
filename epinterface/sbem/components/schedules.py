@@ -3,7 +3,7 @@
 from typing import Any, Literal
 
 from archetypal.idfclass.idf import IDF
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import model_validator
 
 from epinterface.interface import ScheduleDayHourly, ScheduleWeekDaily, ScheduleYear
 from epinterface.sbem.common import NamedObject
@@ -202,71 +202,92 @@ class WeekComponent(NamedObject, extra="forbid"):
         return self.Monday.Type
 
 
-class RepeatedWeekComponent(BaseModel, extra="forbid"):
-    """A week to repeat with a start and end date and a list of days."""
+# class RepeatedWeekComponent(BaseModel, extra="forbid"):
+#     """A week to repeat with a start and end date and a list of days."""
 
-    StartDay: int = Field(..., description="", ge=1, le=31)
-    StartMonth: int = Field(..., description="", ge=1, le=12)
-    EndDay: int = Field(..., description="", ge=1, le=31)
-    EndMonth: int = Field(..., description="", ge=1, le=12)
-    Week: WeekComponent
+#     StartDay: int = Field(..., description="", ge=1, le=31)
+#     StartMonth: int = Field(..., description="", ge=1, le=12)
+#     EndDay: int = Field(..., description="", ge=1, le=31)
+#     EndMonth: int = Field(..., description="", ge=1, le=12)
+#     Week: WeekComponent
 
-    @model_validator(mode="after")
-    def validate_days(self):
-        """Validate the start and end days are valid for the chosen months."""
-        # check that the mm/dd for start is before the mm/dd for end
-        if self.StartMonth > self.EndMonth:
-            msg = "Start month must be before end month"
-            raise ValueError(msg)
-        if self.StartMonth == self.EndMonth and self.StartDay > self.EndDay:
-            msg = "Start day must be before end day"
-            raise ValueError(msg)
+#     @model_validator(mode="after")
+#     def validate_days(self):
+#         """Validate the start and end days are valid for the chosen months."""
+#         # check that the mm/dd for start is before the mm/dd for end
+#         if self.StartMonth > self.EndMonth:
+#             msg = "Start month must be before end month"
+#             raise ValueError(msg)
+#         if self.StartMonth == self.EndMonth and self.StartDay > self.EndDay:
+#             msg = "Start day must be before end day"
+#             raise ValueError(msg)
 
-        # check that the start day is valid for the chosen month (e.g. no 31 in february)
-        def check_day_valid_for_month(month: int, day: int):
-            if month in [1, 3, 5, 7, 8, 10, 12]:
-                return day <= 31
-            elif month in [4, 6, 9, 11]:
-                return day <= 30
-            elif month == 2:
-                return day <= 29
-            else:
-                msg = f"Invalid month: {month}"
-                raise ValueError(msg)
+#         # check that the start day is valid for the chosen month (e.g. no 31 in february)
+#         def check_day_valid_for_month(month: int, day: int):
+#             if month in [1, 3, 5, 7, 8, 10, 12]:
+#                 return day <= 31
+#             elif month in [4, 6, 9, 11]:
+#                 return day <= 30
+#             elif month == 2:
+#                 return day <= 29
+#             else:
+#                 msg = f"Invalid month: {month}"
+#                 raise ValueError(msg)
 
-        start_day_is_valid = check_day_valid_for_month(self.StartMonth, self.StartDay)
-        if not start_day_is_valid:
-            msg = f"Start day {self.StartDay} is invalid for the chosen month: {self.StartMonth}"
-            raise ValueError(msg)
+#         start_day_is_valid = check_day_valid_for_month(self.StartMonth, self.StartDay)
+#         if not start_day_is_valid:
+#             msg = f"Start day {self.StartDay} is invalid for the chosen month: {self.StartMonth}"
+#             raise ValueError(msg)
 
-        end_day_is_valid = check_day_valid_for_month(self.EndMonth, self.EndDay)
-        if not end_day_is_valid:
-            msg = f"End day {self.EndDay} is invalid for the chosen month: {self.EndMonth}"
-            raise ValueError(msg)
+#         end_day_is_valid = check_day_valid_for_month(self.EndMonth, self.EndDay)
+#         if not end_day_is_valid:
+#             msg = f"End day {self.EndDay} is invalid for the chosen month: {self.EndMonth}"
+#             raise ValueError(msg)
 
-        return self
+#         return self
 
 
 class YearComponent(NamedObject, extra="forbid"):
     """A year with a schedule type limit and a list of repeated weeks."""
 
     Type: ScheduleTypeLimit
-    Weeks: list[RepeatedWeekComponent]
+    January: WeekComponent
+    February: WeekComponent
+    March: WeekComponent
+    April: WeekComponent
+    May: WeekComponent
+    June: WeekComponent
+    July: WeekComponent
+    August: WeekComponent
+    September: WeekComponent
+    October: WeekComponent
+    November: WeekComponent
+    December: WeekComponent
 
-    @field_validator("Weeks", mode="after")
-    @classmethod
-    def validate_weeks(cls, weeks: list[RepeatedWeekComponent]):
-        """Validate the weeks are well-ordered and that the start and end days are jan 1 and dec 31."""
-        # check that it is well-ordered and that the start and end days are jan 1 and dec 31
-        # TODO: Implement
-        return weeks
+    @property
+    def Weeks(self) -> list[WeekComponent]:
+        """Get the weeks of the year as a list."""
+        return [
+            self.January,
+            self.February,
+            self.March,
+            self.April,
+            self.May,
+            self.June,
+            self.July,
+            self.August,
+            self.September,
+            self.October,
+            self.November,
+            self.December,
+        ]
 
     @model_validator(mode="after")
     def check_weeks_have_consistent_type(self):
         """Check that the weeks have a consistent type."""
-        lim = self.Weeks[0].Week.Type
+        lim = self.January.Type
         for week in self.Weeks:
-            if week.Week.Type != lim:
+            if week.Type != lim:
                 msg = "Type limits are not consistent"
                 raise ValueError(msg)
 
@@ -291,6 +312,7 @@ class YearComponent(NamedObject, extra="forbid"):
             "Name": self.Name,
             "Schedule_Type_Limits_Name": self.Type,
         }
+        raise NotImplementedError
         for i, week in enumerate(self.Weeks):
             idf, week_name = week.Week.add_week_to_idf(idf, name_prefix)
             schedule_year_obj[f"ScheduleWeek_Name_{i + 1}"] = week_name

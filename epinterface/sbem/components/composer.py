@@ -379,15 +379,3 @@ def construct_composer_model(  # noqa: C901
         validator=root_validator,
         allow_partials=allow_partials,
     )
-
-
-if __name__ == "__main__":
-    from epinterface.sbem.components.zones import ZoneComponent
-
-    g = construct_graph(ZoneComponent)
-    model = construct_composer_model(g, ZoneComponent, use_children=False)
-    template_yaml = model.create_data_entry_template()
-    parsed_yaml = yaml.safe_load(template_yaml)
-    model_from_yaml = model.model_validate(parsed_yaml)
-    model_from_yaml.selector = None
-    model_from_yaml.validate_successful_resolution()

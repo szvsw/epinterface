@@ -10,7 +10,6 @@ from prisma.models import (
     Lighting,
     Occupancy,
     Operations,
-    RepeatedWeek,
     SpaceUse,
     Thermostat,
     Ventilation,
@@ -34,14 +33,36 @@ Week.create_partial(
 )
 
 
-RepeatedWeek.create_partial(
-    name="RepeatedWeekWithWeeks", required={"Week"}, relations={"Week": "WeekWithDays"}
-)
-
 Year.create_partial(
     name="YearWithWeeks",
-    required={"Weeks"},
-    relations={"Weeks": "RepeatedWeekWithWeeks"},
+    required={
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    },
+    relations={
+        "January": "WeekWithDays",
+        "February": "WeekWithDays",
+        "March": "WeekWithDays",
+        "April": "WeekWithDays",
+        "May": "WeekWithDays",
+        "June": "WeekWithDays",
+        "July": "WeekWithDays",
+        "August": "WeekWithDays",
+        "September": "WeekWithDays",
+        "October": "WeekWithDays",
+        "November": "WeekWithDays",
+        "December": "WeekWithDays",
+    },
 )
 
 Occupancy.create_partial(
