@@ -394,6 +394,15 @@ GlazingConstructionSimpleT = TypeVar(
 ZoneT = TypeVar("ZoneT", bound=BaseZone)
 
 
+class SBEMDeepObjectNotFoundError(Exception):
+    """Error raised when a deep object is not found."""
+
+    def __init__(self, name: str, prisma_model: type[BaseT]):
+        """Initialize the error."""
+        msg = f"Deep object {name} not found in {prisma_model.__name__}."
+        super().__init__(msg)
+
+
 @dataclass
 class Link(Generic[BaseT, IncludeT, ValidatorT]):
     """The Link class is used to link a prisma model to an SBEM NamedObject validator class."""
@@ -428,8 +437,7 @@ class Link(Generic[BaseT, IncludeT, ValidatorT]):
             )
             return record, self.validator.model_validate(record, from_attributes=True)
         except Exception as e:
-            msg = f"Error getting {self.prisma_model.__name__} with name {name}."
-            raise ValueError(msg) from e
+            raise SBEMDeepObjectNotFoundError(name, self.prisma_model) from e
 
 
 @dataclass
@@ -608,29 +616,29 @@ class PrismaClient:
     db: Prisma
 
 
-def delete_all():
+def delete_all(db: Prisma):
     """Delete all the objects in the database."""
     # delete everything in the db
-    Zone.prisma().delete_many()
-    Envelope.prisma().delete_many()
-    EnvelopeAssembly.prisma().delete_many()
-    ConstructionAssemblyLayer.prisma().delete_many()
-    ConstructionAssembly.prisma().delete_many()
-    ConstructionMaterial.prisma().delete_many()
-    Infiltration.prisma().delete_many()
-    GlazingConstructionSimple.prisma().delete_many()
-    Operations.prisma().delete_many()
-    HVAC.prisma().delete_many()
-    ConditioningSystems.prisma().delete_many()
-    SpaceUse.prisma().delete_many()
-    Occupancy.prisma().delete_many()
-    Lighting.prisma().delete_many()
-    Thermostat.prisma().delete_many()
-    Equipment.prisma().delete_many()
-    WaterUse.prisma().delete_many()
-    ThermalSystem.prisma().delete_many()
-    DHW.prisma().delete_many()
-    Ventilation.prisma().delete_many()
-    Year.prisma().delete_many()
-    Week.prisma().delete_many()
-    Day.prisma().delete_many()
+    Zone.prisma(db).delete_many()
+    Envelope.prisma(db).delete_many()
+    EnvelopeAssembly.prisma(db).delete_many()
+    ConstructionAssemblyLayer.prisma(db).delete_many()
+    ConstructionAssembly.prisma(db).delete_many()
+    ConstructionMaterial.prisma(db).delete_many()
+    Infiltration.prisma(db).delete_many()
+    GlazingConstructionSimple.prisma(db).delete_many()
+    Operations.prisma(db).delete_many()
+    HVAC.prisma(db).delete_many()
+    ConditioningSystems.prisma(db).delete_many()
+    SpaceUse.prisma(db).delete_many()
+    Occupancy.prisma(db).delete_many()
+    Lighting.prisma(db).delete_many()
+    Thermostat.prisma(db).delete_many()
+    Equipment.prisma(db).delete_many()
+    WaterUse.prisma(db).delete_many()
+    ThermalSystem.prisma(db).delete_many()
+    DHW.prisma(db).delete_many()
+    Ventilation.prisma(db).delete_many()
+    Year.prisma(db).delete_many()
+    Week.prisma(db).delete_many()
+    Day.prisma(db).delete_many()

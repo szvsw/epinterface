@@ -303,7 +303,8 @@ def test_composer_on_space_uses(
     preseeded_readonly_db: Prisma,
 ):
     """Test the composer on space uses (only one level deep)."""
-    _space_use, space_use_comp = deep_fetcher.SpaceUse.get_deep_object("default")
+    db = preseeded_readonly_db
+    _space_use, space_use_comp = deep_fetcher.SpaceUse.get_deep_object("default", db)
     root_graph = construct_graph(ZoneSpaceUseComponent)
     SelectorModel = construct_composer_model(
         root_graph, ZoneSpaceUseComponent, use_children=False
@@ -311,7 +312,7 @@ def test_composer_on_space_uses(
 
     selector = SelectorModel(selector=ComponentNameConstructor(source_fields=["basic"]))
 
-    comp = selector.get_component({"basic": "default"})
+    comp = selector.get_component({"basic": "default"}, db=db)
     assert isinstance(comp, ZoneSpaceUseComponent)
     assert comp == space_use_comp
 
@@ -324,11 +325,14 @@ def test_composer_on_space_uses(
         },
     )
 
-    alt_comp = alt_selector.get_component({
-        "basic": "default",
-        "typology": "office",
-        "age": "new",
-    })
+    alt_comp = alt_selector.get_component(
+        {
+            "basic": "default",
+            "typology": "office",
+            "age": "new",
+        },
+        db=db,
+    )
     assert isinstance(alt_comp, ZoneSpaceUseComponent)
     assert alt_comp != comp
     assert alt_comp.Equipment.Name == "new_office"
@@ -342,6 +346,7 @@ def test_composer_on_space_uses(
 
 def test_operations_selector(preseeded_readonly_db: Prisma):
     """Test the operations selector to include deeply nested target components."""
+    db = preseeded_readonly_db
     root_graph = construct_graph(ZoneOperationsComponent)
     SelectorModel = construct_composer_model(
         root_graph, ZoneOperationsComponent, use_children=False
@@ -349,7 +354,7 @@ def test_operations_selector(preseeded_readonly_db: Prisma):
 
     selector = SelectorModel(selector=ComponentNameConstructor(source_fields=["basic"]))
 
-    comp = selector.get_component({"basic": "default_ops"})
+    comp = selector.get_component({"basic": "default_ops"}, db=db)
 
     assert isinstance(comp, ZoneOperationsComponent)
     assert comp.Name == "default_ops"
@@ -374,13 +379,16 @@ def test_operations_selector(preseeded_readonly_db: Prisma):
         },
     )
 
-    alt_comp = alt_selector.get_component({
-        "defaulter_ops": "default_ops",
-        "defaulter_space": "default",
-        "location": "cold",
-        "typology": "office",
-        "age": "new",
-    })
+    alt_comp = alt_selector.get_component(
+        {
+            "defaulter_ops": "default_ops",
+            "defaulter_space": "default",
+            "location": "cold",
+            "typology": "office",
+            "age": "new",
+        },
+        db=db,
+    )
     assert isinstance(alt_comp, ZoneOperationsComponent)
     assert alt_comp != comp
     assert alt_comp.HVAC.Ventilation != comp.HVAC.Ventilation
@@ -406,6 +414,7 @@ def test_operations_selector(preseeded_readonly_db: Prisma):
 
 def test_envelope_selector(preseeded_readonly_db: Prisma):
     """Test the envelope selector to include deeply nested target components."""
+    db = preseeded_readonly_db
     root_graph = construct_graph(ZoneEnvelopeComponent)
     SelectorModel = construct_composer_model(
         root_graph, ZoneEnvelopeComponent, use_children=False
@@ -413,7 +422,7 @@ def test_envelope_selector(preseeded_readonly_db: Prisma):
 
     selector = SelectorModel(selector=ComponentNameConstructor(source_fields=["basic"]))
 
-    comp = selector.get_component({"basic": "default_env"})
+    comp = selector.get_component({"basic": "default_env"}, db=db)
 
     assert isinstance(comp, ZoneEnvelopeComponent)
     assert comp.Name == "default_env"
@@ -429,11 +438,14 @@ def test_envelope_selector(preseeded_readonly_db: Prisma):
         },
     )
 
-    alt_comp = alt_selector.get_component({
-        "default_env": "default_env",
-        "typology": "residential",
-        "weatherization": "heavily",
-    })
+    alt_comp = alt_selector.get_component(
+        {
+            "default_env": "default_env",
+            "typology": "residential",
+            "weatherization": "heavily",
+        },
+        db=db,
+    )
     assert isinstance(alt_comp, ZoneEnvelopeComponent)
     assert alt_comp != comp
     assert alt_comp.Infiltration.Name == "residential_heavily"
@@ -457,12 +469,15 @@ def test_envelope_selector(preseeded_readonly_db: Prisma):
         **component_selectors_dict,  # pyright: ignore [reportArgumentType]
     )
 
-    alt_comp_2 = alt_selector.get_component({
-        "default_assembly": "default",
-        "typology": "residential",
-        "weatherization": "moderately",
-        "window_type": "double",
-    })
+    alt_comp_2 = alt_selector.get_component(
+        {
+            "default_assembly": "default",
+            "typology": "residential",
+            "weatherization": "moderately",
+            "window_type": "double",
+        },
+        db=db,
+    )
 
     assert isinstance(alt_comp_2, ZoneEnvelopeComponent)
     assert alt_comp_2.Assemblies == alt_comp.Assemblies
@@ -478,6 +493,7 @@ def test_envelope_selector(preseeded_readonly_db: Prisma):
 
 def test_zone_selector(preseeded_readonly_db: Prisma):
     """Test the zone selector to include deeply nested target components."""
+    db = preseeded_readonly_db
     root_graph = construct_graph(ZoneComponent)
     SelectorModel = construct_composer_model(
         root_graph, ZoneComponent, use_children=False
@@ -485,7 +501,7 @@ def test_zone_selector(preseeded_readonly_db: Prisma):
 
     selector = SelectorModel(selector=ComponentNameConstructor(source_fields=["basic"]))
 
-    comp = selector.get_component({"basic": "default_zone"})
+    comp = selector.get_component({"basic": "default_zone"}, db=db)
 
     assert isinstance(comp, ZoneComponent)
     assert comp.Name == "default_zone"
@@ -505,11 +521,14 @@ def test_zone_selector(preseeded_readonly_db: Prisma):
         },
     )
 
-    alt_comp = multi_level_selector.get_component({
-        "default_zone": "default_zone",
-        "age": "new",
-        "typology": "office",
-    })
+    alt_comp = multi_level_selector.get_component(
+        {
+            "default_zone": "default_zone",
+            "age": "new",
+            "typology": "office",
+        },
+        db=db,
+    )
 
     assert isinstance(alt_comp, ZoneComponent)
     assert alt_comp != comp
@@ -656,10 +675,14 @@ def test_validate_successful_resolution_with_one_level_of_children():
     graph = construct_graph(ZoneComponent)
     SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
 
-    selector = SelectorModel.model_validate({
-        "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
-        "Operations": {"selector": ComponentNameConstructor(source_fields=["basic"])},
-    })
+    selector = SelectorModel.model_validate(
+        {
+            "Envelope": {"selector": ComponentNameConstructor(source_fields=["basic"])},
+            "Operations": {
+                "selector": ComponentNameConstructor(source_fields=["basic"])
+            },
+        },
+    )
 
     is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
     assert is_valid, "\n".join(errors)
@@ -671,45 +694,49 @@ def test_validate_successful_resolution_with_multiple_levels_of_children():
     graph = construct_graph(ZoneComponent)
     SelectorModel = construct_composer_model(graph, ZoneComponent, use_children=False)
 
-    selector = SelectorModel.model_validate({
-        "Envelope": {
-            "Assemblies": {
-                "selector": ComponentNameConstructor(source_fields=["basic"])
+    selector = SelectorModel.model_validate(
+        {
+            "Envelope": {
+                "Assemblies": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "Window": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "Infiltration": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
             },
-            "Window": {"selector": ComponentNameConstructor(source_fields=["basic"])},
-            "Infiltration": {
-                "selector": ComponentNameConstructor(source_fields=["basic"])
+            "Operations": {
+                "SpaceUse": {
+                    "Equipment": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                    "Occupancy": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                    "WaterUse": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                    "Lighting": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                    "Thermostat": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                },
+                "HVAC": {
+                    "Ventilation": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                    "ConditioningSystems": {
+                        "selector": ComponentNameConstructor(source_fields=["basic"])
+                    },
+                },
+                "DHW": {"selector": ComponentNameConstructor(source_fields=["basic"])},
             },
         },
-        "Operations": {
-            "SpaceUse": {
-                "Equipment": {
-                    "selector": ComponentNameConstructor(source_fields=["basic"])
-                },
-                "Occupancy": {
-                    "selector": ComponentNameConstructor(source_fields=["basic"])
-                },
-                "WaterUse": {
-                    "selector": ComponentNameConstructor(source_fields=["basic"])
-                },
-                "Lighting": {
-                    "selector": ComponentNameConstructor(source_fields=["basic"])
-                },
-                "Thermostat": {
-                    "selector": ComponentNameConstructor(source_fields=["basic"])
-                },
-            },
-            "HVAC": {
-                "Ventilation": {
-                    "selector": ComponentNameConstructor(source_fields=["basic"])
-                },
-                "ConditioningSystems": {
-                    "selector": ComponentNameConstructor(source_fields=["basic"])
-                },
-            },
-            "DHW": {"selector": ComponentNameConstructor(source_fields=["basic"])},
-        },
-    })
+    )
 
     is_valid, errors = selector.validate_successful_resolution(raise_on_failure=False)
     assert is_valid, "\n".join(errors)

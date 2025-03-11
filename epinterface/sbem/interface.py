@@ -173,7 +173,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
     """Add an excel file to the database."""
     """Add an excel file to the database."""
     if erase_db:
-        delete_all()
+        delete_all(db)
 
     component_dfs_dict = excel_parser(path)
     with db.tx(max_wait=timedelta(seconds=10), timeout=timedelta(minutes=1)) as tx:

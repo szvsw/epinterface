@@ -22,7 +22,9 @@ def preseeded_readonly_db():
     """Create a database with schedules and space use children to be used in other tests."""
     with tempfile.TemporaryDirectory() as temp_dir:
         database_path = Path(temp_dir) / "test.db"
-        settings = PrismaSettings.New(database_path=database_path, if_exists="raise")
+        settings = PrismaSettings.New(
+            database_path=database_path, if_exists="raise", auto_register=False
+        )
         with settings.db:
             create_schedules(settings.db)
             last_space_use_name = create_space_use_children(settings.db)
