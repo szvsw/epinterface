@@ -7,7 +7,14 @@ from typing import Annotated, ClassVar, Literal
 import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule
-from pydantic import BaseModel, BeforeValidator, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+)
 
 logger = getLogger(__name__)
 
@@ -764,6 +771,36 @@ class ScheduleWeekDaily(BaseObj, extra="ignore"):
     Saturday_ScheduleDay_Name: str
     Sunday_ScheduleDay_Name: str
 
+    @computed_field
+    @property
+    def CustomDay1_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def CustomDay2_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def Holiday_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Sunday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def SummerDesignDay_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def WinterDesignDay_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
 
 class ScheduleYear(BaseObj, extra="ignore"):
     """ScheduleYear object."""
@@ -843,54 +880,6 @@ class ScheduleYear(BaseObj, extra="ignore"):
     Start_Day_12: int | None = None
     End_Month_12: int | None = None
     End_Day_12: int | None = None
-
-    ScheduleWeek_Name_13: str | None = None
-    Start_Month_13: int | None = None
-    Start_Day_13: int | None = None
-    End_Month_13: int | None = None
-    End_Day_13: int | None = None
-
-    ScheduleWeek_Name_14: str | None = None
-    Start_Month_14: int | None = None
-    Start_Day_14: int | None = None
-    End_Month_14: int | None = None
-    End_Day_14: int | None = None
-
-    ScheduleWeek_Name_15: str | None = None
-    Start_Month_15: int | None = None
-    Start_Day_15: int | None = None
-    End_Month_15: int | None = None
-    End_Day_15: int | None = None
-
-    ScheduleWeek_Name_16: str | None = None
-    Start_Month_16: int | None = None
-    Start_Day_16: int | None = None
-    End_Month_16: int | None = None
-    End_Day_16: int | None = None
-
-    ScheduleWeek_Name_17: str | None = None
-    Start_Month_17: int | None = None
-    Start_Day_17: int | None = None
-    End_Month_17: int | None = None
-    End_Day_17: int | None = None
-
-    ScheduleWeek_Name_18: str | None = None
-    Start_Month_18: int | None = None
-    Start_Day_18: int | None = None
-    End_Month_18: int | None = None
-    End_Day_18: int | None = None
-
-    ScheduleWeek_Name_19: str | None = None
-    Start_Month_19: int | None = None
-    Start_Day_19: int | None = None
-    End_Month_19: int | None = None
-    End_Day_19: int | None = None
-
-    ScheduleWeek_Name_20: str | None = None
-    Start_Month_20: int | None = None
-    Start_Day_20: int | None = None
-    End_Month_20: int | None = None
-    End_Day_20: int | None = None
 
 
 class ZoneList(BaseModel, extra="ignore"):

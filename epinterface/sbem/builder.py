@@ -29,15 +29,13 @@ from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
-    InfiltrationComponent,
-    ZoneEnvelopeComponent,
 )
 from epinterface.sbem.components.operations import ZoneOperationsComponent
+from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import (
     NotImplementedParameter,
     SBEMBuilderNotImplementedError,
 )
-from epinterface.sbem.interface import ComponentLibrary
 from epinterface.weather import BaseWeather
 
 
@@ -67,16 +65,17 @@ class SurfaceHandler(BaseModel):
     surface_group: Literal["glazing", "opaque"]
 
     def assign_srfs(
-        self, idf: IDF, lib: ComponentLibrary, construction_name: str
+        self,
+        idf: IDF,
+        construction: ConstructionAssemblyComponent
+        | GlazingConstructionSimpleComponent,
     ) -> IDF:
         """Adds a construction (and its materials) to an IDF and assigns it to matching surfaces.
 
         Args:
             idf (IDF): The IDF model to add the construction to.
-            lib (ClimateStudioLibraryV2): The library of constructions.
-            construction_name (str): The name of the construction to add.
+            construction (ConstructionAssemblyComponent | GlazingConstructionComponent): The construction to add.
         """
-        raise NotImplementedError
         srf_key = (
             "FENESTRATIONSURFACE:DETAILED"
             if self.surface_group == "glazing"
@@ -88,21 +87,8 @@ class SurfaceHandler(BaseModel):
             )
 
         srfs = [srf for srf in idf.idfobjects[srf_key] if self.check_srf(srf)]
-        construction_lib = (
-            lib.OpaqueConstructions
-            if self.surface_group != "glazing"
-            else lib.GlazingConstructionSimple
-        )
-        if construction_name not in construction_lib:
-            raise KeyError(
-                f"MISSING_CONSTRUCTION:{construction_name}:TARGET={self.__repr__()}"
-            )
-        construction = construction_lib[construction_name]
-        idf = (
-            construction.add_to_idf(idf)
-            if isinstance(construction, GlazingConstructionSimpleComponent)
-            else construction.add_to_idf(idf, lib.ConstructionMaterial)
-        )
+        idf = construction.add_to_idf(idf)
+
         for srf in srfs:
             srf.Construction_Name = construction.Name
         return idf
@@ -252,7 +238,6 @@ class SurfaceHandlers(BaseModel):
     def handle_envelope(
         self,
         idf: IDF,
-        lib: ComponentLibrary,
         constructions: EnvelopeAssemblyComponent,
         window: GlazingConstructionSimpleComponent | None,
     ):
@@ -262,56 +247,42 @@ class SurfaceHandlers(BaseModel):
 
         Args:
             idf (IDF): The IDF model to add the envelope to.
-            lib (ClimateStudioLibraryV2): The library of constructions.
             constructions (ZoneConstruction): The construction names for the envelope.
             window (GlazingConstructionSimpleComponent | None): The window definition.
 
         Returns:
             idf (IDF): The updated IDF model.
         """
-
         # outside walls are the ones with outdoor boundary condition and vertical orientation
-        def make_reversed(const: ConstructionAssemblyComponent):
-            new_const = const.model_copy(deep=True)
-            new_const.Layers = new_const.Layers[::-1]
-            new_const.Name = f"{const.Name}_Reversed"
-            return new_const
+        # def make_reversed(const: ConstructionAssemblyComponent):
+        #     new_const = const.model_copy(deep=True)
+        #     sorted_layers = sorted(new_const.Layers, key=lambda x: x.LayerOrder)
+        #     for i, layer in enumerate(sorted_layers[::-1]):
+        #         layer.LayerOrder = i
+        #     resorted_layers = sorted(sorted_layers, key=lambda x: x.LayerOrder)
+        #     new_const.Layers = resorted_layers
+        #     new_const.Name = f"{const.Name}_Reversed"
+        #     return new_const
 
-        raise NotImplementedError
+        slab_reversed = constructions.SlabAssembly.reversed
 
-        def reverse_construction(const_name: str, lib: ComponentLibrary):
-            const = lib.ConstructionAssembly[const_name]
-            new_const = make_reversed(const)
-            return new_const
-
-        slab_reversed = reverse_construction(constructions.SlabAssembly, lib)
-        lib.ConstructionAssembly[slab_reversed.Name] = slab_reversed
-
-        idf = self.Roof.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.RoofAssembly
-        )
+        idf = self.Roof.assign_srfs(idf=idf, construction=constructions.RoofAssembly)
         idf = self.Facade.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.FacadeAssembly
+            idf=idf, construction=constructions.FacadeAssembly
         )
         idf = self.Partition.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.PartitionAssembly
+            idf=idf, construction=constructions.PartitionAssembly
         )
-        idf = self.Slab.assign_srfs(
-            idf=idf, lib=lib, construction_name=slab_reversed.Name
-        )
-        idf = self.Ceiling.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.SlabAssembly
-        )
+        idf = self.Slab.assign_srfs(idf=idf, construction=slab_reversed)
+        idf = self.Ceiling.assign_srfs(idf=idf, construction=constructions.SlabAssembly)
         idf = self.GroundSlab.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.GroundSlabAssembly
+            idf=idf, construction=constructions.GroundSlabAssembly
         )
         idf = self.GroundWall.assign_srfs(
-            idf=idf, lib=lib, construction_name=constructions.GroundWallAssembly
+            idf=idf, construction=constructions.GroundWallAssembly
         )
         if window:
-            idf = self.Window.assign_srfs(
-                idf=idf, lib=lib, construction_name=window.Name
-            )
+            idf = self.Window.assign_srfs(idf=idf, construction=window)
         return idf
 
 
@@ -341,10 +312,7 @@ class Model(BaseWeather, validate_assignment=True):
     basement_use_fraction: float | None = Field(..., ge=0, le=1)
     conditioned_basement: bool
     basement_insulation_surface: BasementInsulationSurfaceOption
-    lib: ComponentLibrary
-
-    Envelope: ZoneEnvelopeComponent
-    Operations: ZoneOperationsComponent
+    Zone: ZoneComponent
 
     @property
     def total_conditioned_area(self) -> float:
@@ -369,8 +337,8 @@ class Model(BaseWeather, validate_assignment=True):
 
         """
         ppl_per_m2 = (
-            self.Operations.SpaceUse.Occupancy.PeopleDensity
-            if self.Operations.SpaceUse.Occupancy.IsOn
+            self.Zone.Operations.SpaceUse.Occupancy.PeopleDensity
+            if self.Zone.Operations.SpaceUse.Occupancy.IsOn
             else 0
         )
         total_area = self.total_conditioned_area
@@ -581,39 +549,6 @@ class Model(BaseWeather, validate_assignment=True):
         idf = space_use.DHW.add_water_to_idf_zone(idf, zone.Name, total_ppl)
         return idf
 
-    def add_envelope(
-        self, idf: IDF, envelope: ZoneEnvelopeComponent, inf_zone_list: ZoneList
-    ) -> IDF:
-        """Add the envelope to the IDF model.
-
-        Takes care of both the constructions and infiltration and windows.
-
-        Args:
-            idf (IDF): The IDF model to add the envelope to.
-            envelope (ZoneEnvelope): The envelope template.
-            inf_zone_list (ZoneList): The list of zones to add the infiltration to.
-
-
-        Returns:
-            IDF: The IDF model with the added envelope.
-        """
-        raise NotImplementedError
-        constructions = envelope.Assemblies
-        infiltration = envelope.Infiltration
-        window_def = envelope.Window
-        # _other_settings = envelope.OtherSettings
-        # _foundation_settings = envelope.Foundation
-        # TODO: other settings
-
-        self.add_srf_constructions(idf, constructions, window_def)
-        self.add_infiltration(idf, infiltration, inf_zone_list)
-
-        # TODO: consider natvent/operable windows etc
-        # sch_names = self.envelope.schedule_names
-        # idf = self.add_schedules_by_name(idf, sch_names)
-
-        return idf
-
     def add_srf_constructions(
         self,
         idf: IDF,
@@ -630,9 +565,10 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             IDF: The IDF model with the selected surfaces.
         """
-        raise NotImplementedError
         if self.geometry.roof_height:
             raise SBEMBuilderNotImplementedError("roof_height")
+        if self.geometry.basement:
+            raise SBEMBuilderNotImplementedError("basement")
 
         if (
             constructions.FacadeIsAdiabatic
@@ -647,26 +583,8 @@ class Model(BaseWeather, validate_assignment=True):
             raise SBEMBuilderNotImplementedError("InternalMassAssembly")
 
         handlers = SurfaceHandlers.Default()
-        idf = handlers.handle_envelope(idf, self.lib, constructions, window_def)
+        idf = handlers.handle_envelope(idf, constructions, window_def)
 
-        return idf
-
-    def add_infiltration(
-        self, idf: IDF, infiltration: InfiltrationComponent, zone_list: ZoneList
-    ):
-        """Add the infiltration to the IDF model.
-
-        Args:
-            idf (IDF): The IDF model to add the infiltration to.
-            infiltration: The infiltration object.
-            zone_list (ZoneList): The list of zones to add the infiltration to.
-
-        Returns:
-            idf (IDF): The IDF model with the added infiltration.
-        """
-        raise NotImplementedError
-        idf = infiltration.add_infiltration_to_idf_zone(idf, zone_list.Name)
-        # idf = self.add_schedules_by_name(idf, infiltration.schedule_names)
         return idf
 
     def build(self, config: SimulationPathConfig) -> IDF:
@@ -714,7 +632,12 @@ class Model(BaseWeather, validate_assignment=True):
 
         # construct zone lists
         idf, added_zone_lists = self.add_zone_lists(idf)
-        raise NotImplementedError
+        for zone in added_zone_lists.main_zone_list.Names:
+            self.Zone.add_to_idf_zone(idf, zone)
+        self.add_srf_constructions(
+            idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
+        )
+        # self.add_infiltration(idf, infiltration, inf_zone_list)
 
         # > operations
         # ----> space use
@@ -741,10 +664,9 @@ class Model(BaseWeather, validate_assignment=True):
         # --------> special handling for operable windows
 
         # TODO: Handle separately ventilated attic/basement?
-        idf = self.add_space_use(
-            idf, self.space_use, added_zone_lists.conditioned_zone_list
-        )
-        idf = self.add_envelope(idf, self.Envelope, added_zone_lists.all_zones_list)
+        # idf = self.add_space_use(
+        #     idf, self.space_use, added_zone_lists.conditioned_zone_list
+        # )
 
         return idf
 
@@ -798,7 +720,7 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             pd.DataFrame: The postprocessed results.
         """
-        raise NotImplementedError
+        # TODO: get peaks
         res_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
@@ -820,28 +742,28 @@ class Model(BaseWeather, validate_assignment=True):
         res_series.name = "kWh/m2"
 
         if move_energy:
-            if self.Operations.HVAC.ConditioningSystems.Heating is not None:
-                heat_cop = self.Operations.HVAC.ConditioningSystems.Heating.effective_system_cop
-                heat_fuel = self.Operations.HVAC.ConditioningSystems.Heating.Fuel
+            if self.Zone.Operations.HVAC.ConditioningSystems.Heating is not None:
+                heat_cop = self.Zone.Operations.HVAC.ConditioningSystems.Heating.effective_system_cop
+                heat_fuel = self.Zone.Operations.HVAC.ConditioningSystems.Heating.Fuel
                 heat_energy = res_series["District Heating"] / heat_cop
                 if heat_fuel not in res_series.index:
                     res_series[heat_fuel] = 0
                 res_series[heat_fuel] += heat_energy
 
-            raise NotImplementedError
-            cool_cop = (
-                self.Operations.HVAC.ConditioningSystems.Cooling.effective_system_cop
-            )
-            dhw_cop = self.Operations.DHW.SystemCOP
-            cool_fuel = self.space_use.Conditioning.CoolingFuelType
-            dhw_fuel = self.space_use.HotWater.HotWaterFuelType
-            cool_energy = res_series["District Cooling"] / cool_cop
+            if self.Zone.Operations.HVAC.ConditioningSystems.Cooling is not None:
+                cool_cop = self.Zone.Operations.HVAC.ConditioningSystems.Cooling.effective_system_cop
+                cool_fuel = self.Zone.Operations.HVAC.ConditioningSystems.Cooling.Fuel
+                cool_energy = res_series["District Cooling"] / cool_cop
+                if cool_fuel not in res_series.index:
+                    res_series[cool_fuel] = 0
+                res_series[cool_fuel] += cool_energy
+
+            dhw_cop = self.Zone.Operations.DHW.effective_system_cop
+            dhw_fuel = self.Zone.Operations.DHW.FuelType
             dhw_energy = res_series["Domestic Hot Water"] / dhw_cop
-            if cool_fuel not in res_series.index:
-                res_series[cool_fuel] = 0
             if dhw_fuel not in res_series.index:
                 res_series[dhw_fuel] = 0
-            res_series[cool_fuel] += cool_energy
+
             res_series[dhw_fuel] += dhw_energy
             res_series = res_series.drop([
                 "District Cooling",
@@ -887,81 +809,3 @@ class Model(BaseWeather, validate_assignment=True):
             results = self.standard_results_postprocess(sql, move_energy=move_energy)
             err_text = self.get_warnings(idf)
             return idf, results, err_text
-
-
-if __name__ == "__main__":
-    from prisma.models import Envelope, Operations
-
-    # import tempfile
-    from pydantic import AnyUrl
-
-    from epinterface.sbem.prisma.client import (
-        ENVELOPE_INCLUDE,
-        OPERATIONS_INCLUDE,
-        prisma_settings,
-    )
-
-    def _fetch_comps():
-        db = prisma_settings.db
-        db.connect()
-        operations = Operations.prisma().find_first(include=OPERATIONS_INCLUDE)
-        envelope = Envelope.prisma().find_first(include=ENVELOPE_INCLUDE)
-
-        db.disconnect()
-        return operations, envelope
-
-    operations, envelope = _fetch_comps()
-
-    model = Model(
-        Weather=AnyUrl(
-            "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
-        ),
-        Operations=ZoneOperationsComponent.model_validate(
-            operations, from_attributes=True
-        ),
-        Envelope=ZoneEnvelopeComponent.model_validate(envelope, from_attributes=True),
-        lib=ComponentLibrary(
-            Operations={},
-            SpaceUse={},
-            Occupancy={},
-            Lighting={},
-            Equipment={},
-            Thermostat={},
-            WaterUse={},
-            HVAC={},
-            ConditioningSystems={},
-            ThermalSystem={},
-            Ventilation={},
-            DHW={},
-            Envelope={},
-            GlazingConstructionSimple={},
-            Infiltration={},
-            EnvelopeAssembly={},
-            ConstructionAssembly={},
-            ConstructionMaterial={},
-            Year={},
-            Week={},
-            Day={},
-        ),
-        basement_insulation_surface=None,
-        conditioned_basement=True,
-        basement_use_fraction=None,
-        attic_insulation_surface=None,
-        conditioned_attic=False,
-        attic_use_fraction=None,
-        geometry=ShoeboxGeometry(
-            x=0,
-            y=0,
-            w=10,
-            d=10,
-            h=3,
-            wwr=0.2,
-            num_stories=2,
-            basement=True,
-            zoning="by_storey",
-            roof_height=None,
-        ),
-    )
-
-    idf, results, err_text = model.run(move_energy=False)
-    print(results)

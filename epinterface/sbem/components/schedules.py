@@ -273,12 +273,16 @@ class WeekComponent(NamedObject, extra="forbid"):
 
 #         return self
 
+YearScheduleCategory = Literal[
+    "Equipment", "Lighting", "Occupancy", "Flow rate", "Setpoint"
+]
+
 
 class YearComponent(NamedObject, extra="forbid"):
     """A year with a schedule type limit and a list of repeated weeks."""
 
-    Type: Literal["Equipment", "Lighting", "Occupancy", "Flow rate", "Setpoint"] = (
-        Field(..., description="The system that the schedule is applicable to.")
+    Type: YearScheduleCategory = Field(
+        ..., description="The system that the schedule is applicable to."
     )
     January: WeekComponent
     February: WeekComponent
@@ -340,65 +344,77 @@ class YearComponent(NamedObject, extra="forbid"):
             idf (IDF): The IDF object with the year added.
             year_name (str): The name of the year schedule.
         """
+        idf, jan_name = self.January.add_week_to_idf(idf, name_prefix)
+        idf, feb_name = self.February.add_week_to_idf(idf, name_prefix)
+        idf, mar_name = self.March.add_week_to_idf(idf, name_prefix)
+        idf, apr_name = self.April.add_week_to_idf(idf, name_prefix)
+        idf, may_name = self.May.add_week_to_idf(idf, name_prefix)
+        idf, jun_name = self.June.add_week_to_idf(idf, name_prefix)
+        idf, jul_name = self.July.add_week_to_idf(idf, name_prefix)
+        idf, aug_name = self.August.add_week_to_idf(idf, name_prefix)
+        idf, sep_name = self.September.add_week_to_idf(idf, name_prefix)
+        idf, oct_name = self.October.add_week_to_idf(idf, name_prefix)
+        idf, nov_name = self.November.add_week_to_idf(idf, name_prefix)
+        idf, dec_name = self.December.add_week_to_idf(idf, name_prefix)
         year_sched = ScheduleYear(
             Name=self.Name,
-            Schedule_Type_Limits_Name=self.Type,
-            ScheduleWeek_Name_1=self.January.Name,
+            Schedule_Type_Limits_Name=self.schedule_type_limits,
+            ScheduleWeek_Name_1=jan_name,
             Start_Month_1=1,
             Start_Day_1=1,
             End_Month_1=1,
             End_Day_1=31,
-            ScheduleWeek_Name_2=self.February.Name,
+            ScheduleWeek_Name_2=feb_name,
             Start_Month_2=2,
             Start_Day_2=1,
             End_Month_2=2,
             End_Day_2=28,
-            ScheduleWeek_Name_3=self.March.Name,
+            ScheduleWeek_Name_3=mar_name,
             Start_Month_3=3,
             Start_Day_3=1,
             End_Month_3=3,
             End_Day_3=31,
-            ScheduleWeek_Name_4=self.April.Name,
+            ScheduleWeek_Name_4=apr_name,
             Start_Month_4=4,
             Start_Day_4=1,
             End_Month_4=4,
             End_Day_4=30,
-            ScheduleWeek_Name_5=self.May.Name,
+            ScheduleWeek_Name_5=may_name,
             Start_Month_5=5,
             Start_Day_5=1,
             End_Month_5=5,
             End_Day_5=31,
-            ScheduleWeek_Name_6=self.June.Name,
+            ScheduleWeek_Name_6=jun_name,
             Start_Month_6=6,
             Start_Day_6=1,
             End_Month_6=6,
             End_Day_6=30,
-            ScheduleWeek_Name_7=self.July.Name,
+            ScheduleWeek_Name_7=jul_name,
             Start_Month_7=7,
             Start_Day_7=1,
             End_Month_7=7,
             End_Day_7=31,
-            ScheduleWeek_Name_8=self.August.Name,
+            ScheduleWeek_Name_8=aug_name,
             Start_Month_8=8,
             Start_Day_8=1,
             End_Month_8=8,
             End_Day_8=31,
-            ScheduleWeek_Name_9=self.September.Name,
+            ScheduleWeek_Name_9=sep_name,
             Start_Month_9=9,
             Start_Day_9=1,
             End_Month_9=9,
             End_Day_9=30,
-            ScheduleWeek_Name_10=self.October.Name,
+            ScheduleWeek_Name_10=oct_name,
             Start_Month_10=10,
             Start_Day_10=1,
             End_Month_10=10,
             End_Day_10=31,
-            ScheduleWeek_Name_11=self.November.Name,
+            ScheduleWeek_Name_11=nov_name,
             Start_Month_11=11,
             Start_Day_11=1,
             End_Month_11=11,
             End_Day_11=30,
-            ScheduleWeek_Name_12=self.December.Name,
+            ScheduleWeek_Name_12=dec_name,
             Start_Month_12=12,
             Start_Day_12=1,
             End_Month_12=12,

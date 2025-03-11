@@ -138,7 +138,7 @@ from pathlib import Path
 class PrismaSettings(BaseSettings):
     """Settings for the Prisma client."""
 
-    database_path: FilePath | None = None
+    database_path: FilePath
     auto_register: bool = True
 
     @classmethod
@@ -230,8 +230,6 @@ class PrismaSettings(BaseSettings):
         )
         return Prisma(auto_register=self.auto_register, datasource=datasource)
 
-
-prisma_settings = PrismaSettings()
 
 WEEK_INCLUDE: WeekInclude = {
     "Monday": True,

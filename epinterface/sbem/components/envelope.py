@@ -209,19 +209,16 @@ class ConstructionAssemblyComponent(
         v = sorted(v, key=lambda x: x.LayerOrder)
         return v
 
-    def add_to_idf(
-        self, idf: IDF, material_defs: dict[str, ConstructionMaterialComponent]
-    ) -> IDF:
+    def add_to_idf(self, idf: IDF) -> IDF:
         """Adds an opaque construction to an IDF object.
 
         Note that this will add the individual materials as well.
 
         Args:
             idf (IDF): The IDF object to add the construction to.
-            material_defs (list[OpaqueMaterial]): List of opaque material definitions.
 
         Returns:
-            IDF: The updated IDF object.
+            idf (IDF): The updated IDF object.
         """
         layers = [layer.ep_material for layer in self.Layers]
 
@@ -231,6 +228,21 @@ class ConstructionAssemblyComponent(
         )
         idf = construction.add(idf)
         return idf
+
+    @property
+    def sorted_layers(self):
+        """Return the layers of the construction sorted by layer order."""
+        return sorted(self.Layers, key=lambda x: x.LayerOrder)
+
+    @property
+    def reversed(self):
+        """Return a reversed version of the construction."""
+        copy = self.model_copy(deep=True)
+        for i, layer in enumerate(copy.sorted_layers[::-1]):
+            layer.LayerOrder = i
+        copy.Layers = copy.sorted_layers
+        copy.Name = f"{self.Name}_Reversed"
+        return copy
 
 
 class EnvelopeAssemblyComponent(

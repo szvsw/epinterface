@@ -58,13 +58,12 @@ class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
         activity_sch_name = (
             f"{target_zone_or_zone_list_name}_{self.safe_name}_PEOPLE_Activity_Schedule"
         )
-        lim = "AnyNumber"
-        if not idf.getobject("SCHEDULETYPELIMITS", lim):
-            lim = ScheduleTypeLimits(
-                Name="AnyNumber",
-                LowerLimit=None,
-                UpperLimit=None,
-            )
+        lim = ScheduleTypeLimits(
+            Name="AnyNumber",
+            LowerLimit=None,
+            UpperLimit=None,
+        )
+        if not idf.getobject("SCHEDULETYPELIMITS", lim.Name):
             lim.to_epbunch(idf)
         activity_sch = Schedule.from_values(
             Values=[self.MetabolicRate_met_to_W] * 8760,
