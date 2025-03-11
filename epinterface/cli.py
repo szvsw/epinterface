@@ -23,7 +23,14 @@ def cli():
     pass
 
 
-@cli.command(help="Generate the prisma client for epinterface.")
+# Create a group for prisma-related commands
+@cli.group(help="Commands related to Prisma ORM for epinterface.")
+def prisma():
+    """Commands for working with Prisma ORM for epinterface."""
+    pass
+
+
+@prisma.command(help="Generate the prisma client for epinterface.")
 def generate():
     """Generate the prisma client."""
     # check the install location of epinterface
@@ -62,7 +69,7 @@ def generate():
         sys.exit(1)
 
 
-@cli.command(
+@prisma.command(
     help="Return the path to the prisma schema file. "
     "This is useful for passing the `--schema` flag to `prisma <subcommand>`."
 )
@@ -73,7 +80,7 @@ def schemapath():
     click.echo(str(path_to_schema))
 
 
-@cli.command(
+@prisma.command(
     help="Return the path to the prisma partials file. "
     "This is useful for passing the `--partials` flag to `prisma <subcommand>`."
 )
@@ -84,7 +91,14 @@ def partials_path():
     click.echo(str(path_to_partials))
 
 
-@cli.command(help="Create a new database file at the given path.")
+# Create a group for database-related commands
+@cli.group(help="Commands for working with epinterface databases.")
+def db():
+    """Commands for working with epinterface databases."""
+    pass
+
+
+@db.command(help="Create a new database file at the given path.")
 @click.option(
     "--path",
     type=click.Path(
@@ -119,32 +133,7 @@ def make(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore
     click.echo(f"Database available at {path}.")
 
 
-@cli.command(help="Create a yaml template file for entering component maps.")
-@click.option(
-    "--path",
-    type=click.Path(
-        exists=False,
-        path_type=Path,
-    ),
-    default="component_map.yaml",
-    prompt="Enter the path to the yaml template file for entering component maps.",
-)
-def template(path: Path):
-    """Create a yaml template file for entering component maps."""
-    from epinterface.sbem.components.composer import (
-        construct_composer_model,
-        construct_graph,
-    )
-    from epinterface.sbem.components.zones import ZoneComponent
-
-    g = construct_graph(ZoneComponent)
-    model = construct_composer_model(g, ZoneComponent, use_children=False)
-    template_yaml = model.create_data_entry_template()
-    with open(path, "w") as f:
-        f.write(template_yaml)
-
-
-@cli.command(help="Convert an excel file to a database file.")
+@db.command(help="Convert an excel file to a database file.")
 @click.option(
     "--excel-path",
     type=click.Path(
@@ -189,3 +178,35 @@ def convert(excel_path: Path, db_path: Path):
         sys.exit(1)
 
     click.echo(f"Database available at {db_path}.")
+
+
+# Create a group for component-related commands
+@cli.group(help="Commands for working with components")
+def components():
+    """Commands for working with components."""
+    pass
+
+
+@components.command(help="Create a yaml template file for entering component maps.")
+@click.option(
+    "--path",
+    type=click.Path(
+        exists=False,
+        path_type=Path,
+    ),
+    default="component_map.yaml",
+    prompt="Enter the path to the yaml template file for entering component maps.",
+)
+def template(path: Path):
+    """Create a yaml template file for entering component maps."""
+    from epinterface.sbem.components.composer import (
+        construct_composer_model,
+        construct_graph,
+    )
+    from epinterface.sbem.components.zones import ZoneComponent
+
+    g = construct_graph(ZoneComponent)
+    model = construct_composer_model(g, ZoneComponent, use_children=False)
+    template_yaml = model.create_data_entry_template()
+    with open(path, "w") as f:
+        f.write(template_yaml)
