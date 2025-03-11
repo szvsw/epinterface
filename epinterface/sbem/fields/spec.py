@@ -2,7 +2,7 @@
 
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 NumericOrString = TypeVar("NumericOrString", float, str, int)
 Numeric = TypeVar("Numeric", float, int)
@@ -39,6 +39,26 @@ class SemanticModelFields(BaseModel):
     Fields: list[NumericFieldSpec | CategoricalFieldSpec] = Field(
         ..., description="The fields that make up the model."
     )
+    WWR_col: str | None = Field(
+        default=None, description="The window-to-wall ratio [0-1] column name."
+    )
+    Height_col: str | None = Field(
+        default=None, description="The height [m] column name."
+    )
+    Num_Floors_col: str | None = Field(
+        default=None, description="The number of floors column name [int]."
+    )
+    GFA_col: str | None = Field(
+        default=None, description="The gross floor area column name [m2]."
+    )
+
+    @model_validator(mode="after")
+    def check_at_least_one_height_or_num_floors(self):
+        """Check that at least one of height or number of floors is provided."""
+        if self.Height_col is None and self.Num_Floors_col is None:
+            msg = "At least one of height or number of floors must be provided."
+            raise ValueError(msg)
+        return self
 
 
 if __name__ == "__main__":
@@ -66,6 +86,7 @@ if __name__ == "__main__":
             age_bracket_field,
             on_campus_field,
         ],
+        Height_col="Height",
     )
 
     import yaml
