@@ -421,11 +421,15 @@ class Link(Generic[BaseT, IncludeT, ValidatorT]):
         # It would be great if we could disable the type checker for this line,
         # but right now the BaseT / IncludeT are not constrained to only allow certain combinations.
 
-        record = self.prisma_model.prisma(db).find_unique_or_raise(
-            where={"Name": name},
-            include=self.include,  # pyright: ignore [reportArgumentType]
-        )
-        return record, self.validator.model_validate(record, from_attributes=True)
+        try:
+            record = self.prisma_model.prisma(db).find_unique_or_raise(
+                where={"Name": name},
+                include=self.include,  # pyright: ignore [reportArgumentType]
+            )
+            return record, self.validator.model_validate(record, from_attributes=True)
+        except Exception as e:
+            msg = f"Error getting {self.prisma_model.__name__} with name {name}."
+            raise ValueError(msg) from e
 
 
 @dataclass
