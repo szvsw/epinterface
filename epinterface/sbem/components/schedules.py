@@ -273,8 +273,9 @@ class WeekComponent(NamedObject, extra="forbid"):
 
 #         return self
 
+# TODO: change flow rate to water use.
 YearScheduleCategory = Literal[
-    "Equipment", "Lighting", "Occupancy", "Flow rate", "Setpoint"
+    "Equipment", "Lighting", "Occupancy", "Flow rate", "Setpoint", "Window"
 ]
 
 
