@@ -174,7 +174,7 @@ class PrismaSettings(BaseSettings):
         schema_path = prisma_path / "schema.prisma"
         path_exists = database_path.exists()
         generator_output_path = Path(str(prisma_path / "database.db"))
-        generator_output_path_exists = generator_output_path.exists()
+        _generator_output_path_exists = generator_output_path.exists()
         accepted_commands = ("prisma", "prisma.exe")
         prisma_cmd = shutil.which("prisma")
         if not prisma_cmd or not prisma_cmd.lower().endswith(accepted_commands):
@@ -194,9 +194,9 @@ class PrismaSettings(BaseSettings):
                 msg = f"Error applying migrations: {e}"
                 raise RuntimeError(msg) from e
 
-        if generator_output_path_exists:
-            msg = f"Temp database file {generator_output_path} already exists and would be overwritten.."
-            raise FileExistsError(msg)
+        # if generator_output_path_exists:
+        #     msg = f"Temp database file {generator_output_path} already exists and would be overwritten.."
+        #     raise FileExistsError(msg)
 
         if path_exists and if_exists == "raise":
             msg = f"Database file {database_path} already exists."

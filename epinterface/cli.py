@@ -140,6 +140,7 @@ def make(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore
         exists=True,
         path_type=Path,
     ),
+    default="component-library.xlsx",
     prompt="Enter the path to the excel file to convert (should have a .xlsx suffix).",
     help="The excel file should be a template excel file.  See https://github.com/mitsustainabledesignlab/epinterface for more info.",
 )
