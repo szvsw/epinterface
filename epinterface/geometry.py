@@ -1,5 +1,6 @@
 """Geometry utilities for the UBEM construction."""
 
+from collections.abc import Sequence
 from typing import Literal, cast
 
 import numpy as np
@@ -96,8 +97,8 @@ def match_idf_to_building_and_neighbors(
 
 def compute_shading_mask(
     building: Polygon | str,
-    neighbors: list[Polygon | str | None],
-    neighbor_heights: list[float | int | None],
+    neighbors: Sequence[Polygon | str | None],
+    neighbor_heights: Sequence[float | int | None],
     azimuthal_angle: float,
 ) -> np.ndarray:
     """Compute the shading mask for the building.
