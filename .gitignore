@@ -173,3 +173,8 @@ epinterface/data/Everett_templates_CS_export.zip
 
 epinterface/data/20241007 Templates Update/
 notebooks/test.idf
+
+epinterface/sbem/prisma/**/*.db
+**/*.db.bak
+epinterface/sbem/prisma/**/*.db-journal
+prisma_minimal/

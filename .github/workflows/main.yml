@@ -22,6 +22,9 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-poetry-env
 
+      - name: Generate Prisma client
+        run: make prisma-generate
+
       - name: Run checks
         run: make check
 
@@ -51,6 +54,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Generate Prisma client
+        run: make prisma-generate
+
       - name: Check typing
         run: poetry run pyright
 
@@ -78,6 +84,9 @@ jobs:
 
       - name: Set up the environment
         uses: ./.github/actions/setup-poetry-env
+
+      - name: Generate Prisma client
+        run: make prisma-generate
 
       - name: Check if documentation can be built
         run: poetry run mkdocs build -s

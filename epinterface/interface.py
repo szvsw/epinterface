@@ -7,7 +7,14 @@ from typing import Annotated, ClassVar, Literal
 import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule
-from pydantic import BaseModel, BeforeValidator, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+)
 
 logger = getLogger(__name__)
 
@@ -717,6 +724,162 @@ class People(BaseObj, extra="ignore"):
     # Clothing_Insulation_Schedule_Name: str
     # Air_Velocity_Schedule_Name: str
     # Thermal_Comfort_Model_Type: str
+
+
+class ScheduleDayHourly(BaseObj, extra="ignore"):
+    """ScheduleDayHourly object."""
+
+    key: ClassVar[str] = "SCHEDULE:DAY:HOURLY"
+    Name: str
+    Schedule_Type_Limits_Name: str
+    Hour_1: float
+    Hour_2: float
+    Hour_3: float
+    Hour_4: float
+    Hour_5: float
+    Hour_6: float
+    Hour_7: float
+    Hour_8: float
+    Hour_9: float
+    Hour_10: float
+    Hour_11: float
+    Hour_12: float
+    Hour_13: float
+    Hour_14: float
+    Hour_15: float
+    Hour_16: float
+    Hour_17: float
+    Hour_18: float
+    Hour_19: float
+    Hour_20: float
+    Hour_21: float
+    Hour_22: float
+    Hour_23: float
+    Hour_24: float
+
+
+class ScheduleWeekDaily(BaseObj, extra="ignore"):
+    """ScheduleWeekDaily object."""
+
+    key: ClassVar[str] = "SCHEDULE:WEEK:DAILY"
+    Name: str
+    Monday_ScheduleDay_Name: str
+    Tuesday_ScheduleDay_Name: str
+    Wednesday_ScheduleDay_Name: str
+    Thursday_ScheduleDay_Name: str
+    Friday_ScheduleDay_Name: str
+    Saturday_ScheduleDay_Name: str
+    Sunday_ScheduleDay_Name: str
+
+    @computed_field
+    @property
+    def CustomDay1_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def CustomDay2_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def Holiday_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Sunday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def SummerDesignDay_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
+    @computed_field
+    @property
+    def WinterDesignDay_ScheduleDay_Name(self) -> str:
+        """Automatically set additional day schedules."""
+        return self.Monday_ScheduleDay_Name
+
+
+class ScheduleYear(BaseObj, extra="ignore"):
+    """ScheduleYear object."""
+
+    key: ClassVar[str] = "SCHEDULE:YEAR"
+    Name: str
+    Schedule_Type_Limits_Name: str
+
+    ScheduleWeek_Name_1: str
+    Start_Month_1: int
+    Start_Day_1: int
+    End_Month_1: int
+    End_Day_1: int
+
+    ScheduleWeek_Name_2: str | None = None
+    Start_Month_2: int | None = None
+    Start_Day_2: int | None = None
+    End_Month_2: int | None = None
+    End_Day_2: int | None = None
+
+    ScheduleWeek_Name_3: str | None = None
+    Start_Month_3: int | None = None
+    Start_Day_3: int | None = None
+    End_Month_3: int | None = None
+    End_Day_3: int | None = None
+
+    ScheduleWeek_Name_4: str | None = None
+    Start_Month_4: int | None = None
+    Start_Day_4: int | None = None
+    End_Month_4: int | None = None
+    End_Day_4: int | None = None
+
+    ScheduleWeek_Name_5: str | None = None
+    Start_Month_5: int | None = None
+    Start_Day_5: int | None = None
+    End_Month_5: int | None = None
+    End_Day_5: int | None = None
+
+    ScheduleWeek_Name_6: str | None = None
+    Start_Month_6: int | None = None
+    Start_Day_6: int | None = None
+    End_Month_6: int | None = None
+    End_Day_6: int | None = None
+
+    ScheduleWeek_Name_7: str | None = None
+    Start_Month_7: int | None = None
+    Start_Day_7: int | None = None
+    End_Month_7: int | None = None
+    End_Day_7: int | None = None
+
+    ScheduleWeek_Name_8: str | None = None
+    Start_Month_8: int | None = None
+    Start_Day_8: int | None = None
+    End_Month_8: int | None = None
+    End_Day_8: int | None = None
+
+    ScheduleWeek_Name_9: str | None = None
+    Start_Month_9: int | None = None
+    Start_Day_9: int | None = None
+    End_Month_9: int | None = None
+    End_Day_9: int | None = None
+
+    ScheduleWeek_Name_10: str | None = None
+    Start_Month_10: int | None = None
+    Start_Day_10: int | None = None
+    End_Month_10: int | None = None
+    End_Day_10: int | None = None
+
+    ScheduleWeek_Name_11: str | None = None
+    Start_Month_11: int | None = None
+    Start_Day_11: int | None = None
+    End_Month_11: int | None = None
+    End_Day_11: int | None = None
+
+    ScheduleWeek_Name_12: str | None = None
+    Start_Month_12: int | None = None
+    Start_Day_12: int | None = None
+    End_Month_12: int | None = None
+    End_Day_12: int | None = None
 
 
 class ZoneList(BaseModel, extra="ignore"):
