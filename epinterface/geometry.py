@@ -97,8 +97,7 @@ def match_idf_to_building_and_neighbors(
 def compute_shading_mask(
     building: Polygon | str,
     neighbors: list[Polygon | str | None],
-    neighbor_floors: list[float | int | None],
-    neighbor_f2f_height: float,
+    neighbor_heights: list[float | int | None],
     azimuthal_angle: float,
 ) -> np.ndarray:
     """Compute the shading mask for the building.
@@ -119,8 +118,7 @@ def compute_shading_mask(
     Args:
         building (Polygon | str): The building to compute the shading mask for.
         neighbors (list[Polygon | str | None]): The neighbors to compute the shading mask for.
-        neighbor_floors (list[float | int | None]): The floors of the neighbors.
-        neighbor_f2f_height (float): The height of the neighbors.
+        neighbor_heights (list[float | int | None]): The heights of the neighbors.
         azimuthal_angle (float): The azimuthal angle to compute the shading mask for.
 
     Returns:
@@ -129,14 +127,12 @@ def compute_shading_mask(
     building_geom = building if isinstance(building, Polygon) else from_wkt(building)
 
     neighbor_geo_and_height = [
-        (cast(Polygon, from_wkt(n)), h * neighbor_f2f_height)
-        if isinstance(n, str)
-        else (n, h * neighbor_f2f_height)
-        for n, h in zip(neighbors, neighbor_floors, strict=True)
+        (cast(Polygon, from_wkt(n)), float(h)) if isinstance(n, str) else (n, float(h))
+        for n, h in zip(neighbors, neighbor_heights, strict=True)
         if n is not None and h is not None
     ]
-    neighbor_geoms = [geom for geom, _ in neighbor_geo_and_height]
-    neighbor_heights = [height for _, height in neighbor_geo_and_height]
+    safe_neighbor_geoms = [geom for geom, _ in neighbor_geo_and_height]
+    safe_neighbor_heights = [height for _, height in neighbor_geo_and_height]
 
     # first we compute the number of rays we need to cast
     # along with the angles at which to cast them
@@ -162,7 +158,9 @@ def compute_shading_mask(
         # track the max elevation angle for this ray so far
         max_elevation_angle = 0
 
-        for geom, height in zip(neighbor_geoms, neighbor_heights, strict=True):
+        for geom, height in zip(
+            safe_neighbor_geoms, safe_neighbor_heights, strict=True
+        ):
             # create the line segments of the boundary
             x_coords = np.array(geom.boundary.xy[0])
             y_coords = np.array(geom.boundary.xy[1])
