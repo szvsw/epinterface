@@ -161,7 +161,17 @@ class ConstructionLayerComponent(BaseModel, extra="forbid"):
     @property
     def name(self):
         """Return the name of the layer."""
-        return f"{self.LayerOrder}_{self.ConstructionMaterial.Name}_{self.Thickness}m"
+        # TODO: do we want to consider scoping construction layer names by parent construction?
+        # We currently have disabled LayerOrder in the name because it was causing
+        # warnings to be rised by EP since a reversed construction would end up with
+        # using different materials though with identical definitions; energyplus would
+        # throw a warning but still proceed.
+        # by not name scoping here by the parent construction, we end up with silent logical
+        # failures in the event where a user has mutated
+        # post-instantiated, decoupled ConstructionMaterial definitions with the same
+        # name.
+        # return f"{self.LayerOrder}_{self.ConstructionMaterial.Name}_{self.Thickness}m"
+        return f"{self.ConstructionMaterial.Name}_{self.Thickness}m"
 
     @property
     def ep_material(self):
