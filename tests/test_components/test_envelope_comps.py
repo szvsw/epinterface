@@ -23,12 +23,13 @@ def test_infiltration_comp(
 ):
     """Test the infiltration component."""
     inf_name = "Test_Infiltration"
+    attic_inf_name = f"{inf_name}_Attic"
     main_zone_name = "Test_Zone"
     attic_zone_name = "Test_Zone_Attic"
     main_ach, main_flow_rate = rates
     attic_ach, attic_flow_rate = main_ach * 2, main_flow_rate * 2
     expected_main_inf_name = f"{main_zone_name}_{inf_name}_INFILTRATION"
-    expected_attic_inf_name = f"{attic_zone_name}_{inf_name}_INFILTRATION"
+    expected_attic_inf_name = f"{attic_zone_name}_{attic_inf_name}_INFILTRATION"
     infiltration = InfiltrationComponent(
         Name=inf_name,
         AirChangesPerHour=main_ach,
@@ -46,7 +47,7 @@ def test_infiltration_comp(
     attic_infiltration = infiltration.model_copy(
         deep=True,
         update={
-            "Name": f"{infiltration.Name}_Attic",
+            "Name": attic_inf_name,
             "AirChangesPerHour": attic_ach,
             "FlowPerExteriorSurfaceArea": attic_flow_rate,
             "CalculationMethod": calculation_method_attic,
@@ -63,11 +64,11 @@ def test_infiltration_comp(
         assert main_inf is not None
         assert main_inf.Air_Changes_per_Hour == main_ach
         assert main_inf.Flow_Rate_per_Exterior_Surface_Area == main_flow_rate
-        assert main_inf.Calculation_Method == calculation_method_main
+        assert main_inf.Design_Flow_Rate_Calculation_Method == calculation_method_main
         assert attic_inf is not None
         assert attic_inf.Flow_Rate_per_Exterior_Surface_Area == attic_flow_rate
         assert attic_inf.Air_Changes_per_Hour == attic_ach
-        assert attic_inf.Calculation_Method == calculation_method_attic
+        assert attic_inf.Design_Flow_Rate_Calculation_Method == calculation_method_attic
     else:
         assert main_inf is None
         assert attic_inf is None
