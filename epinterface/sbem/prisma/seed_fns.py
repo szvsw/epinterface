@@ -184,7 +184,7 @@ def create_space_use_children(db: Prisma):
             data={
                 "Name": last_water_use_name,
                 "Schedule": {"connect": {"Name": "WaterUse_Year"}},
-                "FlowRatePerPerson": 0.05 if typology == "office" else 0.01,
+                "FlowRatePerPerson": 0.1 if typology == "office" else 0.239,
             }
         )
 
