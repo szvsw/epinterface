@@ -10,12 +10,16 @@ copyright: Maintained by <a href="https://github.com/szvsw">Sam Wolk</a>.
 nav:
   - Home: index.md
   - Modules:
+      - SBEM:
+          - Components: modules/sbem/components.md
+          - Composer: modules/sbem/composer.md
       - Geometry: modules/geometry.md
       - Weather: modules/weather.md
       - EnergyPlus: modules/interface.md
       - ClimateStudio: modules/climate-studio.md
       - Builder: modules/builder.md
       - Actions: modules/actions.md
+      - CLI: modules/cli.md
 plugins:
   - search
   - mkdocstrings:
@@ -69,3 +73,5 @@ markdown_extensions:
       permalink: "#"
   - pymdownx.arithmatex:
       generic: true
+  - attr_list
+  - mkdocs-click

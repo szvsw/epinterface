@@ -39,6 +39,7 @@ pyarrow = "^17.0.0"
 mkdocs = "^1.4.2"
 mkdocs-material = "^9.2.7"
 mkdocstrings = {extras = ["python"], version = "^0.26.1"}
+mkdocs-click = "^0.8.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
