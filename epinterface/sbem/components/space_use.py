@@ -239,19 +239,14 @@ class WaterUseComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A water use object in the SBEM library."""
 
     FlowRatePerPerson: float = Field(
-        ..., title="Flow rate per person [m3/day/p]", ge=0, le=10
+        ...,
+        title="Flow rate per person [m3/day/p]",
+        ge=0,
+        le=10,
+        description="This is the AVERAGE total amount of water per person per day; "
+        "the peak flow rate will be computed dynamically based on the schedule.",
     )
     Schedule: YearComponent = Field(..., title="Water schedule")
-
-    @property
-    def schedule_names(self) -> set[str]:
-        """Get the schedule names used in the object.
-
-        Returns:
-            set[str]: The schedule names.
-        """
-        raise NotImplementedError
-        return {self.WaterSchedule} if self.IsOn else set()
 
 
 class ZoneSpaceUseComponent(NamedObject, MetadataMixin, extra="forbid"):

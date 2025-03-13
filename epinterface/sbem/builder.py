@@ -13,7 +13,6 @@ import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
 from pydantic import BaseModel, Field, model_validator
-from shapely import Polygon
 
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
@@ -30,7 +29,6 @@ from epinterface.sbem.components.envelope import (
     EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
 )
-from epinterface.sbem.components.operations import ZoneOperationsComponent
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import (
     NotImplementedParameter,
@@ -489,65 +487,37 @@ class Model(BaseWeather, validate_assignment=True):
 
     # part of the HVAC/conditioning system
     def compute_dhw(self) -> float:
-        """Compute the domestic hot water energy demand.
+        """Explicitly compute the domestic hot water energy demand.
+
+        This is useful as a gut-check to make sure the DHW has been added correctly.
 
         Returns:
-            energy (float): The domestic hot water energy demand (kWh/m2)
+            energy (float): The annual domestic hot water energy demand (kWh/m2)
         """
-        raise NotImplementedError
         # TODO: this should be computed from the DHW schedule
-        if not self.space_use.DHW.IsOn:
+        if not self.Zone.Operations.DHW.IsOn:
             return 0
-        flow_rate_per_person = self.space_use.DHW.FlowRatePerPerson  # m3/hr/person
+        flow_rate_per_person = (
+            self.Zone.Operations.SpaceUse.WaterUse.FlowRatePerPerson
+        )  # m3/day/person, average
         temperature_rise = (
-            self.space_use.DHW.WaterSupplyTemperature
-            - self.space_use.DHW.WaterTemperatureInlet
+            self.Zone.Operations.DHW.WaterSupplyTemperature
+            - self.Zone.Operations.DHW.WaterTemperatureInlet
         )  # K
-        water_density = physical_constants["water_density"]  # kg/m3
-        c = physical_constants["water_specific_heat"]  # J/kg.K
-        total_flow_rate = flow_rate_per_person * self.total_people  # m3/hr
-        total_volume = (
-            total_flow_rate * physical_constants["flow_rate_to_volume_conversion"]
-        )  # m3 / yr
-        total_energy = total_volume * temperature_rise * water_density * c  # J / yr
-        total_energy_kWh = total_energy / physical_constants["J_to_kWh"]  # kWh / yr
+        water_density = physical_constants.WaterDensity_kg_per_m3  # kg/m3
+        c = physical_constants.WaterSpecificHeat_J_per_kg_degK  # J/kg.K
+        total_flow_rate = flow_rate_per_person * self.total_people  # m3/day
+        total_volume = total_flow_rate * 365  # m3 / yr
+        total_mass = total_volume * water_density  # kg
+        total_energy = total_mass * temperature_rise * c  # J / yr
+        total_energy_kWh = total_energy / physical_constants.J_to_kWh  # kWh / yr
+        # TODO: unit test this with parameterizations over basement presence/absence,
+        # attic presence/absence, basement occupation/unoccupation, etc.
+        # - total_conditioned_area now probably needs to be replaced with total_occupied_area
         total_energy_kWh_per_m2 = (
             total_energy_kWh / self.total_conditioned_area
         )  # kWh/m2 / yr
         return total_energy_kWh_per_m2
-
-    def add_hot_water_to_zone(
-        self, idf: IDF, space_use: ZoneOperationsComponent, zone_name: str
-    ) -> IDF:
-        """Add the hot water to the zone.
-
-        Args:
-            idf (IDF): The IDF model to add the hot water to.
-            space_use (ZoneUse): The zone use template.
-            zone_name (str): The name of the zone to add the hot water to.
-
-        Returns:
-            idf (IDF): The IDF model with the added hot water.
-        """
-        raise NotImplementedError
-        zone = next((x for x in idf.idfobjects["ZONE"] if x.Name == zone_name), None)
-        if zone is None:
-            raise ValueError(f"NO_ZONE:{zone_name}")
-        area = 0
-        area_ct = 0
-        for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
-            if srf.Zone_Name == zone.Name and srf.Surface_Type.lower() == "floor":
-                poly = Polygon(srf.coords)
-                area += poly.area
-                area_ct += 1
-        if area_ct > 1:
-            raise ValueError(f"TOO_MANY_FLOORS:{zone.Name}")
-        if area == 0 or area_ct == 0:
-            raise ValueError(f"NO_AREA:{zone.Name}")
-        ppl_density = space_use.SpaceUse.OccupancyDensity
-        total_ppl = ppl_density * area
-        idf = space_use.DHW.add_water_to_idf_zone(idf, zone.Name, total_ppl)
-        return idf
 
     def add_srf_constructions(
         self,
@@ -563,7 +533,7 @@ class Model(BaseWeather, validate_assignment=True):
             window_def (WindowDefinition): The window definition template.
 
         Returns:
-            IDF: The IDF model with the selected surfaces.
+            idf (IDF): The IDF model with the selected surfaces.
         """
         if self.geometry.roof_height:
             raise SBEMBuilderNotImplementedError("roof_height")
@@ -588,14 +558,19 @@ class Model(BaseWeather, validate_assignment=True):
 
         return idf
 
-    def build(self, config: SimulationPathConfig) -> IDF:
+    def build(
+        self,
+        config: SimulationPathConfig,
+        post_geometry_callback: Callable[[IDF], IDF] | None = None,
+    ) -> IDF:
         """Build the energy model using the Climate Studio API.
 
         Args:
             config (SimulationConfig): The configuration for the simulation.
+            post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
 
         Returns:
-            IDF: The built energy model.
+            idf (IDF): The built energy model.
         """
         if self.geometry.roof_height:
             raise SBEMBuilderNotImplementedError("roof_height")
@@ -630,11 +605,19 @@ class Model(BaseWeather, validate_assignment=True):
         ).add(idf)
 
         idf = self.geometry.add(idf)
+        if post_geometry_callback is not None:
+            idf = post_geometry_callback(idf)
 
         # construct zone lists
         idf, added_zone_lists = self.add_zone_lists(idf)
+
+        # Handle main zones
         for zone in added_zone_lists.main_zone_list.Names:
             self.Zone.add_to_idf_zone(idf, zone)
+
+        # TODO: Handle Basements:
+        # TODO: Handle Attic:
+
         self.add_srf_constructions(
             idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
         )
@@ -677,20 +660,19 @@ class Model(BaseWeather, validate_assignment=True):
     def simulate(
         self,
         config: SimulationPathConfig,
-        post_build_callback: Callable[[IDF], IDF] | None = None,
+        post_geometry_callback: Callable[[IDF], IDF] | None = None,
     ) -> tuple[IDF, Sql]:
         """Build and simualte the idf model.
 
         Args:
             config (SimulationConfig): The configuration for the simulation.
-            post_build_callback (Callable[[IDF],IDF] | None): A callback to run after the model is built.
+            post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
 
         Returns:
-            tuple[IDF, Sql]: The built energy model and the sql file.
+            idf (IDF): The built energy model.
+            sql (Sql): The sql results file with simulation data.
         """
-        idf = self.build(config)
-        if post_build_callback is not None:
-            idf = post_build_callback(idf)
+        idf = self.build(config, post_geometry_callback)
         idf.simulate()
         sql = Sql(idf.sql_file)
         return idf, sql
@@ -766,6 +748,9 @@ class Model(BaseWeather, validate_assignment=True):
                 res_series[dhw_fuel] = 0
 
             res_series[dhw_fuel] += dhw_energy
+            # TODO: this will cause data loss if coincidentally, one of the fuels has the same name!
+            # to safely do it, first pop out these value from the res_series, and then
+            # go through the comps which will safely add them back in.
             res_series = res_series.drop([
                 "District Cooling",
                 "District Heating",
@@ -777,14 +762,14 @@ class Model(BaseWeather, validate_assignment=True):
     def run(
         self,
         weather_dir: Path | None = None,
-        post_build_callback: Callable[[IDF], IDF] | None = None,
+        post_geometry_callback: Callable[[IDF], IDF] | None = None,
         move_energy: bool = False,
     ) -> tuple[IDF, pd.Series, str]:
         """Build and simualte the idf model.
 
         Args:
             weather_dir (Path): The directory to store the weather files.
-            post_build_callback (Callable[[IDF],IDF] | None): A callback to run after the model is built.
+            post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
             move_energy (bool): Whether to move the energy to fuels based off of the CoP/Fuel Types.
 
         Returns:
@@ -805,8 +790,69 @@ class Model(BaseWeather, validate_assignment=True):
 
             idf, sql = self.simulate(
                 config,
-                post_build_callback=post_build_callback,
+                post_geometry_callback=post_geometry_callback,
             )
             results = self.standard_results_postprocess(sql, move_energy=move_energy)
             err_text = self.get_warnings(idf)
             return idf, results, err_text
+
+
+if __name__ == "__main__":
+    from epinterface.sbem.prisma.client import PrismaSettings, deep_fetcher
+    from epinterface.sbem.prisma.seed_fns import (
+        create_dhw_systems,
+        create_envelope,
+        create_hvac_systems,
+        create_operations,
+        create_schedules,
+        create_space_use_children,
+        create_zone,
+    )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_path = Path(temp_dir) / "test.db"
+        settings = PrismaSettings.New(
+            database_path=database_path, if_exists="raise", auto_register=False
+        )
+        with settings.db:
+            create_schedules(settings.db)
+            last_space_use_name = create_space_use_children(settings.db)
+            last_hvac_name = create_hvac_systems(settings.db)
+            last_dhw_name = create_dhw_systems(settings.db)
+            _last_ops_name = create_operations(
+                settings.db, last_space_use_name, last_hvac_name, last_dhw_name
+            )
+
+            create_envelope(settings.db)
+            create_zone(settings.db)
+
+            _, zone = deep_fetcher.Zone.get_deep_object("default_zone", settings.db)
+
+            model = Model(
+                Weather=(
+                    "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
+                ),  # pyright: ignore [reportArgumentType]
+                Zone=zone,
+                basement_insulation_surface=None,
+                conditioned_basement=False,
+                basement_use_fraction=None,
+                attic_insulation_surface=None,
+                conditioned_attic=False,
+                attic_use_fraction=None,
+                geometry=ShoeboxGeometry(
+                    x=0,
+                    y=0,
+                    w=10,
+                    d=10,
+                    h=3,
+                    wwr=0.2,
+                    num_stories=2,
+                    basement=False,
+                    zoning="by_storey",
+                    roof_height=None,
+                ),
+            )
+
+            _idf, results, _err_text = model.run(move_energy=False)
+            print(_err_text)
+            print(results)
