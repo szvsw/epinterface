@@ -59,9 +59,7 @@ class ZoneOperationsComponent(
         water_supply_temperature = self.DHW.WaterSupplyTemperature  # degC
         water_temperature_inlet = self.DHW.WaterTemperatureInlet  # degC
         water_use_frac_sched = self.SpaceUse.WaterUse.Schedule
-        water_use_name = (
-            f"{target_zone_name}_{self.SpaceUse.safe_name}_{self.DHW.safe_name}_WATER"
-        )
+        water_use_name = f"{target_zone_name}_{self.SpaceUse.WaterUse.safe_name}_{self.DHW.safe_name}_WATER"
 
         # determine zone area to then compute total people
         # we will do this by finding all matching surfaces and computing their areas.

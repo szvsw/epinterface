@@ -9,6 +9,7 @@ import pytest
 from archetypal.idfclass import IDF
 
 from epinterface.data import EnergyPlusArtifactDir
+from epinterface.geometry import ShoeboxGeometry
 from epinterface.sbem.prisma.client import PrismaSettings
 from epinterface.sbem.prisma.seed_fns import (
     create_dhw_systems,
@@ -58,3 +59,40 @@ def idf() -> Generator[IDF, None, None]:
             output_directory=temp_dir,
         )
         yield idf
+
+
+@pytest.fixture(scope="function")
+def shoebox_geometry_by_storey_no_basement_or_attic_or_neighbors():
+    """A shoebox that does NOT have a core/perim split."""
+    geometry = ShoeboxGeometry(
+        x=-5,
+        y=-5,
+        w=10,
+        d=10,
+        h=3,
+        wwr=0.2,
+        num_stories=2,
+        basement=False,
+        zoning="by_storey",
+        roof_height=None,
+    )
+    return geometry
+
+
+@pytest.fixture(scope="function")
+def shoebox_geometry_core_perim_no_basement_or_attic_or_neighbors():
+    """A shoebox that has a core/perim split."""
+    geometry = ShoeboxGeometry(
+        x=-5,
+        y=-5,
+        w=10,
+        d=10,
+        h=3,
+        wwr=0.2,
+        num_stories=2,
+        basement=False,
+        zoning="core/perim",
+        roof_height=None,
+    )
+
+    return geometry
