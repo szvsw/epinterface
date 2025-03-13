@@ -1,5 +1,6 @@
 """Operations components for the SBEM library."""
 
+import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 from shapely.geometry import Polygon
@@ -27,11 +28,16 @@ class ZoneOperationsComponent(
         We choose to execute this from the zone component interface because it requires context from both
         zone.Operations.SpaceUse.WaterUse and zone.Operations.
 
+        Note: the water use component's flow rate represents the total amount of water used per person per day;
+        in order to calculate a peak flow rate, we will need to ensure that the product of the schedule and the peak
+        flow rate would resolve to the same daily average value per person.
+
         This will be responsible for:
             1. Extracting the total area of the zone by finding the matching surfaces.
             2. Computing the total number of people in the zone based on the occupancy density and the total area.
-            3. Computing the total flow rate of water use/s in the zone based on the flow rate per person/day and the total number of people.
-            4. Adding the water use equipment to the zone.
+            3. Computing the average flow rate of water use/s in the zone based on the flow rate per person/day and the total number of people.
+            4. Computing the peak flow rate of water use/s in the zone based on the average flow rate and the average fractional value of the schedule.
+            5. Adding the water use equipment to the zone.
 
 
         # TODO: major problem - this assumes the zone has already been correctly sized!
@@ -83,8 +89,8 @@ class ZoneOperationsComponent(
         total_ppl = occupant_density * area
 
         # Compute final flow rates.
-        total_flow_rate_per_day = flow_rate_per_person_per_day * total_ppl  # m3/day
-        total_flow_rate_per_s = total_flow_rate_per_day / (3600 * 24)  # m3/s
+        total_flow_per_day = flow_rate_per_person_per_day * total_ppl  # m3/day
+        avg_flow_per_s = total_flow_per_day / (3600 * 24)  # m3/s
         # TODO: Update this rather than being constant rate
 
         lim = "Temperature"
@@ -125,11 +131,17 @@ class ZoneOperationsComponent(
         idf, water_use_frac_sch_name = water_use_frac_sched.add_year_to_idf(
             idf, name_prefix=water_use_name
         )
+        sch_obj = idf.getobject("SCHEDULE:YEAR", water_use_frac_sch_name)
+        arch_sch = Schedule.from_epbunch(sch_obj)
+        values = np.array(arch_sch.Values)
+        avg_fractional_value = np.sum(values) / 8760
+        # total_fractional_value * peak_flow_rate_per_s = avg_float_per_s
+        peak_flow_rate_per_s = avg_flow_per_s / avg_fractional_value
 
         hot_water = WaterUseEquipment(
             Name=water_use_name,
             EndUse_Subcategory="Domestic Hot Water",
-            Peak_Flow_Rate=total_flow_rate_per_s,  # TODO: Update this to actual peak rate?
+            Peak_Flow_Rate=peak_flow_rate_per_s,
             Flow_Rate_Fraction_Schedule_Name=water_use_frac_sch_name,
             Zone_Name=target_zone_name,
             Target_Temperature_Schedule_Name=target_temperature_yr_schedule.Name,

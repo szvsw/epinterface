@@ -499,7 +499,7 @@ class Model(BaseWeather, validate_assignment=True):
             return 0
         flow_rate_per_person = (
             self.Zone.Operations.SpaceUse.WaterUse.FlowRatePerPerson
-        )  # m3/day/person
+        )  # m3/day/person, average
         temperature_rise = (
             self.Zone.Operations.DHW.WaterSupplyTemperature
             - self.Zone.Operations.DHW.WaterTemperatureInlet
@@ -517,11 +517,6 @@ class Model(BaseWeather, validate_assignment=True):
         total_energy_kWh_per_m2 = (
             total_energy_kWh / self.total_conditioned_area
         )  # kWh/m2 / yr
-
-        raise NotImplementedError
-        # TODO: we need to compute sum(year_schedule) / 8760 * total_energy_kWh_per_m2
-        # to get the final value, since we now use partial schedules.
-
         return total_energy_kWh_per_m2
 
     def add_srf_constructions(
