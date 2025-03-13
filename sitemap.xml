@@ -2,30 +2,46 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://szvsw.github.io/epinterface/</loc>
-         <lastmod>2024-10-14</lastmod>
+         <lastmod>2025-03-13</lastmod>
+    </url>
+    <url>
+         <loc>https://szvsw.github.io/epinterface/cli/</loc>
+         <lastmod>2025-03-13</lastmod>
     </url>
     <url>
          <loc>https://szvsw.github.io/epinterface/modules/actions/</loc>
-         <lastmod>2024-10-14</lastmod>
+         <lastmod>2025-03-13</lastmod>
     </url>
     <url>
          <loc>https://szvsw.github.io/epinterface/modules/builder/</loc>
-         <lastmod>2024-10-14</lastmod>
+         <lastmod>2025-03-13</lastmod>
     </url>
     <url>
          <loc>https://szvsw.github.io/epinterface/modules/climate-studio/</loc>
-         <lastmod>2024-10-14</lastmod>
+         <lastmod>2025-03-13</lastmod>
     </url>
     <url>
          <loc>https://szvsw.github.io/epinterface/modules/geometry/</loc>
-         <lastmod>2024-10-14</lastmod>
+         <lastmod>2025-03-13</lastmod>
     </url>
     <url>
          <loc>https://szvsw.github.io/epinterface/modules/interface/</loc>
-         <lastmod>2024-10-14</lastmod>
+         <lastmod>2025-03-13</lastmod>
     </url>
     <url>
          <loc>https://szvsw.github.io/epinterface/modules/weather/</loc>
-         <lastmod>2024-10-14</lastmod>
+         <lastmod>2025-03-13</lastmod>
+    </url>
+    <url>
+         <loc>https://szvsw.github.io/epinterface/modules/sbem/</loc>
+         <lastmod>2025-03-13</lastmod>
+    </url>
+    <url>
+         <loc>https://szvsw.github.io/epinterface/modules/sbem/components/</loc>
+         <lastmod>2025-03-13</lastmod>
+    </url>
+    <url>
+         <loc>https://szvsw.github.io/epinterface/modules/sbem/composer/</loc>
+         <lastmod>2025-03-13</lastmod>
     </url>
 </urlset>
