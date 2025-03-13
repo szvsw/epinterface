@@ -257,13 +257,14 @@ class WaterUseComponent(NamedObject, MetadataMixin, extra="forbid"):
 class ZoneSpaceUseComponent(NamedObject, MetadataMixin, extra="forbid"):
     """Space use object."""
 
-    # TODO
     Occupancy: OccupancyComponent
     Lighting: LightingComponent
     Equipment: EquipmentComponent
     Thermostat: ThermostatComponent
     WaterUse: WaterUseComponent
 
+    # TODO: Is this really necessary, or should it be lifted up to the ZoneComponent?
+    # it currently is acting as a very bare bones passthrough.
     def add_loads_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add the loads to an IDF zone.
 

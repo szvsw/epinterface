@@ -1,10 +1,14 @@
 """Fixtures for the tests."""
 
+import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from archetypal.idfclass import IDF
 
+from epinterface.data import EnergyPlusArtifactDir
 from epinterface.sbem.prisma.client import PrismaSettings
 from epinterface.sbem.prisma.seed_fns import (
     create_dhw_systems,
@@ -38,3 +42,19 @@ def preseeded_readonly_db():
             create_zone(settings.db)
 
             yield settings.db
+
+
+@pytest.fixture(scope="function")
+def idf() -> Generator[IDF, None, None]:
+    """Create a new IDF object."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
+        target_base_filepath = Path(temp_dir) / "Minimal.idf"
+        shutil.copy(base_filepath, target_base_filepath)
+        idf = IDF(
+            target_base_filepath.as_posix(),
+            as_version=None,  # pyright: ignore [reportArgumentType]
+            prep_outputs=True,
+            output_directory=temp_dir,
+        )
+        yield idf

@@ -16,4 +16,5 @@ class ZoneComponent(NamedObject):
     def add_to_idf_zone(self, idf: IDF, zone_name: str) -> IDF:
         """Add the zone to the IDF."""
         idf = self.Operations.SpaceUse.add_loads_to_idf_zone(idf, zone_name)
+        idf = self.Envelope.Infiltration.add_infiltration_to_idf_zone(idf, zone_name)
         return idf

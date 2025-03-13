@@ -38,3 +38,7 @@ def test_builder(preseeded_readonly_db: Prisma):
     )
 
     _idf, results, _err_text = model.run(move_energy=False)
+
+
+# TODO: add parameterized tests for different attic/basement configurations
+# and check almost all individual parameters in the returned idf model.

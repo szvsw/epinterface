@@ -72,8 +72,9 @@ class InfiltrationComponent(
 ):
     """Zone infiltration object."""
 
-    # TODO: add assumed_constants
     IsOn: BoolStr = Field(..., title="Infiltration is on")
+    # TODO: add assumed_constants
+    # TODO: these values should have stronger validators are on them or be dropped entirely and use defaults from EP wrapper classes
     ConstantCoefficient: float = Field(
         ...,
         title="Infiltration constant coefficient",
@@ -126,7 +127,10 @@ class InfiltrationComponent(
             return idf
 
         infiltration_schedule_name = (
-            f"{target_zone_or_zone_list_name}_{self.Name}_Infiltration_Schedule"
+            f"{target_zone_or_zone_list_name}_{self.safe_name}_INFILTRATION_Schedule"
+        )
+        infiltration_name = (
+            f"{target_zone_or_zone_list_name}_{self.safe_name}_INFILTRATION"
         )
         schedule = Schedule.constant_schedule(
             value=1, Name=infiltration_schedule_name, Type="Fraction"
@@ -134,7 +138,7 @@ class InfiltrationComponent(
         inf_schedule, *_ = schedule.to_year_week_day()
         inf_schedule.to_epbunch(idf)
         inf = ZoneInfiltrationDesignFlowRate(
-            Name=f"{target_zone_or_zone_list_name}_{self.Name}_Infiltration",
+            Name=infiltration_name,
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
             Schedule_Name=inf_schedule.Name,
             Design_Flow_Rate_Calculation_Method=self.CalculationMethod,
