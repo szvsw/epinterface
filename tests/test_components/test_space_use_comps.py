@@ -1,15 +1,9 @@
 """Test the space use components."""
 
-import shutil
-import tempfile
-from collections.abc import Generator
-from pathlib import Path
-
 import pytest
 from archetypal.idfclass.idf import IDF
 from prisma import Prisma
 
-from epinterface.data import EnergyPlusArtifactDir
 from epinterface.sbem.components.schedules import YearComponent
 from epinterface.sbem.components.space_use import (
     DimmingTypeType,
@@ -22,22 +16,6 @@ from epinterface.sbem.components.space_use import (
 )
 from epinterface.sbem.exceptions import NotImplementedParameter
 from epinterface.sbem.prisma.client import deep_fetcher
-
-
-@pytest.fixture(scope="function")
-def idf() -> Generator[IDF, None, None]:
-    """Create a new IDF object."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
-        target_base_filepath = Path(temp_dir) / "Minimal.idf"
-        shutil.copy(base_filepath, target_base_filepath)
-        idf = IDF(
-            target_base_filepath.as_posix(),
-            as_version=None,  # pyright: ignore [reportArgumentType]
-            prep_outputs=True,
-            output_directory=temp_dir,
-        )
-        yield idf
 
 
 @pytest.fixture(scope="function")
@@ -99,8 +77,10 @@ def test_add_lighting_to_idf_zone_with_dimming(
         lighting.add_lights_to_idf_zone(idf, "default_zone")
 
 
-@pytest.mark.parametrize("is_on", [True, False])
-def test_add_people_to_idf_zone(idf: IDF, schedule: YearComponent, is_on: bool):
+@pytest.mark.parametrize("is_on,density", [(True, 10), (False, 0)])
+def test_add_people_to_idf_zone(
+    idf: IDF, schedule: YearComponent, is_on: bool, density: float
+):
     """Test the add_people_to_idf_zone method."""
     component_name = "new_office"
     schedule.Name = "some_people_schedule"
@@ -112,7 +92,7 @@ def test_add_people_to_idf_zone(idf: IDF, schedule: YearComponent, is_on: bool):
 
     occupancy = OccupancyComponent(
         Name=component_name,
-        PeopleDensity=10,
+        PeopleDensity=density,
         Schedule=schedule,
         IsOn=is_on,
         MetabolicRate=1.3,
@@ -124,6 +104,7 @@ def test_add_people_to_idf_zone(idf: IDF, schedule: YearComponent, is_on: bool):
     if is_on:
         assert idf.idfobjects["PEOPLE"]
         assert idf.idfobjects["PEOPLE"][0].Name == expected_idf_obj_name
+        assert idf.idfobjects["PEOPLE"][0].People_per_Floor_Area == density
         assert (
             idf.idfobjects["PEOPLE"][0].Number_of_People_Schedule_Name
             == expected_schedule_name

@@ -16,10 +16,11 @@ class NamedObject(BaseModel):
 
     Name: str = Field(..., title="Name of the object used in referencing.")
 
+    # TODO: this is potentially a confusing footgun, but it's probably necessary.
     @property
     def safe_name(self) -> str:
         """Get the safe name of the object."""
-        return self.Name.replace(" ", "_")
+        return self.Name.replace(" ", "_").replace(",", "_")
 
 
 NanStr = Annotated[str | None, BeforeValidator(nan_to_none_or_str)]
