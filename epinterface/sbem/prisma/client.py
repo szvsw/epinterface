@@ -127,8 +127,8 @@ try:
     )
 except (RuntimeError, ImportError) as e:
     msg = "Prisma client has not yet been generated. "
-    msg += "Please run `epinterface generate` to generate the client, or if more customization is desired,"
-    msg += "run `prisma generate --schema $(epinterface schemapath)` directly."
+    msg += "Please run `epinterface prisma generate` to generate the client, or if more customization is desired, "
+    msg += "run `prisma py generate --schema $(epinterface prisma schemapath) --partials $(epinterface prisma partials-path)` directly."
     raise ImportError(msg) from e
 
 
