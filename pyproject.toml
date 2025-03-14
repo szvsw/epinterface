@@ -13,6 +13,7 @@ packages = [
 
 [tool.poetry.scripts]
 epinterface = "epinterface.cli:cli"
+epi = "epinterface.cli:cli"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
