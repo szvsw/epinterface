@@ -5,7 +5,12 @@ from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 from shapely.geometry import Polygon
 
-from epinterface.interface import WaterUseEquipment
+from epinterface.interface import (
+    HVACTemplateThermostat,
+    HVACTemplateZoneIdealLoadsAirSystem,
+    WaterUseEquipment,
+    ZoneVentilationWindAndStackOpenArea,
+)
 from epinterface.sbem.common import MetadataMixin, NamedObject
 from epinterface.sbem.components.space_use import ZoneSpaceUseComponent
 from epinterface.sbem.components.systems import DHWComponent, ZoneHVACComponent
@@ -151,4 +156,80 @@ class ZoneOperationsComponent(
             Latent_Fraction_Schedule_Name=None,
         )
         idf = hot_water.add(idf)
+        return idf
+
+    def add_thermostat_to_idf_zone(
+        self, idf: IDF, target_zone_name: str
+    ) -> HVACTemplateThermostat:
+        """Add a thermostat to the zone.
+
+        Args:
+            idf (IDF): The IDF object to add the thermostat to.
+            target_zone_name (str): The name of the zone to add the thermostat to.
+            thermostat_type (ThermostatType): The type of thermostat to add.
+
+        Returns:
+            idf (IDF): The updated IDF object.
+        """
+        thermostat_name = (
+            f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_THERMOSTAT"
+        )
+        thermostat = HVACTemplateThermostat(
+            Name=thermostat_name,
+            Heating_Setpoint_Schedule_Name=ZoneSpaceUseComponent.Thermostat.HeatingSchedule.Name,
+            Constant_Heating_Setpoint=ZoneSpaceUseComponent.Thermostat.HeatingSetpoint,
+            Cooling_Setpoint_Schedule_Name=ZoneSpaceUseComponent.Thermostat.CoolingSchedule.Name,
+            Constant_Cooling_Setpoint=ZoneSpaceUseComponent.Thermostat.CoolingSetpoint,
+        )
+        return thermostat
+
+    def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
+        """Add conditioning to an IDF zone."""
+        thermostat = self.add_thermostat_to_idf_zone(idf, target_zone_name)
+        hvac_template = HVACTemplateZoneIdealLoadsAirSystem(
+            Zone_Name=target_zone_name,
+            Template_Thermostat_Name=thermostat.Name,
+            System_Availability_Schedule_Name="AlwaysOn",
+            Heating_Availability_Schedule_Name="AlwaysOn",
+            Cooling_Availability_Schedule_Name="AlwaysOn",
+            Maximum_Heating_Supply_Air_Temperature=50,
+            Maximum_Heating_Air_Flow_Rate="autosize",
+            Heating_Limit="NoLimit",
+            Maximum_Sensible_Heating_Capacity="autosize",
+            Minimum_Cooling_Supply_Air_Temperature=13,
+            Maximum_Cooling_Air_Flow_Rate="autosize",
+            Maximum_Total_Cooling_Capacity="autosize",
+            Cooling_Limit="NoLimit",
+            Humidification_Control_Type="None",
+            Outdoor_Air_Flow_Rate_per_Person=self.HVAC.Ventilation.MinFreshAir,  # CHECK THE UNITS IN UNIT TESTS
+            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.HVAC.Ventilation.MinFreshAir,
+            Outdoor_Air_Flow_Rate_per_Zone=0,
+            Demand_Controlled_Ventilation_Type="OccupancySchedule"
+            if self.HVAC.Ventilation.TechType == "DCV"
+            else "None",
+            Outdoor_Air_Economizer_Type="DifferentialDryBulb"
+            if self.HVAC.Ventilation.TechType == "Economizer"
+            else "NoEconomizer",
+            Heat_Recovery_Type="Sensible"
+            if self.HVAC.Ventilation.TechType == "HRV"
+            else "None",
+            Sensible_Heat_Recovery_Effectiveness=0.70,
+            Latent_Heat_Recovery_Effectiveness=0.65,
+            Outdoor_Air_Method="Sum"
+            if self.HVAC.Ventilation.Type == "Mechanical"
+            else "None",
+        )
+        idf = thermostat.add(idf)
+        idf = hvac_template.add(idf)
+
+        if self.HVAC.Ventilation.Type == "Natural":
+            ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
+                Name=f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA",
+                Zone_or_ZoneList_Name=target_zone_name,
+                OpeningArea=0,
+                OpeningArea_Schedule_Name=self.HVAC.Ventilation.Schedule.Name,
+                Height_Difference=0,
+            )
+            idf = ventilation_wind_and_stack_open_area.add(idf)
+
         return idf
