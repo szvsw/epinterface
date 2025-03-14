@@ -186,7 +186,14 @@ class SiteGroundTemperature(BaseObj, extra="ignore"):
         )
 
 
-# TODO: InternalMass, Building
+class InternalMass(BaseObj, extra="ignore"):
+    """InternalMass object."""
+
+    key: ClassVar[str] = "INTERNALMASS"
+    Name: str
+    Zone_or_ZoneList_Name: str
+    Construction_Name: str
+    SurfaceArea: float
 
 
 class BaseMaterial(BaseModel, extra="ignore", populate_by_name=True):
