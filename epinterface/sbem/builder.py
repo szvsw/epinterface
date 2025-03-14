@@ -166,6 +166,7 @@ class SurfaceHandlers(BaseModel):
     Slab: SurfaceHandler
     Ceiling: SurfaceHandler
     Partition: SurfaceHandler
+    InternalMass: SurfaceHandler
     GroundSlab: SurfaceHandler
     GroundWall: SurfaceHandler
     Window: SurfaceHandler
@@ -222,12 +223,20 @@ class SurfaceHandlers(BaseModel):
             surface_group="glazing",
         )
 
+        internal_mass_handler = SurfaceHandler(
+            boundary_condition=None,
+            original_construction_name=None,
+            original_surface_type="internal_mass",
+            surface_group="opaque",
+        )
+
         return cls(
             Roof=roof_handler,
             Facade=facade_handler,
             Slab=slab_handler,
             Ceiling=ceiling_handler,
             Partition=partition_handler,
+            InternalMass=internal_mass_handler,
             GroundSlab=ground_slab_handler,
             GroundWall=ground_wall_handler,
             Window=window_handler,
@@ -281,6 +290,11 @@ class SurfaceHandlers(BaseModel):
         )
         if window:
             idf = self.Window.assign_srfs(idf=idf, construction=window)
+
+        if constructions.InternalMassAssembly is not None:
+            idf = self.InternalMass.assign_srfs(
+                idf=idf, construction=constructions.InternalMassAssembly
+            )
         return idf
 
 
@@ -549,7 +563,6 @@ class Model(BaseWeather, validate_assignment=True):
         ):
             raise SBEMBuilderNotImplementedError("_IsAdiabatic")
 
-        # TODO: re-enable a not implemented error for internal mass construction.
         # if constructions.InternalMassAssembly is not None:
         #     raise SBEMBuilderNotImplementedError("InternalMassAssembly")
 
