@@ -550,6 +550,10 @@ HeatRecoveryTypeType = Annotated[
 # TODO: convert templates into BaseObjs?
 # TODO: Schedule referencing more richly?
 
+ThermostatType = Literal[
+    "SingleHeating", "SingleCooling", "SingleHeatingOrCooling", "DualSetpoint"
+]
+
 
 class HVACTemplateThermostat(BaseModel):
     """HVACTemplateThermostat object."""
@@ -682,6 +686,36 @@ InfDesignFlowRateCalculationMethodType = Literal[
     "Flow/ExteriorWallArea",
     "AirChanges/Hour",
 ]
+VentDesignFlowRateCalculationMethodType = Literal[
+    "Flow/Zone", "Flow/Area", "Flow/Person", "AirChanges/Hour"
+]
+
+VentilationType = Literal["Natural", "Exhaust", "Intake", "Balanced"]
+
+
+class ZoneVentilationWindAndStackOpenArea(BaseObj, extra="ignore"):
+    """ZoneVentilationWindAndStackOpenArea object."""
+
+    key: ClassVar[str] = "ZONEVENTILATION:WINDANDSTACKOPENAREA"
+    Name: str
+    Zone_or_Space_Name: str
+    Opening_Area: float
+    Opening_Area_Fraction_Schedule_Name: str
+    Opening_Effectiveness: str = "AutoCalculate"
+    Effective_Angle: float = 0
+    Height_Difference: float
+    Discharge_Coefficient_for_Opening: str = "AutoCalculate"
+    Minimum_Indoor_Temperature: float | None = 18
+    Minimum_Indoor_Temperature_Schedule_Name: str | None = None
+    Maximum_Indoor_Temperature: float | None = None
+    Maximum_Indoor_Temperature_Schedule_Name: str | None = None
+    Delta_Temperature: float | None = None
+    Delta_Temperature_Schedule_Name: str | None = None
+    Minimum_Outdoor_Temperature: float | None = None
+    Minimum_Outdoor_Temperature_Schedule_Name: str | None = None
+    Maximum_Outdoor_Temperature: float | None = None
+    Maximum_Outdoor_Temperature_Schedule_Name: str | None = None
+    Maximum_Wind_Speed: float = 40
 
 
 class ZoneInfiltrationDesignFlowRate(BaseObj, extra="ignore"):

@@ -1,14 +1,24 @@
 """Operations components for the SBEM library."""
 
+from logging import getLogger
+
 import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 
-from epinterface.geometry import get_zone_floor_area
-from epinterface.interface import WaterUseEquipment
+from epinterface.constants import assumed_constants
+from epinterface.geometry import get_zone_floor_area, get_zone_glazed_area
+from epinterface.interface import (
+    HVACTemplateThermostat,
+    HVACTemplateZoneIdealLoadsAirSystem,
+    WaterUseEquipment,
+    ZoneVentilationWindAndStackOpenArea,
+)
 from epinterface.sbem.common import MetadataMixin, NamedObject
 from epinterface.sbem.components.space_use import ZoneSpaceUseComponent
 from epinterface.sbem.components.systems import DHWComponent, ZoneHVACComponent
+
+logger = getLogger(__name__)
 
 
 class ZoneOperationsComponent(
@@ -140,4 +150,114 @@ class ZoneOperationsComponent(
             Latent_Fraction_Schedule_Name=None,
         )
         idf = hot_water.add(idf)
+        return idf
+
+    def add_thermostat_to_idf_zone(
+        self, idf: IDF, target_zone_name: str
+    ) -> HVACTemplateThermostat:
+        """Add a thermostat to the zone.
+
+        Args:
+            idf (IDF): The IDF object to add the thermostat to.
+            target_zone_name (str): The name of the zone to add the thermostat to.
+
+        Returns:
+            idf (IDF): The updated IDF object.
+        """
+        thermostat_name = (
+            f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_THERMOSTAT"
+        )
+        heating_schedule = self.SpaceUse.Thermostat.HeatingSchedule
+        cooling_schedule = self.SpaceUse.Thermostat.CoolingSchedule
+        heating_schedule_name = None
+        cooling_schedule_name = None
+        if heating_schedule is not None:
+            idf, heating_schedule_name = heating_schedule.add_year_to_idf(
+                idf, name_prefix=thermostat_name
+            )
+        if cooling_schedule is not None:
+            idf, cooling_schedule_name = cooling_schedule.add_year_to_idf(
+                idf, name_prefix=thermostat_name
+            )
+
+        thermostat = HVACTemplateThermostat(
+            Name=thermostat_name,
+            Heating_Setpoint_Schedule_Name=heating_schedule_name,
+            Constant_Heating_Setpoint=self.SpaceUse.Thermostat.HeatingSetpoint
+            if self.SpaceUse.Thermostat.HeatingSchedule is None
+            else None,
+            Cooling_Setpoint_Schedule_Name=cooling_schedule_name,
+            Constant_Cooling_Setpoint=self.SpaceUse.Thermostat.CoolingSetpoint
+            if self.SpaceUse.Thermostat.CoolingSchedule is None
+            else None,
+        )
+
+        idf = thermostat.add(idf)
+
+        return thermostat
+
+    def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
+        """Add conditioning to an IDF zone."""
+        thermostat = self.add_thermostat_to_idf_zone(idf, target_zone_name)
+        if self.HVAC.Ventilation.TechType == "DCV":
+            # check the design spec outdoor air for the DCV
+            raise NotImplementedError("DCV not implemented.")
+        if self.HVAC.Ventilation.TechType == "Economizer":
+            # check the differential dry bulb vs. differential enthalpy for the economizer
+            raise NotImplementedError("Economizer not implemented")
+        hvac_template = HVACTemplateZoneIdealLoadsAirSystem(
+            Zone_Name=target_zone_name,
+            Template_Thermostat_Name=thermostat.Name,
+            Maximum_Heating_Air_Flow_Rate="autosize",
+            Heating_Limit="NoLimit",
+            Maximum_Sensible_Heating_Capacity="autosize",
+            Minimum_Cooling_Supply_Air_Temperature=13,
+            Maximum_Cooling_Air_Flow_Rate="autosize",
+            Maximum_Total_Cooling_Capacity="autosize",
+            Cooling_Limit="NoLimit",
+            Humidification_Control_Type="None",
+            Outdoor_Air_Flow_Rate_per_Person=self.HVAC.Ventilation.MinFreshAir,  # CHECK THE UNITS IN UNIT TESTS
+            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.HVAC.Ventilation.MinFreshAir,
+            Outdoor_Air_Flow_Rate_per_Zone=0,
+            Demand_Controlled_Ventilation_Type="OccupancySchedule"
+            if self.HVAC.Ventilation.TechType == "DCV"
+            else "None",
+            Outdoor_Air_Economizer_Type="DifferentialDryBulb"
+            if self.HVAC.Ventilation.TechType == "Economizer"
+            else "NoEconomizer",
+            Heat_Recovery_Type="Sensible"
+            if self.HVAC.Ventilation.TechType == "HRV"
+            else "None",
+            Sensible_Heat_Recovery_Effectiveness=assumed_constants.Sensible_Heat_Recovery_Effectiveness,
+            Latent_Heat_Recovery_Effectiveness=assumed_constants.Latent_Heat_Recovery_Effectiveness,
+            Outdoor_Air_Method="Sum"
+            if self.HVAC.Ventilation.Type == "Mechanical"
+            else "None",
+        )
+        idf = hvac_template.add(idf)
+
+        if self.HVAC.Ventilation.Type == "Natural":
+            # total_window_area = calculate_window_area_for_zone(idf, target_zone_name)
+            total_window_area = get_zone_glazed_area(idf, target_zone_name)
+
+            if total_window_area == 0:
+                logger.warning(
+                    f"No windows found for natural ventilation in zone {target_zone_name}"
+                )
+                return idf
+            vent_wind_stack_name = f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA"
+            idf, vent_wind_stack_name = self.HVAC.Ventilation.Schedule.add_year_to_idf(
+                idf, name_prefix=vent_wind_stack_name
+            )
+            ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
+                Name=vent_wind_stack_name,
+                Zone_or_Space_Name=target_zone_name,
+                Minimum_Indoor_Temperature=self.SpaceUse.Thermostat.HeatingSetpoint,
+                Maximum_Outdoor_Temperature=self.SpaceUse.Thermostat.CoolingSetpoint,
+                Opening_Area=total_window_area,
+                Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name,
+                Height_Difference=0,
+            )
+            idf = ventilation_wind_and_stack_open_area.add(idf)
+
         return idf

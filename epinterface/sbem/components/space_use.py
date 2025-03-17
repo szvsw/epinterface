@@ -206,33 +206,14 @@ class ThermostatComponent(NamedObject, MetadataMixin, extra="forbid"):
     IsOn: BoolStr = Field(..., title="Thermostat is on")
     HeatingSetpoint: float = Field(
         ...,
-        title="Heating setpoint of the object",
+        title="Heating setpoint of the object; ignored if schedule is present, except also used for determining natural ventilation boundaries.",
     )
     HeatingSchedule: YearComponent = Field(..., title="Heating schedule of the object")
     CoolingSetpoint: float = Field(
         ...,
-        title="Cooling setpoint of the object",
+        title="Cooling setpoint of the object; ignored if schedule is present, except also used for determining natural ventilation boundaries.",
     )
     CoolingSchedule: YearComponent = Field(..., title="Cooling schedule of the object")
-
-    def add_thermostat_to_idf_zone(
-        self, idf: IDF, target_zone_or_zone_list_name: str
-    ) -> IDF:
-        """Add thermostat settings to an IDF zone.
-
-        Args:
-            idf (IDF): The IDF object to add the thermostat settings to.
-            target_zone_or_zone_list_name (str): The name of the zone or zone list to add the thermostat settings to.
-
-        Returns:
-            IDF: The updated IDF object.
-        """
-        if not self.IsOn:
-            return idf
-
-        raise NotImplementedError
-        idf = idf.newidfobject("HVACTEMPLATE:THERMOSTAT", **self.model_dump())
-        return idf
 
 
 class WaterUseComponent(NamedObject, MetadataMixin, extra="forbid"):

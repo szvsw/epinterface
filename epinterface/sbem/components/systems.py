@@ -119,7 +119,9 @@ class ConditioningSystemsComponent(NamedObject, MetadataMixin, extra="forbid"):
 
 
 VentilationType = Literal["Natural", "Mechanical", "Hybrid"]
-VentilationTechType = Literal["ERV", "HRV", "DCV", "NoMechanicalVentilation", "Custom"]
+VentilationTechType = Literal[
+    "ERV", "HRV", "DCV", "Economizer", "NoMechanicalVentilation", "Custom"
+]
 
 
 class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
