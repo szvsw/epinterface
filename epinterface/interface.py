@@ -582,9 +582,9 @@ class HVACTemplateZoneIdealLoadsAirSystem(BaseModel):
 
     Zone_Name: str
     Template_Thermostat_Name: str
-    System_Availability_Schedule_Name: str | str = "AlwaysOn"
-    Heating_Availability_Schedule_Name: str | str = "AlwaysOn"
-    Cooling_Availability_Schedule_Name: str | str = "AlwaysOn"
+    System_Availability_Schedule_Name: str | None = None
+    Heating_Availability_Schedule_Name: str | None = None
+    Cooling_Availability_Schedule_Name: str | None = None
     Maximum_Heating_Supply_Air_Temperature: float = 30
     Minimum_Cooling_Supply_Air_Temperature: float = 18
     Maximum_Heating_Supply_Air_Humidity_Ratio: float = 0.0156
