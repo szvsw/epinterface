@@ -185,6 +185,12 @@ class ZoneOperationsComponent(
     def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add conditioning to an IDF zone."""
         thermostat = self.add_thermostat_to_idf_zone(idf, target_zone_name)
+        if self.HVAC.Ventilation.TechType == "DCV":
+            # check the design spec outdoor air for the DCV
+            raise NotImplementedError("DCV not implemented.")
+        if self.HVAC.Ventilation.TechType == "Economizer":
+            # check the differential dry bulb vs. differential enthalpy for the economizer
+            raise NotImplementedError("Economizer not implemented")
         hvac_template = HVACTemplateZoneIdealLoadsAirSystem(
             Zone_Name=target_zone_name,
             Template_Thermostat_Name=thermostat.Name,
