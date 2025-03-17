@@ -160,7 +160,6 @@ class ZoneOperationsComponent(
         Args:
             idf (IDF): The IDF object to add the thermostat to.
             target_zone_name (str): The name of the zone to add the thermostat to.
-            thermostat_type (ThermostatType): The type of thermostat to add.
 
         Returns:
             idf (IDF): The updated IDF object.
