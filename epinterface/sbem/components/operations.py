@@ -168,17 +168,32 @@ class ZoneOperationsComponent(
         thermostat_name = (
             f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_THERMOSTAT"
         )
+        heating_schedule = self.SpaceUse.Thermostat.HeatingSchedule
+        cooling_schedule = self.SpaceUse.Thermostat.CoolingSchedule
+        heating_schedule_name = None
+        cooling_schedule_name = None
+        if heating_schedule is not None:
+            idf, heating_schedule_name = heating_schedule.add_year_to_idf(
+                idf, name_prefix=thermostat_name
+            )
+        if cooling_schedule is not None:
+            idf, cooling_schedule_name = cooling_schedule.add_year_to_idf(
+                idf, name_prefix=thermostat_name
+            )
+
         thermostat = HVACTemplateThermostat(
             Name=thermostat_name,
-            Heating_Setpoint_Schedule_Name=self.SpaceUse.Thermostat.HeatingSchedule.Name,
+            Heating_Setpoint_Schedule_Name=heating_schedule_name,
             Constant_Heating_Setpoint=self.SpaceUse.Thermostat.HeatingSetpoint
             if self.SpaceUse.Thermostat.HeatingSchedule is None
             else None,
-            Cooling_Setpoint_Schedule_Name=self.SpaceUse.Thermostat.CoolingSchedule.Name,
+            Cooling_Setpoint_Schedule_Name=cooling_schedule_name,
             Constant_Cooling_Setpoint=self.SpaceUse.Thermostat.CoolingSetpoint
             if self.SpaceUse.Thermostat.CoolingSchedule is None
             else None,
         )
+
+        idf = thermostat.add(idf)
 
         return thermostat
 
@@ -220,7 +235,6 @@ class ZoneOperationsComponent(
             if self.HVAC.Ventilation.Type == "Mechanical"
             else "None",
         )
-        idf = thermostat.add(idf)
         idf = hvac_template.add(idf)
 
         if self.HVAC.Ventilation.Type == "Natural":
@@ -232,13 +246,17 @@ class ZoneOperationsComponent(
                     f"No windows found for natural ventilation in zone {target_zone_name}"
                 )
                 return idf
+            vent_wind_stack_name = f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA"
+            idf, vent_wind_stack_name = self.HVAC.Ventilation.Schedule.add_year_to_idf(
+                idf, name_prefix=vent_wind_stack_name
+            )
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
-                Name=f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA",
+                Name=vent_wind_stack_name,
                 Zone_or_Space_Name=target_zone_name,
                 Minimum_Indoor_Temperature=self.SpaceUse.Thermostat.HeatingSetpoint,
                 Maximum_Outdoor_Temperature=self.SpaceUse.Thermostat.CoolingSetpoint,
                 Opening_Area=total_window_area,
-                Opening_Area_Fraction_Schedule_Name=self.HVAC.Ventilation.Schedule.Name,
+                Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name,
                 Height_Difference=0,
             )
             idf = ventilation_wind_and_stack_open_area.add(idf)
