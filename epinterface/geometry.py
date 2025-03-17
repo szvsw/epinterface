@@ -473,3 +473,56 @@ class ShoeboxGeometry(BaseModel):
             surfaces=window_walls,
         )
         return idf
+
+
+def get_zone_floor_area(idf: IDF, zone_name: str) -> float:
+    """Get the floor area of a zone by iterating over building surfaces that are of type 'floor'.
+
+    If more than one floor is found, for now we will return an error; it could be possible in an
+    attic where the floor below has perim/core zoning...
+
+    Args:
+        idf (IDF): The IDF model to get the floor area from.
+        zone_name (str): The name of the zone to get the floor area from.
+
+    Returns:
+        area (float): The floor area of the zone [m2].
+    """
+    area = 0
+    area_ct = 0
+    for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
+        # TODO: ensure that this still works for basements and attics.
+        if srf.Zone_Name == zone_name and srf.Surface_Type.lower() == "floor":
+            poly = Polygon(srf.coords)
+            area += poly.area
+            area_ct += 1
+    if area_ct > 1:
+        raise ValueError(f"TOO_MANY_FLOORS:{zone_name}")
+    if area == 0 or area_ct == 0:
+        raise ValueError(f"NO_AREA:{zone_name}")
+
+    return area
+
+
+def get_zone_glazed_area(idf: IDF, zone_name: str) -> float:
+    """Get the glazed area of a zone by iterating over building surfaces that are of type 'window'.
+
+    Args:
+        idf (IDF): The IDF model to get the glazed area from.
+        zone_name (str): The name of the zone to get the glazed area from.
+
+    Returns:
+        area (float): The glazed area of the zone [m2].
+    """
+    area = 0
+    area_ct = 0
+    for srf in idf.idfobjects["FENESTRATIONSURFACE:DETAILED"]:
+        if srf.Zone_Name == zone_name and srf.Surface_Type.lower() == "window":
+            poly = Polygon(srf.coords)
+            area += poly.area
+            area_ct += 1
+
+    if area_ct not in [0, 1, 4]:
+        raise ValueError(f"TOO_MANY_WINDOWS:{zone_name}:{area_ct}")
+
+    return area

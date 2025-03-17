@@ -193,7 +193,7 @@ class InternalMass(BaseObj, extra="ignore"):
     Name: str
     Zone_or_ZoneList_Name: str
     Construction_Name: str
-    SurfaceArea: float
+    Surface_Area: float
 
 
 class BaseMaterial(BaseModel, extra="ignore", populate_by_name=True):
