@@ -216,8 +216,8 @@ class ZoneOperationsComponent(
             Maximum_Total_Cooling_Capacity="autosize",
             Cooling_Limit="NoLimit",
             Humidification_Control_Type="None",
-            Outdoor_Air_Flow_Rate_per_Person=self.HVAC.Ventilation.MinFreshAir,  # CHECK THE UNITS IN UNIT TESTS
-            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.HVAC.Ventilation.MinFreshAir,
+            Outdoor_Air_Flow_Rate_per_Person=self.HVAC.Ventilation.FreshAirPerPerson,
+            Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.HVAC.Ventilation.FreshAirPerFloorArea,
             Outdoor_Air_Flow_Rate_per_Zone=0,
             Demand_Controlled_Ventilation_Type="OccupancySchedule"
             if self.HVAC.Ventilation.TechType == "DCV"
@@ -232,6 +232,7 @@ class ZoneOperationsComponent(
             Latent_Heat_Recovery_Effectiveness=assumed_constants.Latent_Heat_Recovery_Effectiveness,
             Outdoor_Air_Method="Sum"
             if self.HVAC.Ventilation.Type == "Mechanical"
+            or self.HVAC.Ventilation.Type == "Hybrid"
             else "None",
         )
         idf = hvac_template.add(idf)

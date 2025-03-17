@@ -128,10 +128,17 @@ class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
     """A ventilation object in the SBEM library."""
 
     # TODO: add unit notes in field descriptions
-    Rate: float = Field(..., title="Ventilation rate of the object")
-    MinFreshAir: float = Field(
+    FreshAirPerFloorArea: float = Field(
         ...,
-        title="Minimum fresh air of the object [m³/s]",
+        title="Fresh air per m2 of the object [m³/s/m²]",
+        ge=0,
+        le=0.05,
+    )
+    FreshAirPerPerson: float = Field(
+        ...,
+        title="Fresh air per person of the object [m³/s/p]",
+        ge=0,
+        le=0.05,
     )
     Schedule: YearComponent = Field(..., title="Ventilation schedule of the object")
     Type: VentilationType = Field(..., title="Type of the object")

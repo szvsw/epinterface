@@ -358,8 +358,8 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             ventilation = tx.ventilation.create(
                 data={
                     "Name": row["Name"],
-                    "Rate": row["Rate"],
-                    "MinFreshAir": row["Min_fresh_air"],
+                    "FreshAirPerPerson": row["Fresh_air_per_person"],
+                    "FreshAirPerFloorArea": row["Fresh_air_per_m2"],
                     "Type": row["Ventilation_type"],
                     "TechType": row["Tech_type"],
                     "Schedule": {"connect": {"Name": row["Window_schedule"]}},
