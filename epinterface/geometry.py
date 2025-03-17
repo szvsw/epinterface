@@ -494,6 +494,8 @@ def get_zone_floor_area(idf: IDF, zone_name: str) -> float:
         # TODO: ensure that this still works for basements and attics.
         if srf.Zone_Name == zone_name and srf.Surface_Type.lower() == "floor":
             poly = Polygon(srf.coords)
+            if poly.area == 0:
+                raise ValueError(f"INVALID_FLOOR:{zone_name}:{srf.Name}")
             area += poly.area
             area_ct += 1
     if area_ct > 1:
@@ -505,24 +507,69 @@ def get_zone_floor_area(idf: IDF, zone_name: str) -> float:
 
 
 def get_zone_glazed_area(idf: IDF, zone_name: str) -> float:
-    """Get the glazed area of a zone by iterating over building surfaces that are of type 'window'.
+    """Calculate the total area of windows for a specific zone in the IDF model.
 
     Args:
-        idf (IDF): The IDF model to get the glazed area from.
-        zone_name (str): The name of the zone to get the glazed area from.
+        idf (IDF): The IDF model.
+        zone_name (str): The name of the zone to calculate the window area for.
 
     Returns:
-        area (float): The glazed area of the zone [m2].
+        float: The total area of windows in the specified zone.
     """
-    area = 0
-    area_ct = 0
-    for srf in idf.idfobjects["FENESTRATIONSURFACE:DETAILED"]:
-        if srf.Zone_Name == zone_name and srf.Surface_Type.lower() == "window":
-            poly = Polygon(srf.coords)
-            area += poly.area
-            area_ct += 1
+    total_window_area = 0.0
+    total_windows = 0
 
-    if area_ct not in [0, 1, 4]:
-        raise ValueError(f"TOO_MANY_WINDOWS:{zone_name}:{area_ct}")
+    for window in idf.idfobjects["FENESTRATIONSURFACE:DETAILED"]:
+        parent_srf = idf.getobject(
+            "BUILDINGSURFACE:DETAILED", window.Building_Surface_Name
+        )
+        if parent_srf is None:
+            msg = f"BUILDINGSURFACE:DETAILED:{window.Building_Surface_Name} not found"
+            raise ValueError(msg)
+        if (
+            parent_srf.Zone_Name.lower() == zone_name.lower()
+            and window.Surface_Type.lower() == "window"
+        ):
+            vertices = [
+                (
+                    window.Vertex_1_Xcoordinate,
+                    window.Vertex_1_Ycoordinate,
+                    window.Vertex_1_Zcoordinate,
+                ),
+                (
+                    window.Vertex_2_Xcoordinate,
+                    window.Vertex_2_Ycoordinate,
+                    window.Vertex_2_Zcoordinate,
+                ),
+                (
+                    window.Vertex_3_Xcoordinate,
+                    window.Vertex_3_Ycoordinate,
+                    window.Vertex_3_Zcoordinate,
+                ),
+                (
+                    window.Vertex_4_Xcoordinate,
+                    window.Vertex_4_Ycoordinate,
+                    window.Vertex_4_Zcoordinate,
+                ),
+            ]
+            # Assuming the window is a quadrilateral, calculate its area
+            # This is a simplified calculation assuming the window is a rectangle
+            width = (
+                (vertices[1][0] - vertices[0][0]) ** 2
+                + (vertices[1][1] - vertices[0][1]) ** 2
+                + (vertices[1][2] - vertices[0][2]) ** 2
+            ) ** 0.5
+            height = (
+                (vertices[2][0] - vertices[1][0]) ** 2
+                + (vertices[2][1] - vertices[1][1]) ** 2
+                + (vertices[2][2] - vertices[1][2]) ** 2
+            ) ** 0.5
+            area = width * height
+            total_window_area += area
+            total_windows += 1
 
-    return area
+    if total_windows not in [0, 1, 4]:
+        msg = f"TOO_MANY_WINDOWS:{zone_name}:{total_windows}"
+        raise ValueError(msg)
+
+    return total_window_area

@@ -206,12 +206,12 @@ class ThermostatComponent(NamedObject, MetadataMixin, extra="forbid"):
     IsOn: BoolStr = Field(..., title="Thermostat is on")
     HeatingSetpoint: float = Field(
         ...,
-        title="Heating setpoint of the object",
+        title="Heating setpoint of the object; ignored if schedule is present, except also used for determining natural ventilation boundaries.",
     )
     HeatingSchedule: YearComponent = Field(..., title="Heating schedule of the object")
     CoolingSetpoint: float = Field(
         ...,
-        title="Cooling setpoint of the object",
+        title="Cooling setpoint of the object; ignored if schedule is present, except also used for determining natural ventilation boundaries.",
     )
     CoolingSchedule: YearComponent = Field(..., title="Cooling schedule of the object")
 

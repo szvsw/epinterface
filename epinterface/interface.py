@@ -696,15 +696,15 @@ VentilationType = Literal["Natural", "Exhaust", "Intake", "Balanced"]
 class ZoneVentilationWindAndStackOpenArea(BaseObj, extra="ignore"):
     """ZoneVentilationWindAndStackOpenArea object."""
 
-    key: ClassVar[str] = "ZONEVENTILATION:WINDANDSTACKOPENAER"
+    key: ClassVar[str] = "ZONEVENTILATION:WINDANDSTACKOPENAREA"
     Name: str
-    Zone_or_ZoneList_Name: str
-    OpeningArea: float
-    OpeningArea_Schedule_Name: str = "Constant"
+    Zone_or_Space_Name: str
+    Opening_Area: float
+    Opening_Area_Fraction_Schedule_Name: str
     Opening_Effectiveness: str = "AutoCalculate"
     Effective_Angle: float = 0
     Height_Difference: float
-    Discharge_Coefficient: str = "AutoCalculate"
+    Discharge_Coefficient_for_Opening: str = "AutoCalculate"
     Minimum_Indoor_Temperature: float | float = 18
     Minimum_Indoor_Temperature_Schedule_Name: str | None = None
     Maximum_Indoor_Temperature: float | None = None
