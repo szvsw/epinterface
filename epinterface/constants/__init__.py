@@ -51,6 +51,12 @@ class AssumedConstants(BaseModel, frozen=True):
         ],
         frozen=True,
     )
+    Sensible_Heat_Recovery_Effectiveness: float = Field(
+        default=0.70, ge=0, le=1, frozen=True
+    )
+    Latent_Heat_Recovery_Effectiveness: float = Field(
+        default=0.65, ge=0, le=1, frozen=True
+    )
 
 
 assumed_constants = AssumedConstants()

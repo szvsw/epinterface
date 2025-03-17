@@ -1,10 +1,13 @@
 """Operations components for the SBEM library."""
 
+from logging import getLogger
+
 import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 from shapely.geometry import Polygon
 
+from epinterface.constants import assumed_constants
 from epinterface.interface import (
     HVACTemplateThermostat,
     HVACTemplateZoneIdealLoadsAirSystem,
@@ -14,6 +17,8 @@ from epinterface.interface import (
 from epinterface.sbem.common import MetadataMixin, NamedObject
 from epinterface.sbem.components.space_use import ZoneSpaceUseComponent
 from epinterface.sbem.components.systems import DHWComponent, ZoneHVACComponent
+
+logger = getLogger(__name__)
 
 
 class ZoneOperationsComponent(
@@ -176,11 +181,16 @@ class ZoneOperationsComponent(
         )
         thermostat = HVACTemplateThermostat(
             Name=thermostat_name,
-            Heating_Setpoint_Schedule_Name=ZoneSpaceUseComponent.Thermostat.HeatingSchedule.Name,
-            Constant_Heating_Setpoint=ZoneSpaceUseComponent.Thermostat.HeatingSetpoint,
-            Cooling_Setpoint_Schedule_Name=ZoneSpaceUseComponent.Thermostat.CoolingSchedule.Name,
-            Constant_Cooling_Setpoint=ZoneSpaceUseComponent.Thermostat.CoolingSetpoint,
+            Heating_Setpoint_Schedule_Name=self.SpaceUse.Thermostat.HeatingSchedule.Name,
+            Constant_Heating_Setpoint=self.SpaceUse.Thermostat.HeatingSetpoint
+            if self.SpaceUse.Thermostat.HeatingSchedule is None
+            else None,
+            Cooling_Setpoint_Schedule_Name=self.SpaceUse.Thermostat.CoolingSchedule.Name,
+            Constant_Cooling_Setpoint=self.SpaceUse.Thermostat.CoolingSetpoint
+            if self.SpaceUse.Thermostat.CoolingSchedule is None
+            else None,
         )
+
         return thermostat
 
     def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
@@ -189,10 +199,6 @@ class ZoneOperationsComponent(
         hvac_template = HVACTemplateZoneIdealLoadsAirSystem(
             Zone_Name=target_zone_name,
             Template_Thermostat_Name=thermostat.Name,
-            System_Availability_Schedule_Name="AlwaysOn",
-            Heating_Availability_Schedule_Name="AlwaysOn",
-            Cooling_Availability_Schedule_Name="AlwaysOn",
-            Maximum_Heating_Supply_Air_Temperature=50,
             Maximum_Heating_Air_Flow_Rate="autosize",
             Heating_Limit="NoLimit",
             Maximum_Sensible_Heating_Capacity="autosize",
@@ -213,8 +219,8 @@ class ZoneOperationsComponent(
             Heat_Recovery_Type="Sensible"
             if self.HVAC.Ventilation.TechType == "HRV"
             else "None",
-            Sensible_Heat_Recovery_Effectiveness=0.70,
-            Latent_Heat_Recovery_Effectiveness=0.65,
+            Sensible_Heat_Recovery_Effectiveness=assumed_constants.Sensible_Heat_Recovery_Effectiveness,
+            Latent_Heat_Recovery_Effectiveness=assumed_constants.Latent_Heat_Recovery_Effectiveness,
             Outdoor_Air_Method="Sum"
             if self.HVAC.Ventilation.Type == "Mechanical"
             else "None",
@@ -223,13 +229,73 @@ class ZoneOperationsComponent(
         idf = hvac_template.add(idf)
 
         if self.HVAC.Ventilation.Type == "Natural":
+            total_window_area = calculate_window_area_for_zone(idf, target_zone_name)
+            if total_window_area == 0:
+                logger.warning(
+                    f"No windows found for natural ventilation in zone {target_zone_name}"
+                )
+                return idf
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
                 Name=f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA",
                 Zone_or_ZoneList_Name=target_zone_name,
-                OpeningArea=0,
+                Minimum_Indoor_Temperature=self.SpaceUse.Thermostat.HeatingSetpoint,
+                OpeningArea=total_window_area,
                 OpeningArea_Schedule_Name=self.HVAC.Ventilation.Schedule.Name,
                 Height_Difference=0,
             )
             idf = ventilation_wind_and_stack_open_area.add(idf)
 
         return idf
+
+
+def calculate_window_area_for_zone(idf: IDF, zone_name: str) -> float:
+    """Calculate the total area of windows for a specific zone in the IDF model.
+
+    Args:
+        idf (IDF): The IDF model.
+        zone_name (str): The name of the zone to calculate the window area for.
+
+    Returns:
+        float: The total area of windows in the specified zone.
+    """
+    total_window_area = 0.0
+    for window in idf.idfobjects["FENESTRATIONSURFACE:DETAILED"]:
+        if window.Zone_Name.lower() == zone_name.lower():
+            vertices = [
+                (
+                    window.Vertex_1_Xcoordinate,
+                    window.Vertex_1_Ycoordinate,
+                    window.Vertex_1_Zcoordinate,
+                ),
+                (
+                    window.Vertex_2_Xcoordinate,
+                    window.Vertex_2_Ycoordinate,
+                    window.Vertex_2_Zcoordinate,
+                ),
+                (
+                    window.Vertex_3_Xcoordinate,
+                    window.Vertex_3_Ycoordinate,
+                    window.Vertex_3_Zcoordinate,
+                ),
+                (
+                    window.Vertex_4_Xcoordinate,
+                    window.Vertex_4_Ycoordinate,
+                    window.Vertex_4_Zcoordinate,
+                ),
+            ]
+            # Assuming the window is a quadrilateral, calculate its area
+            # This is a simplified calculation assuming the window is a rectangle
+            width = (
+                (vertices[1][0] - vertices[0][0]) ** 2
+                + (vertices[1][1] - vertices[0][1]) ** 2
+                + (vertices[1][2] - vertices[0][2]) ** 2
+            ) ** 0.5
+            height = (
+                (vertices[2][0] - vertices[1][0]) ** 2
+                + (vertices[2][1] - vertices[1][1]) ** 2
+                + (vertices[2][2] - vertices[1][2]) ** 2
+            ) ** 0.5
+            area = width * height
+            total_window_area += area
+
+    return total_window_area
