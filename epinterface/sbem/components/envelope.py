@@ -146,10 +146,10 @@ class InfiltrationComponent(
             Air_Changes_per_Hour=self.AirChangesPerHour,
             Flow_Rate_per_Floor_Area=None,
             Design_Flow_Rate=None,
-            Constant_Term_Coefficient=self.ConstantCoefficient,
-            Temperature_Term_Coefficient=self.TemperatureCoefficient,
-            Velocity_Term_Coefficient=self.WindVelocityCoefficient,
-            Velocity_Squared_Term_Coefficient=self.WindVelocitySquaredCoefficient,
+            # Constant_Term_Coefficient=self.ConstantCoefficient,
+            # Temperature_Term_Coefficient=self.TemperatureCoefficient,
+            # Velocity_Term_Coefficient=self.WindVelocityCoefficient,
+            # Velocity_Squared_Term_Coefficient=self.WindVelocitySquaredCoefficient,
         )
         idf = inf.add(idf)
         return idf
@@ -304,13 +304,16 @@ class EnvelopeAssemblyComponent(
     @model_validator(mode="after")
     def validate_internal_mass_exposed_area_per_area(self):
         """Validate that either both internal mass assembly and internal mass exposed area are provided, or neither."""
-        if self.InternalMassAssembly and self.InternalMassExposedAreaPerArea is None:
-            msg = "Internal mass assembly must be provided if internal mass exposed area per area is provided"
+        if self.InternalMassAssembly and (
+            self.InternalMassExposedAreaPerArea is None
+            or self.InternalMassExposedAreaPerArea == 0
+        ):
+            msg = "Internal mass assembly cannot be provided if internal mass exposed area per area is not provided (or 0)."
             raise ValueError(msg)
         if (
             self.InternalMassExposedAreaPerArea is not None
-            and self.InternalMassAssembly is None
-        ):
+            and self.InternalMassExposedAreaPerArea != 0
+        ) and self.InternalMassAssembly is None:
             msg = "Internal mass exposed area per area must be provided if internal mass assembly is provided"
             raise ValueError(msg)
         return self
