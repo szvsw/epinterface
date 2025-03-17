@@ -17,8 +17,9 @@ from pydantic import BaseModel, Field, model_validator
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
-from epinterface.geometry import ShoeboxGeometry
+from epinterface.geometry import ShoeboxGeometry, get_zone_floor_area
 from epinterface.interface import (
+    InternalMass,
     SiteGroundTemperature,
     ZoneList,
     add_default_schedules,
@@ -60,9 +61,9 @@ class SurfaceHandler(BaseModel):
     boundary_condition: str | None
     original_construction_name: str | None
     original_surface_type: str | None
-    surface_group: Literal["glazing", "opaque"]
+    surface_group: Literal["glazing", "opaque", "internal_mass"]
 
-    def assign_srfs(
+    def assign_constructions_to_objs(
         self,
         idf: IDF,
         construction: ConstructionAssemblyComponent
@@ -70,23 +71,39 @@ class SurfaceHandler(BaseModel):
     ) -> IDF:
         """Adds a construction (and its materials) to an IDF and assigns it to matching surfaces.
 
+        The basic idea is to look for certain idf objects that need a construction assigned to them,
+        and then assign the construction to them by name.
+
+        Depending on the configuration of the surface handler, we will look for different types of IDF objects.
+
         Args:
             idf (IDF): The IDF model to add the construction to.
             construction (ConstructionAssemblyComponent | GlazingConstructionComponent): The construction to add.
         """
-        srf_key = (
+        # This will identify what *type* of energy plus object we need to assign a particular construction to.
+        # e.g. glazing -> look for FENESTRATIONSURFACE:DETAILED
+        # e.g. opaque -> look for BUILDINGSURFACE:DETAILED
+        # e.g. internal mass -> look for INTERNALMASS
+        obj_type_key = (
             "FENESTRATIONSURFACE:DETAILED"
             if self.surface_group == "glazing"
-            else "BUILDINGSURFACE:DETAILED"
+            else (
+                "INTERNALMASS"
+                if self.surface_group == "internal_mass"
+                else "BUILDINGSURFACE:DETAILED"
+            )
         )
+
         if self.boundary_condition is not None and self.surface_group == "glazing":
             raise NotImplementedParameter(
                 "BoundaryCondition", self.surface_group, "Glazing"
             )
 
-        srfs = [srf for srf in idf.idfobjects[srf_key] if self.check_srf(srf)]
+        # Now we can find the matching idf objects that need a construction.
+        srfs = [srf for srf in idf.idfobjects[obj_type_key] if self.check_srf(srf)]
         idf = construction.add_to_idf(idf)
 
+        # and then we can finally assign the construction to the surfaces.
         for srf in srfs:
             srf.Construction_Name = construction.Name
         return idf
@@ -226,8 +243,8 @@ class SurfaceHandlers(BaseModel):
         internal_mass_handler = SurfaceHandler(
             boundary_condition=None,
             original_construction_name=None,
-            original_surface_type="internal_mass",
-            surface_group="opaque",
+            original_surface_type=None,
+            surface_group="internal_mass",
         )
 
         return cls(
@@ -273,26 +290,49 @@ class SurfaceHandlers(BaseModel):
 
         slab_reversed = constructions.SlabAssembly.reversed
 
-        idf = self.Roof.assign_srfs(idf=idf, construction=constructions.RoofAssembly)
-        idf = self.Facade.assign_srfs(
+        idf = self.Roof.assign_constructions_to_objs(
+            idf=idf, construction=constructions.RoofAssembly
+        )
+        idf = self.Facade.assign_constructions_to_objs(
             idf=idf, construction=constructions.FacadeAssembly
         )
-        idf = self.Partition.assign_srfs(
+        idf = self.Partition.assign_constructions_to_objs(
             idf=idf, construction=constructions.PartitionAssembly
         )
-        idf = self.Slab.assign_srfs(idf=idf, construction=slab_reversed)
-        idf = self.Ceiling.assign_srfs(idf=idf, construction=constructions.SlabAssembly)
-        idf = self.GroundSlab.assign_srfs(
+        idf = self.Slab.assign_constructions_to_objs(
+            idf=idf, construction=slab_reversed
+        )
+        idf = self.Ceiling.assign_constructions_to_objs(
+            idf=idf, construction=constructions.SlabAssembly
+        )
+        idf = self.GroundSlab.assign_constructions_to_objs(
             idf=idf, construction=constructions.GroundSlabAssembly
         )
-        idf = self.GroundWall.assign_srfs(
+        idf = self.GroundWall.assign_constructions_to_objs(
             idf=idf, construction=constructions.GroundWallAssembly
         )
         if window:
-            idf = self.Window.assign_srfs(idf=idf, construction=window)
+            idf = self.Window.assign_constructions_to_objs(idf=idf, construction=window)
 
         if constructions.InternalMassAssembly is not None:
-            idf = self.InternalMass.assign_srfs(
+            # We need to create new IDF Objects since they were not added into the scene
+            # yet (whereas the other buildingsurface/fenestrationsurface were added by
+            # eppy during the add_block call which inits zone geometry)
+            for zone in idf.idfobjects["ZONE"]:
+                floor_area = get_zone_floor_area(idf, zone.Name) * (
+                    constructions.InternalMassExposedAreaPerArea or 0
+                )
+                internal_mass = InternalMass(
+                    Name=f"{zone.Name}_InternalMass",
+                    Zone_or_ZoneList_Name=zone.Name,
+                    Construction_Name=constructions.InternalMassAssembly.Name,
+                    Surface_Area=floor_area,
+                )
+                idf = internal_mass.add(idf)
+
+            # once we've guaranteed that the internal mass object exists, we can
+            # assign it the constructions to them
+            idf = self.InternalMass.assign_constructions_to_objs(
                 idf=idf, construction=constructions.InternalMassAssembly
             )
         return idf
@@ -533,7 +573,7 @@ class Model(BaseWeather, validate_assignment=True):
         )  # kWh/m2 / yr
         return total_energy_kWh_per_m2
 
-    def add_srf_constructions(
+    def add_constructions(
         self,
         idf: IDF,
         constructions: EnvelopeAssemblyComponent,
@@ -631,7 +671,7 @@ class Model(BaseWeather, validate_assignment=True):
         # TODO: Handle Basements:
         # TODO: Handle Attic:
 
-        self.add_srf_constructions(
+        idf = self.add_constructions(
             idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
         )
         # self.add_infiltration(idf, infiltration, inf_zone_list)

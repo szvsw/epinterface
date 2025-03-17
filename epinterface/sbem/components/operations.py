@@ -5,9 +5,9 @@ from logging import getLogger
 import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
-from shapely.geometry import Polygon
 
 from epinterface.constants import assumed_constants
+from epinterface.geometry import get_zone_floor_area
 from epinterface.interface import (
     HVACTemplateThermostat,
     HVACTemplateZoneIdealLoadsAirSystem,
@@ -84,18 +84,7 @@ class ZoneOperationsComponent(
         )
         if zone is None:
             raise ValueError(f"NO_ZONE:{target_zone_name}")
-        area = 0
-        area_ct = 0
-        for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
-            # TODO: ensure that this still works for basements and attics.
-            if srf.Zone_Name == zone.Name and srf.Surface_Type.lower() == "floor":
-                poly = Polygon(srf.coords)
-                area += poly.area
-                area_ct += 1
-        if area_ct > 1:
-            raise ValueError(f"TOO_MANY_FLOORS:{zone.Name}")
-        if area == 0 or area_ct == 0:
-            raise ValueError(f"NO_AREA:{zone.Name}")
+        area = get_zone_floor_area(idf, zone.Name)
         total_ppl = occupant_density * area
 
         # Compute final flow rates.
