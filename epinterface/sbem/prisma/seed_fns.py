@@ -528,6 +528,26 @@ def create_construction_assemblies(db: Prisma):
             },
         }
     )
+    db.constructionassembly.create(
+        data={  # pyright: ignore [reportArgumentType]
+            "Name": "InternalMass",
+            "Type": "InternalMass",
+            "Layers": {
+                "create": [
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Concrete"}},
+                        "Thickness": 0.1,
+                        "LayerOrder": 0,
+                    },
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Gypsum"}},
+                        "Thickness": 0.01,
+                        "LayerOrder": 1,
+                    },
+                ],
+            },
+        }
+    )
 
 
 def create_envelope_assemblies(db: Prisma):
@@ -549,6 +569,8 @@ def create_envelope_assemblies(db: Prisma):
             "GroundSlabAssembly": {"connect": {"Name": "GroundSlab"}},
             "GroundWallAssembly": {"connect": {"Name": "GroundWall"}},
             "ExternalFloorAssembly": {"connect": {"Name": "ExternalFloor"}},
+            "InternalMassAssembly": {"connect": {"Name": "InternalMass"}},
+            "InternalMassExposedAreaPerArea": 0.2,
         }
     )
 
