@@ -705,7 +705,7 @@ class ZoneVentilationWindAndStackOpenArea(BaseObj, extra="ignore"):
     Effective_Angle: float = 0
     Height_Difference: float
     Discharge_Coefficient_for_Opening: str = "AutoCalculate"
-    Minimum_Indoor_Temperature: float | float = 18
+    Minimum_Indoor_Temperature: float | None = 18
     Minimum_Indoor_Temperature_Schedule_Name: str | None = None
     Maximum_Indoor_Temperature: float | None = None
     Maximum_Indoor_Temperature_Schedule_Name: str | None = None
