@@ -247,8 +247,8 @@ def create_hvac_systems(db: Prisma):
                 data={
                     "Name": last_ventilation_name,
                     "Schedule": {"connect": {"Name": "Ventilation_Year"}},
-                    "Rate": 0.5 if location == "cold" else 0.1,
-                    "MinFreshAir": 0.4 if typology == "office" else 0.1,
+                    "FreshAirPerPerson": 0.008 if location == "cold" else 0.006,
+                    "FreshAirPerFloorArea": 0.0004 if typology == "office" else 0.0002,
                     "Type": "Natural",
                     "TechType": "HRV",
                 }

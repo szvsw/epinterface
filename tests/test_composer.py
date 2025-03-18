@@ -408,8 +408,8 @@ def test_operations_selector(preseeded_readonly_db: Prisma):
 
     assert alt_comp.HVAC.Ventilation != comp.HVAC.Ventilation
     assert alt_comp.HVAC.Ventilation.Name == "cold_office"
-    assert alt_comp.HVAC.Ventilation.Rate == 0.5  # from seed_fn
-    assert alt_comp.HVAC.Ventilation.MinFreshAir == 0.4  # from seed_fn
+    assert alt_comp.HVAC.Ventilation.FreshAirPerPerson == 0.008  # from seed_fn
+    assert alt_comp.HVAC.Ventilation.FreshAirPerFloorArea == 0.0004  # from seed_fn
 
 
 def test_envelope_selector(preseeded_readonly_db: Prisma):

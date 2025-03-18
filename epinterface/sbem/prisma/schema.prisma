@@ -198,12 +198,12 @@ model ConditioningSystems {
 }
 
 model Ventilation {
-  id          String @id @default(uuid())
-  Name        String @unique
-  Rate        Float
-  MinFreshAir Float
-  Type        String // "Natural", "Mechanical", "Hybrid"
-  TechType    String // "ERV", "HRV", "DCV", "None", "Custom"
+  id                   String @id @default(uuid())
+  Name                 String @unique
+  FreshAirPerFloorArea Float
+  FreshAirPerPerson    Float
+  Type                 String // "Natural", "Mechanical", "Hybrid"
+  TechType             String // "ERV", "HRV", "DCV", "None", "Custom"
 
   // Relations
   MetadataId String?

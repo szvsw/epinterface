@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 from prisma import Prisma
+from prisma.types import EnvelopeAssemblyCreateInput
 from pydantic import Field
 
 from epinterface.sbem.common import MetadataMixin
@@ -158,7 +159,7 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
             logger.warning(f"Dropping {old_len - new_len} rows from {sheet}.")
         if new_len == 0:
             msg = f"No data found in {sheet}."
-            raise ValueError(msg)
+            logger.warning(msg)
         component_dfs_dict[sheet] = df
 
     # remove any duplicate instances from materials
@@ -358,8 +359,8 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             ventilation = tx.ventilation.create(
                 data={
                     "Name": row["Name"],
-                    "Rate": row["Rate"],
-                    "MinFreshAir": row["Min_fresh_air"],
+                    "FreshAirPerPerson": row["Fresh_air_per_person"],
+                    "FreshAirPerFloorArea": row["Fresh_air_per_m2"],
                     "Type": row["Ventilation_type"],
                     "TechType": row["Tech_type"],
                     "Schedule": {"connect": {"Name": row["Window_schedule"]}},
@@ -465,32 +466,37 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
         # add envelope assemblies - connect to construction assemblies
         # TODO: update with changes to excel
         for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
-            envelope_assembly = tx.envelopeassembly.create(
-                data={
-                    "Name": row["Name"],
-                    "InternalMassExposedAreaPerArea": row["InternalMassFraction"],
-                    "GroundIsAdiabatic": False,
-                    "RoofIsAdiabatic": False,
-                    "FacadeIsAdiabatic": False,
-                    "SlabIsAdiabatic": False,
-                    "PartitionIsAdiabatic": False,
-                    "RoofAssembly": {"connect": {"Name": row["Roof"]}},
-                    "FacadeAssembly": {"connect": {"Name": row["Facade"]}},
-                    "SlabAssembly": {
-                        "connect": {"Name": row["Slab"]}
-                    },  # FLOOR CEILING SYSTEM!!!!
-                    "PartitionAssembly": {"connect": {"Name": row["Partition"]}},
-                    "ExternalFloorAssembly": {
-                        "connect": {"Name": row["ExternalFloor"]}
-                    },
-                    "GroundSlabAssembly": {
-                        "connect": {"Name": row["GroundFloor"]}
-                    },  # FOUNDATION!!!!
-                    "GroundWallAssembly": {
-                        "connect": {"Name": row["GroundWall"]}  # Basement wall
-                    },
-                    "InternalMassAssembly": {"connect": {"Name": row["InternalMass"]}},
+            payload: EnvelopeAssemblyCreateInput = {
+                "Name": row["Name"],
+                "GroundIsAdiabatic": False,
+                "RoofIsAdiabatic": False,
+                "FacadeIsAdiabatic": False,
+                "SlabIsAdiabatic": False,
+                "PartitionIsAdiabatic": False,
+                "RoofAssembly": {"connect": {"Name": row["Roof"]}},
+                "FacadeAssembly": {"connect": {"Name": row["Facade"]}},
+                "SlabAssembly": {
+                    "connect": {"Name": row["Slab"]}
+                },  # FLOOR CEILING SYSTEM!!!!
+                "PartitionAssembly": {"connect": {"Name": row["Partition"]}},
+                "ExternalFloorAssembly": {"connect": {"Name": row["ExternalFloor"]}},
+                "GroundSlabAssembly": {
+                    "connect": {"Name": row["GroundFloor"]}
+                },  # FOUNDATION!!!!
+                "GroundWallAssembly": {
+                    "connect": {"Name": row["GroundWall"]}  # Basement wall
                 },
+            }
+            if (row["InternalMass"] is not None or row["InternalMass"] != "") and (
+                row["InternalMassFraction"] is not None
+                and row["InternalMassFraction"] > 0
+            ):
+                payload["InternalMassAssembly"] = {
+                    "connect": {"Name": row["InternalMass"]}
+                }
+                payload["InternalMassExposedAreaPerArea"] = row["InternalMassFraction"]
+            envelope_assembly = tx.envelopeassembly.create(
+                data=payload,
                 include=ENVELOPE_ASSEMBLY_INCLUDE,
             )
             EnvelopeAssemblyComponent.model_validate(
