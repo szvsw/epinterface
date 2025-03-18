@@ -60,6 +60,7 @@ try:
         BaseYear,
         BaseZone,
     )
+    from prisma.errors import RecordNotFoundError
     from prisma.models import (
         DHW,
         HVAC,
@@ -436,7 +437,7 @@ class Link(Generic[BaseT, IncludeT, ValidatorT]):
                 include=self.include,  # pyright: ignore [reportArgumentType]
             )
             return record, self.validator.model_validate(record, from_attributes=True)
-        except Exception as e:
+        except RecordNotFoundError as e:
             raise SBEMDeepObjectNotFoundError(name, self.prisma_model) from e
 
 
