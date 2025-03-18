@@ -1,0 +1,74 @@
+Envelope:
+  Infiltration:
+    selector:
+      source_fields:
+        - Region
+        - Weatherization
+  Assemblies:
+    selector:
+      source_fields:
+        - Region
+        - Typology
+        - Age_bracket
+        - Roof_and_attic
+        - Weatherization
+        - Wall
+        - Windows
+  Window:
+    selector:
+      source_fields:
+        - Region
+        - Windows
+Operations:
+  SpaceUse:
+    Occupancy:
+      selector:
+        source_fields:
+          - Region
+          - Typology
+    Lighting:
+      selector:
+        source_fields:
+          - Region
+          - Typology
+          - Lighting
+    Equipment:
+      selector:
+        source_fields:
+          - Region
+          - Typology
+          - Equipment
+    Thermostat:
+      selector:
+        source_fields:
+          - Region
+          - Thermostat
+    WaterUse:
+      selector:
+        source_fields:
+          - Region
+          - Typology
+
+  HVAC:
+    ConditioningSystems:
+      Heating:
+        selector:
+          source_fields:
+            - Heating
+            - Distribution
+      Cooling:
+        selector:
+          source_fields:
+            - Cooling
+            - Distribution
+    Ventilation:
+      selector:
+        source_fields:
+          - Region
+          - Typology
+          - Ventilation
+  DHW:
+    selector:
+      source_fields:
+        - Region
+        - DHW

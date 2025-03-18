@@ -1,6 +1,7 @@
 """A module for specifying the fields in the GIS data."""
 
-from typing import Generic, TypeVar
+from pathlib import Path
+from typing import Generic, TypeVar, cast
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -84,31 +85,53 @@ class SemanticModelFields(BaseModel):
 
 
 if __name__ == "__main__":
-    typology_coarse_field = CategoricalFieldSpec(
-        Name="Typology_Coarse",
-        Options=["Residential", "Commercial"],
+    import yaml
+
+    from epinterface.sbem.components.composer import (
+        construct_composer_model,
+        construct_graph,
     )
-    typology_fine_field = CategoricalFieldSpec(
-        Name="Typology_Fine",
-        Options=["Single_Family", "Multi_Family", "Retail", "Office", "Supermarket"],
-    )
-    age_bracket_field = CategoricalFieldSpec(
-        Name="Age_Bracket",
-        Options=["pre-1975", "1975-2003", "2003-2025", "post-2025"],
-    )
-    on_campus_field = CategoricalFieldSpec(
-        Name="On_Campus",
-        Options=["on_campus", "off_campus"],
-    )
-    model = SemanticModelFields(
-        Name="Los Angeles Model",
-        Fields=[
-            typology_coarse_field,
-            typology_fine_field,
-            age_bracket_field,
-            on_campus_field,
-        ],
-        Height_col="Height",
+    from epinterface.sbem.components.zones import ZoneComponent
+    from epinterface.sbem.prisma.client import PrismaSettings
+
+    component_map_path = "tests/data/component-map-ma.yml"
+    semantic_fields_path = "tests/data/semantic-fields-ma.yml"
+    db_path = "tests/data/components-ma.db"
+
+    with open(semantic_fields_path) as f:
+        semantic_fields_yaml = yaml.safe_load(f)
+    model = SemanticModelFields.model_validate(semantic_fields_yaml)
+    print(model.make_grid(numerical_discretization=10))
+
+    g = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(
+        g,
+        ZoneComponent,
+        use_children=False,
     )
 
-    print(model.make_grid(numerical_discretization=10))
+    with open(component_map_path) as f:
+        component_map_yaml = yaml.safe_load(f)
+    selector = SelectorModel.model_validate(component_map_yaml)
+
+    # TODO: make sure we are okay with accwssing the same db
+    # across workers executing the same experiment.
+    settings = PrismaSettings.New(
+        database_path=Path(db_path), if_exists="ignore", auto_register=False
+    )
+    db = settings.db
+
+    from tqdm.autonotebook import tqdm
+
+    grid = model.make_grid(numerical_discretization=10).sample(100)
+
+    with db:
+        for _ix, row in tqdm(grid.iterrows(), total=len(grid)):
+            context = row.to_dict()
+            try:
+                component = cast(
+                    ZoneComponent, selector.get_component(context=context, db=db)
+                )
+                print(component.Name)
+            except Exception as e:
+                print(f"\nError: {e}, context: {context}\n")
