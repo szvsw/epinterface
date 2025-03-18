@@ -158,7 +158,7 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
             logger.warning(f"Dropping {old_len - new_len} rows from {sheet}.")
         if new_len == 0:
             msg = f"No data found in {sheet}."
-            raise ValueError(msg)
+            logger.warning(msg)
         component_dfs_dict[sheet] = df
 
     # remove any duplicate instances from materials
