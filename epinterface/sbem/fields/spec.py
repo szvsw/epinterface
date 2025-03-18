@@ -60,6 +60,28 @@ class SemanticModelFields(BaseModel):
             raise ValueError(msg)
         return self
 
+    def make_grid(self, numerical_discretization: int = 10):
+        """Make a grid of the fields."""
+        import numpy as np
+        import pandas as pd
+
+        options = []
+        for field in self.Fields:
+            if isinstance(field, CategoricalFieldSpec):
+                options.append(field.Options)
+            elif isinstance(field, NumericFieldSpec):
+                options.append(
+                    np.linspace(field.Min, field.Max, numerical_discretization)
+                )
+            else:
+                msg = f"Unexpected field type: {type(field)}"
+                raise TypeError(msg)
+
+        grid = pd.MultiIndex.from_product(
+            options, names=[field.Name for field in self.Fields]
+        )
+        return grid.to_frame(index=False)
+
 
 if __name__ == "__main__":
     typology_coarse_field = CategoricalFieldSpec(
@@ -89,6 +111,4 @@ if __name__ == "__main__":
         Height_col="Height",
     )
 
-    import yaml
-
-    print(yaml.safe_dump(model.model_dump()))
+    print(model.make_grid(numerical_discretization=10))
