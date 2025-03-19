@@ -165,7 +165,7 @@ class ZoneOperationsComponent(
             idf (IDF): The updated IDF object.
         """
         thermostat_name = (
-            f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_THERMOSTAT"
+            f"{target_zone_name}_{self.SpaceUse.Thermostat.safe_name}_THERMOSTAT"
         )
         heating_schedule = self.SpaceUse.Thermostat.HeatingSchedule
         cooling_schedule = self.SpaceUse.Thermostat.CoolingSchedule
@@ -246,7 +246,7 @@ class ZoneOperationsComponent(
                     f"No windows found for natural ventilation in zone {target_zone_name}"
                 )
                 return idf
-            vent_wind_stack_name = f"{target_zone_name}_{self.HVAC.safe_name}_{self.DHW.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA"
+            vent_wind_stack_name = f"{target_zone_name}_{self.SpaceUse.Thermostat.safe_name}_{self.HVAC.Ventilation.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA"
             idf, vent_wind_stack_name = self.HVAC.Ventilation.Schedule.add_year_to_idf(
                 idf, name_prefix=vent_wind_stack_name
             )
