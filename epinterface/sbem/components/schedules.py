@@ -103,8 +103,14 @@ class DayComponent(NamedObject, extra="forbid"):
         """Validate the values of the day are consistent with the schedule type limit."""
         # TODO: Implement with a eye for Archetypal
 
-        # check that the values are consistent with the schedule type limit
-
+        lim_low = TypeLimits[self.Type].Lower_Limit_Value
+        lim_high = TypeLimits[self.Type].Upper_Limit_Value
+        if lim_low is not None and any(v < lim_low for v in self.Values):
+            msg = f"Values are less than the lower limit: {lim_low}"
+            raise ValueError(msg)
+        if lim_high is not None and any(v > lim_high for v in self.Values):
+            msg = f"Values are greater than the upper limit: {lim_high}"
+            raise ValueError(msg)
         return self
 
     def add_day_to_idf(self, idf: IDF, name_prefix: str | None) -> tuple[IDF, str]:
