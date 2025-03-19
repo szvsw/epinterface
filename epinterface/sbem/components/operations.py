@@ -253,8 +253,9 @@ class ZoneOperationsComponent(
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
                 Name=vent_wind_stack_name,
                 Zone_or_Space_Name=target_zone_name,
-                Minimum_Indoor_Temperature=self.SpaceUse.Thermostat.HeatingSetpoint,
-                Maximum_Outdoor_Temperature=self.SpaceUse.Thermostat.CoolingSetpoint,
+                # Minimum_Indoor_Temperature=self.SpaceUse.Thermostat.HeatingSetpoint,
+                Minimum_Outdoor_Temperature_Schedule_Name=thermostat.Heating_Setpoint_Schedule_Name,
+                Maximum_Outdoor_Temperature_Schedule_Name=thermostat.Cooling_Setpoint_Schedule_Name,
                 Opening_Area=total_window_area,
                 Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name,
                 Height_Difference=0,
