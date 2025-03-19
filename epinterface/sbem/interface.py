@@ -48,6 +48,7 @@ from epinterface.sbem.prisma.client import (
     ENVELOPE_INCLUDE,
     EQUIPMENT_INCLUDE,
     HVAC_INCLUDE,
+    INFILTRATION_INCLUDE,
     LIGHTING_INCLUDE,
     OCCUPANCY_INCLUDE,
     SPACE_USE_INCLUDE,
@@ -136,7 +137,9 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
         "Ventilation_constructor",
         "Materials",
         "Window_choices",
+        "Infiltration_components",
         "Construction_components",
+        "Construction_assembly",
         "Envelope_assembly",
     ]
     component_dfs_dict = {
@@ -464,8 +467,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
 
         # add envelope assemblies - connect to construction assemblies
-        # TODO: update with changes to excel
-        for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
+        for _, row in component_dfs_dict["Construction_assembly"].iterrows():
             payload: EnvelopeAssemblyCreateInput = {
                 "Name": row["Name"],
                 "GroundIsAdiabatic": False,
@@ -503,30 +505,36 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 envelope_assembly, from_attributes=True
             )
 
-        # add envelope - connect to envelope assemblies, glazing constructions, infiltration
+        # add infiltration
+        for _, row in component_dfs_dict["Infiltration_components"].iterrows():
+            infiltration = tx.infiltration.create(
+                data={
+                    "Name": row["Name"],
+                    "IsOn": True,
+                    "ConstantCoefficient": 0.0,
+                    "TemperatureCoefficient": 0.0,
+                    "WindVelocityCoefficient": 0.0,
+                    "WindVelocitySquaredCoefficient": 0.0,
+                    "AFNAirMassFlowCoefficientCrack": 0.0,
+                    "AirChangesPerHour": row["Infiltration"]
+                    if row["Infiltration_unit"] == "AirChanges/Hour"
+                    else 0,
+                    "FlowPerExteriorSurfaceArea": row["Infiltration"]
+                    if row["Infiltration_unit"] == "Flow/ExteriorArea"
+                    else 0,
+                    "CalculationMethod": row["Infiltration_unit"],
+                },
+                include=INFILTRATION_INCLUDE,
+            )
+            InfiltrationComponent.model_validate(infiltration, from_attributes=True)
+
+        # add envelope
         for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
             envelope = tx.envelope.create(
                 data={
                     "Name": row["Name"],
                     "Assemblies": {"connect": {"Name": row["Name"]}},
-                    "Infiltration": {
-                        "create": {
-                            "Name": row["Name"],
-                            "IsOn": True,
-                            "ConstantCoefficient": 0.0,
-                            "TemperatureCoefficient": 0.0,
-                            "WindVelocityCoefficient": 0.0,
-                            "WindVelocitySquaredCoefficient": 0.0,
-                            "AFNAirMassFlowCoefficientCrack": 0.0,
-                            "AirChangesPerHour": row["Infiltration"]
-                            if row["Infiltration_unit"] == "AirChanges/Hour"
-                            else 0,
-                            "FlowPerExteriorSurfaceArea": row["Infiltration"]
-                            if row["Infiltration_unit"] == "Flow/ExteriorArea"
-                            else 0,
-                            "CalculationMethod": row["Infiltration_unit"],
-                        }
-                    },
+                    "Infiltration": {"connect": {"Name": row["Infiltration"]}},
                     "Window": {"connect": {"Name": row["Windows"]}},
                 },
                 include=ENVELOPE_INCLUDE,
