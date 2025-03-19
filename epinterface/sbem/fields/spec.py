@@ -94,9 +94,9 @@ if __name__ == "__main__":
     from epinterface.sbem.components.zones import ZoneComponent
     from epinterface.sbem.prisma.client import PrismaSettings
 
-    component_map_path = "tests/data/component-map-ma.yml"
-    semantic_fields_path = "tests/data/semantic-fields-ma.yml"
-    db_path = "tests/data/components-ma.db"
+    component_map_path = "tests/data/component-map-ma-simple.yml"
+    semantic_fields_path = "tests/data/semantic-fields-ma-simple.yml"
+    db_path = "tests/data/components-ma-simple.db"
 
     with open(semantic_fields_path) as f:
         semantic_fields_yaml = yaml.safe_load(f)
