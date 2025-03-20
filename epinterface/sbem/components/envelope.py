@@ -192,6 +192,16 @@ class ConstructionLayerComponent(BaseModel, extra="forbid"):
             Visible_Absorptance=self.ConstructionMaterial.VisibleAbsorptance,
         )
 
+    @property
+    def r_value(self):
+        """Return the R-value of the layer in m²K/W."""
+        return self.Thickness / self.ConstructionMaterial.Conductivity
+
+    @property
+    def u_value(self):
+        """Return the U-value of the layer in W/m²K."""
+        return 1 / self.r_value
+
 
 class ConstructionAssemblyComponent(
     NamedObject,
@@ -257,6 +267,16 @@ class ConstructionAssemblyComponent(
         copy.Layers = copy.sorted_layers
         copy.Name = f"{self.Name}_Reversed"
         return copy
+
+    @property
+    def r_value(self):
+        """Return the R-value of the construction in m²K/W."""
+        return sum(layer.r_value for layer in self.sorted_layers)
+
+    @property
+    def u_value(self):
+        """Return the U-value of the construction in W/m²K."""
+        return 1 / self.r_value
 
 
 class EnvelopeAssemblyComponent(
