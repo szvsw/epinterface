@@ -6,7 +6,9 @@ import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 
-from epinterface.constants import assumed_constants
+from epinterface.constants import (
+    assumed_constants,
+)
 from epinterface.geometry import get_zone_floor_area, get_zone_glazed_area
 from epinterface.interface import (
     HVACTemplateThermostat,
@@ -253,9 +255,7 @@ class ZoneOperationsComponent(
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
                 Name=vent_wind_stack_name,
                 Zone_or_Space_Name=target_zone_name,
-                # Minimum_Indoor_Temperature=self.SpaceUse.Thermostat.HeatingSetpoint,
-                Minimum_Outdoor_Temperature_Schedule_Name=thermostat.Heating_Setpoint_Schedule_Name,
-                Maximum_Outdoor_Temperature_Schedule_Name=thermostat.Cooling_Setpoint_Schedule_Name,
+                Minimum_Outdoor_Temperature=assumed_constants.Minimum_Outdoor_Temperature,
                 Opening_Area=total_window_area,
                 Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name,
                 Height_Difference=0,
