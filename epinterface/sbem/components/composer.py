@@ -28,6 +28,8 @@ class ComponentNameConstructor(BaseModel, extra="forbid"):
     """A constructor for the name of a component. based off of a list of source fields."""
 
     source_fields: list[str] = Field(default_factory=list)
+    prefix: str | None = None
+    suffix: str | None = None
 
     def construct_name(self, x: dict[str, Any]) -> str:
         """Construct the name of a component based off of a dictionary of source fields."""
@@ -38,7 +40,12 @@ class ComponentNameConstructor(BaseModel, extra="forbid"):
                 # should we warn? should we raise?
                 msg = f"{field} is not in the source fields."
                 raise ValueError(msg)
-        return "_".join(x[field] for field in self.source_fields)
+        core_name = "_".join(x[field] for field in self.source_fields)
+        if self.prefix is not None:
+            core_name = f"{self.prefix}_{core_name}"
+        if self.suffix is not None:
+            core_name = f"{core_name}_{self.suffix}"
+        return core_name
 
 
 NamedObjectT = TypeVar("NamedObjectT", bound=NamedObject)
