@@ -181,8 +181,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
     component_dfs_dict = excel_parser(path)
     with db.tx(max_wait=timedelta(seconds=10), timeout=timedelta(minutes=5)) as tx:
+        print("-" * 15, "Adding Day schedules", "-" * 15)
         for _, row in component_dfs_dict["Day_schedules"].iterrows():
-            print("Adding day schedule", row["Day_schedule_name"])
+            print("Adding day schedule", row.to_dict())
             tx.day.create(
                 data={
                     "Name": str(row["Day_schedule_name"]),
@@ -214,8 +215,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 },
             )
 
+        print("-" * 15, "Adding Week schedules", "-" * 15)
         for _, row in component_dfs_dict["Week_schedules"].iterrows():
-            print("Adding week schedule", row["Week_schedules"])
+            print("Adding week schedule", row.to_dict())
             tx.week.create(
                 data={
                     "Name": row["Week_schedules"],
@@ -229,9 +231,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 },
             )
 
-        # add year: note that your will need to connnnect to weeks
+        print("-" * 15, "Adding Year schedules", "-" * 15)
         for _, row in component_dfs_dict["Year_schedules"].iterrows():
-            print("Adding year schedule", row["Year_schedules"])
+            print("Adding year schedule", row.to_dict())
             year = tx.year.create(
                 data={
                     "Name": row["Year_schedules"],
@@ -253,8 +255,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
             YearComponent.model_validate(year, from_attributes=True)
 
+        print("-" * 15, "Adding Occupancy", "-" * 15)
         for _, row in component_dfs_dict["Occupancy"].iterrows():
-            print("Adding occupancy", row["Name"])
+            print("Adding occupancy", row.to_dict())
             occupancy = tx.occupancy.create(
                 data={
                     "Name": row["Name"],
@@ -267,8 +270,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
             OccupancyComponent.model_validate(occupancy, from_attributes=True)
 
+        print("-" * 15, "Adding Lighting", "-" * 15)
         for _, row in component_dfs_dict["Lighting"].iterrows():
-            print("Adding lighting", row["Name"])
+            print("Adding lighting", row.to_dict())
             lighting = tx.lighting.create(
                 data={
                     "Name": row["Name"],
@@ -281,8 +285,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
             LightingComponent.model_validate(lighting, from_attributes=True)
 
+        print("-" * 15, "Adding Equipment", "-" * 15)
         for _, row in component_dfs_dict["Power"].iterrows():
-            print("Adding equipment", row["Name"])
+            print("Adding equipment", row.to_dict())
             equipment = tx.equipment.create(
                 data={
                     "Name": row["Name"],
@@ -294,8 +299,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
             EquipmentComponent.model_validate(equipment, from_attributes=True)
 
+        print("-" * 15, "Adding Thermostats", "-" * 15)
         for _, row in component_dfs_dict["Setpoints"].iterrows():
-            print("Adding thermostat", row["Name"])
+            print("Adding thermostat", row.to_dict())
             thermostat = tx.thermostat.create(
                 data={
                     "Name": row["Name"],
@@ -309,8 +315,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
             ThermostatComponent.model_validate(thermostat, from_attributes=True)
 
+        print("-" * 15, "Adding Water Use", "-" * 15)
         for _, row in component_dfs_dict["Water_flow"].iterrows():
-            print("Adding water use", row["Name"])
+            print("Adding water use", row.to_dict())
             water_use = tx.wateruse.create(
                 data={
                     "Name": row["Name"],
@@ -321,9 +328,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
             WaterUseComponent.model_validate(water_use, from_attributes=True)
 
-        # space use
+        print("-" * 15, "Adding Space Use", "-" * 15)
         for _, row in component_dfs_dict["Space_use_assembly"].iterrows():
-            print("Adding space use", row["Name"])
+            print("Adding space use", row.to_dict())
             space_use = tx.spaceuse.create(
                 data={
                     "Name": row["Name"],
@@ -339,8 +346,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
         # # add cooling/heating systems
         # # TODO: think about what happens when a heating and cooling system have the same name
+        print("-" * 15, "Adding Thermal System", "-" * 15)
         for _, row in component_dfs_dict["Conditioning_constructor"].iterrows():
-            print("Adding thermal system", row["Name"])
+            print("Adding thermal system", row.to_dict())
             thermal_system = tx.thermalsystem.create(
                 data={
                     "Name": row["Name"],
@@ -354,8 +362,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             ThermalSystemComponent.model_validate(thermal_system, from_attributes=True)
 
         # add conditioning systems
+        print("-" * 15, "Adding Conditioning Systems", "-" * 15)
         for _, row in component_dfs_dict["Systems_assembly"].iterrows():
-            print("Adding conditioning system", row["Name"])
+            print("Adding conditioning system", row.to_dict())
             conditioning_system = tx.conditioningsystems.create(
                 data={
                     "Name": row["Name"],
@@ -369,8 +378,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
 
         # add ventilation
+        print("-" * 15, "Adding Ventilation", "-" * 15)
         for _, row in component_dfs_dict["Ventilation_constructor"].iterrows():
-            print("Adding ventilation", row["Name"])
+            print("Adding ventilation", row.to_dict())
             ventilation = tx.ventilation.create(
                 data={
                     "Name": row["Name"],
@@ -383,9 +393,11 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 include=VENTILATION_INCLUDE,
             )
             VentilationComponent.model_validate(ventilation, from_attributes=True)
+
         # add hvac
+        print("-" * 15, "Adding HVAC", "-" * 15)
         for _, row in component_dfs_dict["Systems_assembly"].iterrows():
-            print("Adding hvac", row["Name"])
+            print("Adding hvac", row.to_dict())
             hvac = tx.hvac.create(
                 data={
                     "Name": row["Name"],
@@ -397,8 +409,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             ZoneHVACComponent.model_validate(hvac, from_attributes=True)
 
         # add dhw
+        print("-" * 15, "Adding DHW", "-" * 15)
         for _, row in component_dfs_dict["DHW_Constructor"].iterrows():
-            print("Adding dhw", row["Name"])
+            print("Adding dhw", row.to_dict())
             dhw = tx.dhw.create(
                 data={
                     "Name": row["Name"],
@@ -414,8 +427,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             DHWComponent.model_validate(dhw, from_attributes=True)
 
         # add materials
+        print("-" * 15, "Adding Materials", "-" * 15)
         for _, row in component_dfs_dict["Materials"].iterrows():
-            print("Adding material", row["Name"])
+            print("Adding material", row.to_dict())
             mat = tx.constructionmaterial.create(
                 data={
                     "Name": row["Name"],
@@ -434,8 +448,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
             ConstructionMaterialComponent.model_validate(mat, from_attributes=True)
 
+        print("-" * 15, "Adding Glazing Construction Simple", "-" * 15)
         for _, row in component_dfs_dict["Window_choices"].iterrows():
-            print("Adding glazing construction simple", row["Name"])
+            print("Adding glazing construction simple", row.to_dict())
             glazing = tx.glazingconstructionsimple.create(
                 data={
                     "Name": row["Name"],
@@ -449,9 +464,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 glazing, from_attributes=True
             )
 
-        # add construction assemblies - connect to materials
+        print("-" * 15, "Adding Construction Assemblies", "-" * 15)
         for _, row in component_dfs_dict["Construction_components"].iterrows():
-            print("Adding construction component", row["Name"])
+            print("Adding construction assembly component", row.to_dict())
             if "window" in row["Type"].lower():
                 continue
             layers = []
@@ -484,8 +499,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
 
         # add envelope assemblies - connect to construction assemblies
+        print("-" * 15, "Adding Envelope Assemblies", "-" * 15)
         for _, row in component_dfs_dict["Construction_assembly"].iterrows():
-            print("Adding envelope assembly", row["Name"])
+            print("Adding envelope assembly", row.to_dict())
             payload: EnvelopeAssemblyCreateInput = {
                 "Name": row["Name"],
                 "GroundIsAdiabatic": False,
@@ -524,8 +540,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             )
 
         # add infiltration
+        print("-" * 15, "Adding Infiltration", "-" * 15)
         for _, row in component_dfs_dict["Infiltration_components"].iterrows():
-            print("Adding infiltration", row["Name"])
+            print("Adding infiltration", row.to_dict())
             infiltration = tx.infiltration.create(
                 data={
                     "Name": row["Name"],
@@ -548,12 +565,13 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             InfiltrationComponent.model_validate(infiltration, from_attributes=True)
 
         # add envelope
+        print("-" * 15, "Adding envelopes", "-" * 15)
         for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
-            print("Adding envelope", row["Name"])
+            print("Adding envelope", row.to_dict())
             envelope = tx.envelope.create(
                 data={
                     "Name": row["Name"],
-                    "Assemblies": {"connect": {"Name": row["Name"]}},
+                    "Assemblies": {"connect": {"Name": row["Construction"]}},
                     "Infiltration": {"connect": {"Name": row["Infiltration"]}},
                     "Window": {"connect": {"Name": row["Windows"]}},
                 },
