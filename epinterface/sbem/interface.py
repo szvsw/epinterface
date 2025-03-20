@@ -451,7 +451,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
         # add construction assemblies - connect to materials
         for _, row in component_dfs_dict["Construction_components"].iterrows():
-            print("Adding construction component", row["Name"])
+            # print("Adding construction component", row["Name"])
             if "window" in row["Type"].lower():
                 continue
             layers = []
@@ -485,7 +485,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
         # add envelope assemblies - connect to construction assemblies
         for _, row in component_dfs_dict["Construction_assembly"].iterrows():
-            print("Adding envelope assembly", row["Name"])
+            # print("Adding envelope assembly", row["Name"])
             payload: EnvelopeAssemblyCreateInput = {
                 "Name": row["Name"],
                 "GroundIsAdiabatic": False,
@@ -525,7 +525,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
         # add infiltration
         for _, row in component_dfs_dict["Infiltration_components"].iterrows():
-            print("Adding infiltration", row["Name"])
+            # print("Adding infiltration", row["Name"])
             infiltration = tx.infiltration.create(
                 data={
                     "Name": row["Name"],
@@ -550,10 +550,13 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
         # add envelope
         for _, row in component_dfs_dict["Envelope_assembly"].iterrows():
             print("Adding envelope", row["Name"])
+            print("Adding construction assembly", row["Construction"])
+            print("Adding infiltration", row["Infiltration"])
+            print("Adding window", row["Windows"])
             envelope = tx.envelope.create(
                 data={
                     "Name": row["Name"],
-                    "Assemblies": {"connect": {"Name": row["Name"]}},
+                    "Assemblies": {"connect": {"Name": row["Construction"]}},
                     "Infiltration": {"connect": {"Name": row["Infiltration"]}},
                     "Window": {"connect": {"Name": row["Windows"]}},
                 },
