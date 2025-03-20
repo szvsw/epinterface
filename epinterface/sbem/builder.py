@@ -30,6 +30,7 @@ from epinterface.sbem.components.envelope import (
     EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
 )
+from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import (
     NotImplementedParameter,
@@ -746,23 +747,26 @@ class Model(BaseWeather, validate_assignment=True):
         err_text = "\n".join([f.read_text() for f in err_files])
         return err_text
 
-    def standard_results_postprocess(self, sql: Sql, move_energy: bool) -> pd.Series:
+    def standard_results_postprocess(self, sql: Sql) -> pd.Series:
         """Postprocess the sql file to get the standard results.
+
+        This will return a series with two levels:
+        - Aggregation: "Raw", "End Uses", "Utilities"
+        - Meter: ["Electricity", "Cooling", "Heating", "Domestic Hot Water"], ["Electricity", "Propane", ...]
 
         Args:
             sql (Sql): The sql file to postprocess.
-            move_energy (bool): Whether to move the energy to fuels based off of the CoP/Fuel Types.
 
         Returns:
-            pd.DataFrame: The postprocessed results.
+            series (pd.Series): The postprocessed results.
         """
         # TODO: get peaks
-        res_df = sql.tabular_data_by_name(
+        raw_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
         kWh_per_GJ = 277.778
-        res_df = (
-            res_df[
+        raw_df = (
+            raw_df[
                 [
                     "Electricity",
                     "District Cooling",
@@ -771,63 +775,74 @@ class Model(BaseWeather, validate_assignment=True):
             ].droplevel(-1, axis=1)
             * kWh_per_GJ
         ) / self.total_conditioned_area
-        res_series_hot_water = res_df.loc["Water Systems"]
-        res_series = res_df.loc["Total End Uses"] - res_series_hot_water
-        res_series["Domestic Hot Water"] = res_series_hot_water.sum()
+        raw_series_hot_water = raw_df.loc["Water Systems"]
+        raw_series = raw_df.loc["Total End Uses"] - raw_series_hot_water
+        raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
 
-        res_series.name = "kWh/m2"
+        raw_series.name = "kWh/m2"
+        raw_series = raw_series.rename({
+            "District Cooling": "Cooling",
+            "District Heating": "Heating",
+        })
+        ops = self.Zone.Operations
+        cond_sys = ops.HVAC.ConditioningSystems
+        heat_cop = (
+            cond_sys.Heating.effective_system_cop if cond_sys.Heating is not None else 1
+        )
+        cool_cop = (
+            cond_sys.Cooling.effective_system_cop if cond_sys.Cooling is not None else 1
+        )
+        dhw_cop = ops.DHW.effective_system_cop
+        heat_use = raw_series["Heating"] / heat_cop
+        cool_use = raw_series["Cooling"] / cool_cop
+        dhw_use = raw_series["Domestic Hot Water"] / dhw_cop
+        equip_lights_use = raw_series["Electricity"]
+        use_series = pd.Series(
+            {
+                "Heating": heat_use,
+                "Cooling": cool_use,
+                "Domestic Hot Water": dhw_use,
+                "Electricity": equip_lights_use,
+            },
+            name="kWh/m2",
+        )
 
-        if move_energy:
-            if self.Zone.Operations.HVAC.ConditioningSystems.Heating is not None:
-                heat_cop = self.Zone.Operations.HVAC.ConditioningSystems.Heating.effective_system_cop
-                heat_fuel = self.Zone.Operations.HVAC.ConditioningSystems.Heating.Fuel
-                heat_energy = res_series["District Heating"] / heat_cop
-                if heat_fuel not in res_series.index:
-                    res_series[heat_fuel] = 0
-                res_series[heat_fuel] += heat_energy
+        heat_fuel = cond_sys.Heating.Fuel if cond_sys.Heating is not None else None
+        cool_fuel = cond_sys.Cooling.Fuel if cond_sys.Cooling is not None else None
+        dhw_fuel = ops.DHW.FuelType
+        fuel_series = pd.Series(
+            dict.fromkeys([*FuelType.__args__, *DHWFuelType.__args__], 0.0),
+            name="kWh/m2",
+        )
+        if heat_fuel is not None:
+            fuel_series.loc[heat_fuel] += heat_use
+        if cool_fuel is not None:
+            fuel_series.loc[cool_fuel] += cool_use
+        fuel_series.loc[dhw_fuel] += dhw_use
+        fuel_series.loc["Electricity"] += equip_lights_use
+        data = pd.concat(
+            [raw_series, use_series, fuel_series],
+            axis=0,
+            keys=["Raw", "End Uses", "Utilities"],
+            names=["Aggregation", "Meter"],
+        )
 
-            if self.Zone.Operations.HVAC.ConditioningSystems.Cooling is not None:
-                cool_cop = self.Zone.Operations.HVAC.ConditioningSystems.Cooling.effective_system_cop
-                cool_fuel = self.Zone.Operations.HVAC.ConditioningSystems.Cooling.Fuel
-                cool_energy = res_series["District Cooling"] / cool_cop
-                if cool_fuel not in res_series.index:
-                    res_series[cool_fuel] = 0
-                res_series[cool_fuel] += cool_energy
-
-            dhw_cop = self.Zone.Operations.DHW.effective_system_cop
-            dhw_fuel = self.Zone.Operations.DHW.FuelType
-            dhw_energy = res_series["Domestic Hot Water"] / dhw_cop
-            if dhw_fuel not in res_series.index:
-                res_series[dhw_fuel] = 0
-
-            res_series[dhw_fuel] += dhw_energy
-            # TODO: this will cause data loss if coincidentally, one of the fuels has the same name!
-            # to safely do it, first pop out these value from the res_series, and then
-            # go through the comps which will safely add them back in.
-            res_series = res_series.drop([
-                "District Cooling",
-                "District Heating",
-                "Domestic Hot Water",
-            ])
-
-        return cast(pd.Series, res_series)
+        return cast(pd.Series, data)
 
     def run(
         self,
         weather_dir: Path | None = None,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
-        move_energy: bool = False,
     ) -> tuple[IDF, pd.Series, str]:
         """Build and simualte the idf model.
 
         Args:
             weather_dir (Path): The directory to store the weather files.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
-            move_energy (bool): Whether to move the energy to fuels based off of the CoP/Fuel Types.
 
         Returns:
             idf (IDF): The built energy model.
-            results (pd.Series): The postprocessed results.
+            results (dict[str, pd.Series]): The postprocessed results.
             err_text (str): The warning text.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -845,7 +860,7 @@ class Model(BaseWeather, validate_assignment=True):
                 config,
                 post_geometry_callback=post_geometry_callback,
             )
-            results = self.standard_results_postprocess(sql, move_energy=move_energy)
+            results = self.standard_results_postprocess(sql)
             err_text = self.get_warnings(idf)
             return idf, results, err_text
 
@@ -906,6 +921,6 @@ if __name__ == "__main__":
                 ),
             )
 
-            _idf, results, _err_text = model.run(move_energy=False)
+            _idf, results, _err_text = model.run()
             print(_err_text)
             print(results)
