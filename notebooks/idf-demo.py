@@ -63,6 +63,10 @@ class FlatParameters(BaseModel):
     WindowSHGF: float
     WindowTVis: float
 
+    FacadeRValue: float
+    RoofRValue: float
+    SlabRValue: float
+
     WWR: float
     f2f_height: float
     num_stories: int
@@ -679,6 +683,15 @@ class FlatParameters(BaseModel):
             Type="Facade",
             Name="residential_wall",
         )
+        facade_r_value_without_xps = (
+            residential_wall.r_value - residential_wall.sorted_layers[1].r_value
+        )
+        facade_r_value_delta = self.FacadeRValue - facade_r_value_without_xps
+        required_xps_thickness = xps.Conductivity * facade_r_value_delta
+        if required_xps_thickness < 0.003:
+            msg = f"Required XPS thickness is less than 3mm because the desired total facade R-value is {self.FacadeRValue} m²K/W but the concrete and gypsum layers already have a total R-value of {facade_r_value_without_xps} m²K/W."
+            raise ValueError(msg)
+        residential_wall.Layers[1].Thickness = required_xps_thickness
 
         residential_roof = ConstructionAssemblyComponent(
             Layers=[
@@ -701,6 +714,16 @@ class FlatParameters(BaseModel):
             Type="Roof",
             Name="residential_roof",
         )
+
+        roof_r_value_without_last_xps = (
+            residential_roof.r_value - residential_roof.sorted_layers[-1].r_value
+        )
+        roof_r_value_delta = self.RoofRValue - roof_r_value_without_last_xps
+        required_xps_thickness = xps.Conductivity * roof_r_value_delta
+        if required_xps_thickness < 0.003:
+            msg = f"Required XPS thickness is less than 3mm because the desired total roof R-value is {self.RoofRValue} m²K/W but the concrete and XPS layers already have a total R-value of {roof_r_value_without_last_xps} m²K/W."
+            raise ValueError(msg)
+        residential_roof.Layers[-1].Thickness = required_xps_thickness
 
         residential_partition = ConstructionAssemblyComponent(
             Layers=[
@@ -762,6 +785,16 @@ class FlatParameters(BaseModel):
             Type="Slab",
             Name="residential_groundslab",
         )
+        groundslab_r_value_without_xps = (
+            residential_groundslab.r_value
+            - residential_groundslab.sorted_layers[-1].r_value
+        )
+        groundslab_r_value_delta = self.SlabRValue - groundslab_r_value_without_xps
+        required_xps_thickness = xps.Conductivity * groundslab_r_value_delta
+        if required_xps_thickness < 0.003:
+            msg = f"Required XPS thickness is less than 3mm because the desired total slab R-value is {self.SlabRValue} m²K/W but the concrete and XPS layers already have a total R-value of {groundslab_r_value_without_xps} m²K/W."
+            raise ValueError(msg)
+        residential_groundslab.Layers[-1].Thickness = required_xps_thickness
 
         envelope_assemblies = EnvelopeAssemblyComponent(
             Name="envelope_assemblies",
@@ -850,6 +883,9 @@ if __name__ == "__main__":
         WindowUValue=1.493,
         WindowSHGF=0.373,
         WindowTVis=0.769,
+        FacadeRValue=3,
+        RoofRValue=4,
+        SlabRValue=3,
         WWR=0.25,
         f2f_height=3.5,
         num_stories=3,
