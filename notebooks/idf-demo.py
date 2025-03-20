@@ -456,7 +456,7 @@ class FlatParameters(BaseModel):
             Name="heating_system",
             ConditioningType="Heating",
             Fuel="Electricity",
-            SystemCOP=0.9,
+            SystemCOP=3.2,
             DistributionCOP=0.95,
         )
 
@@ -661,8 +661,8 @@ class FlatParameters(BaseModel):
         residential_wall = ConstructionAssemblyComponent(
             Layers=[
                 ConstructionLayerComponent(
-                    ConstructionMaterial=concrete,
-                    Thickness=0.1,
+                    ConstructionMaterial=woodframing,
+                    Thickness=0.02,
                     LayerOrder=0,
                 ),
                 ConstructionLayerComponent(
@@ -672,7 +672,7 @@ class FlatParameters(BaseModel):
                 ),
                 ConstructionLayerComponent(
                     ConstructionMaterial=gypsum,
-                    Thickness=0.01,
+                    Thickness=0.012,
                     LayerOrder=2,
                 ),
             ],
@@ -684,17 +684,17 @@ class FlatParameters(BaseModel):
             Layers=[
                 ConstructionLayerComponent(
                     ConstructionMaterial=xps,
-                    Thickness=0.1,
+                    Thickness=0.019,
                     LayerOrder=0,
                 ),
                 ConstructionLayerComponent(
                     ConstructionMaterial=concrete,
-                    Thickness=0.05,
+                    Thickness=0.1,
                     LayerOrder=1,
                 ),
                 ConstructionLayerComponent(
                     ConstructionMaterial=xps,
-                    Thickness=0.1,
+                    Thickness=0.017,
                     LayerOrder=2,
                 ),
             ],
@@ -706,7 +706,7 @@ class FlatParameters(BaseModel):
             Layers=[
                 ConstructionLayerComponent(
                     ConstructionMaterial=gypsum,
-                    Thickness=0.05,
+                    Thickness=0.012,
                     LayerOrder=0,
                 ),
                 ConstructionLayerComponent(
@@ -716,7 +716,7 @@ class FlatParameters(BaseModel):
                 ),
                 ConstructionLayerComponent(
                     ConstructionMaterial=gypsum,
-                    Thickness=0.05,
+                    Thickness=0.012,
                     LayerOrder=2,
                 ),
             ],
@@ -727,14 +727,19 @@ class FlatParameters(BaseModel):
         residential_floorceiling = ConstructionAssemblyComponent(
             Layers=[
                 ConstructionLayerComponent(
-                    ConstructionMaterial=concrete,
-                    Thickness=0.1,
+                    ConstructionMaterial=xps,
+                    Thickness=0.012,
                     LayerOrder=0,
                 ),
                 ConstructionLayerComponent(
-                    ConstructionMaterial=xps,
-                    Thickness=0.05,
+                    ConstructionMaterial=concrete,
+                    Thickness=0.1,
                     LayerOrder=1,
+                ),
+                ConstructionLayerComponent(
+                    ConstructionMaterial=xps,
+                    Thickness=0.03,
+                    LayerOrder=2,
                 ),
             ],
             Type="Slab",
@@ -752,11 +757,6 @@ class FlatParameters(BaseModel):
                     ConstructionMaterial=xps,
                     Thickness=0.05,
                     LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete,
-                    Thickness=0.1,
-                    LayerOrder=2,
                 ),
             ],
             Type="Slab",
@@ -838,18 +838,18 @@ if __name__ == "__main__":
     params = FlatParameters(
         CoolingSetpoint=24,
         HeatingSetpoint=20,
-        EquipmentPowerDensity=10,
-        LightingPowerDensity=10,
-        PeopleDensity=1,
-        VentFlowRatePerPerson=0.01,
-        VentFlowRatePerArea=0.01,
+        EquipmentPowerDensity=5.7,
+        LightingPowerDensity=2.6,
+        PeopleDensity=0.016,
+        VentFlowRatePerPerson=0.005,
+        VentFlowRatePerArea=0.0006,
         VentTechType="Custom",
         VentType="Mechanical",
-        DHWFlowRatePerPerson=0.01,
-        InfiltrationACH=0.5,
-        WindowUValue=0.5,
-        WindowSHGF=0.5,
-        WindowTVis=0.5,
+        DHWFlowRatePerPerson=0.052,
+        InfiltrationACH=0.2,
+        WindowUValue=1.493,
+        WindowSHGF=0.373,
+        WindowTVis=0.769,
         WWR=0.25,
         f2f_height=3.5,
         num_stories=3,
