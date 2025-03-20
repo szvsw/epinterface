@@ -481,30 +481,30 @@ class FlatParameters(BaseModel):
         vent_schedule_day = DayComponent(
             Name="vent_schedule_day",
             Type="Fraction",
-            Hour_00=1,
-            Hour_01=1,
-            Hour_02=1,
-            Hour_03=1,
-            Hour_04=1,
-            Hour_05=1,
-            Hour_06=1,
-            Hour_07=1,
-            Hour_08=1,
-            Hour_09=1,
-            Hour_10=1,
-            Hour_11=1,
-            Hour_12=1,
-            Hour_13=1,
-            Hour_14=1,
-            Hour_15=1,
-            Hour_16=1,
-            Hour_17=1,
-            Hour_18=1,
-            Hour_19=1,
-            Hour_20=1,
-            Hour_21=1,
-            Hour_22=1,
-            Hour_23=1,
+            Hour_00=0.5,
+            Hour_01=0.5,
+            Hour_02=0.5,
+            Hour_03=0.5,
+            Hour_04=0.5,
+            Hour_05=0.5,
+            Hour_06=0.5,
+            Hour_07=0.5,
+            Hour_08=0.5,
+            Hour_09=0.5,
+            Hour_10=0.5,
+            Hour_11=0.5,
+            Hour_12=0.5,
+            Hour_13=0.5,
+            Hour_14=0.5,
+            Hour_15=0.5,
+            Hour_16=0.5,
+            Hour_17=0.5,
+            Hour_18=0.5,
+            Hour_19=0.5,
+            Hour_20=0.5,
+            Hour_21=0.5,
+            Hour_22=0.5,
+            Hour_23=0.5,
         )
 
         vent_schedule_week = WeekComponent(
@@ -866,25 +866,26 @@ class FlatParameters(BaseModel):
         )
 
 
+# TODO:Material defintions
 if __name__ == "__main__":
     weather_url = "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
     params = FlatParameters(
         CoolingSetpoint=24,
         HeatingSetpoint=20,
-        EquipmentPowerDensity=5.7,
+        EquipmentPowerDensity=10.7,
         LightingPowerDensity=2.6,
         PeopleDensity=0.016,
-        VentFlowRatePerPerson=0.005,
-        VentFlowRatePerArea=0.0006,
+        VentFlowRatePerPerson=0.006,
+        VentFlowRatePerArea=0.0005,
         VentTechType="Custom",
         VentType="Mechanical",
         DHWFlowRatePerPerson=0.052,
-        InfiltrationACH=0.2,
+        InfiltrationACH=0.3,
         WindowUValue=1.493,
         WindowSHGF=0.373,
         WindowTVis=0.769,
         FacadeRValue=3,
-        RoofRValue=4,
+        RoofRValue=3,
         SlabRValue=3,
         WWR=0.25,
         f2f_height=3.5,
@@ -893,6 +894,9 @@ if __name__ == "__main__":
         depth=10,
         weather_url=weather_url,
     )
+    # Test types:
+    # 1. Mechanical but no ventilation flow rates but change the envelope
+    # 2. Mechanical with ventilation flow rates
 
     model = params.to_model()
 
@@ -900,7 +904,7 @@ if __name__ == "__main__":
         output_dir = Path(temp_dir)
         config = SimulationPathConfig(output_dir=output_dir)
         idf = model.build(config)
-        idf.view_model()
+        # idf.view_model()
 
     idf, results, err_text = model.run()
 
