@@ -12,5 +12,6 @@
         "notebook.source.fixAll": "explicit",
         "notebook.source.organizeImports": "explicit"
     },
-    "ruff.lineLength": 88
+    "ruff.lineLength": 88,
+    "python.analysis.autoImportCompletions": true
 }
