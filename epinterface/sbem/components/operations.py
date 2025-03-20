@@ -256,6 +256,7 @@ class ZoneOperationsComponent(
                 Name=vent_wind_stack_name,
                 Zone_or_Space_Name=target_zone_name,
                 Minimum_Outdoor_Temperature=assumed_constants.Minimum_Outdoor_Temperature,
+                Maximum_Outdoor_Temperature=assumed_constants.Maximum_Outdoor_Temperature,
                 Opening_Area=total_window_area,
                 Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name,
                 Height_Difference=0,
