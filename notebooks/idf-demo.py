@@ -802,6 +802,6 @@ with tempfile.TemporaryDirectory() as temp_dir:
     idf = model.build(config)
     idf.view_model()
 
-idf, results, err_text = model.run(move_energy=False)
+idf, results, err_text = model.run()
 
 print(results)
