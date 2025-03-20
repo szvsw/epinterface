@@ -57,6 +57,9 @@ class AssumedConstants(BaseModel, frozen=True):
     Latent_Heat_Recovery_Effectiveness: float = Field(
         default=0.65, ge=0, le=1, frozen=True
     )
+    Minimum_Outdoor_Temperature: float = Field(default=18, ge=0, frozen=True)
+
+    Maximum_Outdoor_Temperature: float = Field(default=25, ge=0, frozen=True)
 
 
 assumed_constants = AssumedConstants()
