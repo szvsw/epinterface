@@ -38,6 +38,14 @@ from epinterface.sbem.exceptions import (
 )
 from epinterface.weather import BaseWeather
 
+DESIRED_METERS = (
+    "InteriorEquipment:Electricity",
+    "InteriorLights:Electricity",
+    "Heating:DistrictHeating",
+    "Cooling:DistrictCooling",
+    "WaterSystems:DistrictHeating",
+)
+
 
 class SimulationPathConfig(BaseModel):
     """The configuration for the simulation's pathing."""
@@ -633,10 +641,14 @@ class Model(BaseWeather, validate_assignment=True):
         target_base_filepath = config.output_dir / "Minimal.idf"
         shutil.copy(base_filepath, target_base_filepath)
         epw_path, ddy_path = asyncio.run(self.fetch_weather(config.weather_dir))
+        output_meters = [
+            {"key": "OUTPUT:METER", "Key_Name": meter, "Reporting_Frequency": "Monthly"}
+            for meter in DESIRED_METERS
+        ]
         idf = IDF(
             target_base_filepath.as_posix(),
             as_version=None,  # pyright: ignore [reportArgumentType]
-            prep_outputs=True,
+            prep_outputs=output_meters,  # pyright: ignore [reportArgumentType]
             epw=epw_path.as_posix(),
             output_directory=config.output_dir.as_posix(),
         )
@@ -760,11 +772,15 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             series (pd.Series): The postprocessed results.
         """
+        raw_monthly = sql.timeseries_by_name(DESIRED_METERS, "Monthly")
         # TODO: get peaks
         raw_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
         kWh_per_GJ = 277.778
+        GJ_per_J = 1e-9
+        normalizing_floor_area = self.total_conditioned_area
+
         raw_df = (
             raw_df[
                 [
@@ -774,16 +790,37 @@ class Model(BaseWeather, validate_assignment=True):
                 ]
             ].droplevel(-1, axis=1)
             * kWh_per_GJ
-        ) / self.total_conditioned_area
-        raw_series_hot_water = raw_df.loc["Water Systems"]
-        raw_series = raw_df.loc["Total End Uses"] - raw_series_hot_water
-        raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
+        ) / normalizing_floor_area
 
-        raw_series.name = "kWh/m2"
-        raw_series = raw_series.rename({
-            "District Cooling": "Cooling",
-            "District Heating": "Heating",
-        })
+        raw_monthly = (
+            (
+                raw_monthly.droplevel(["IndexGroup", "KeyValue"], axis=1)
+                * GJ_per_J
+                * kWh_per_GJ
+                / normalizing_floor_area
+            )
+            .rename(
+                columns={
+                    "InteriorLights:Electricity": "Lighting",
+                    "InteriorEquipment:Electricity": "Equipment",
+                    "Heating:DistrictHeating": "Heating",
+                    "Cooling:DistrictCooling": "Cooling",
+                    "WaterSystems:DistrictHeating": "Domestic Hot Water",
+                }
+            )
+            .set_index(pd.RangeIndex(1, 13, 1, name="Month"))
+        )
+        raw_monthly.columns.name = "Meter"
+
+        # raw_series_hot_water = raw_df.loc["Water Systems"]
+        # raw_series = raw_df.loc["Total End Uses"] - raw_series_hot_water
+        # raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
+
+        # raw_series.name = "kWh/m2"
+        # raw_series = raw_series.rename({
+        # "District Cooling": "Cooling",
+        # "District Heating": "Heating",
+        # })
         ops = self.Zone.Operations
         cond_sys = ops.HVAC.ConditioningSystems
         heat_cop = (
@@ -793,41 +830,51 @@ class Model(BaseWeather, validate_assignment=True):
             cond_sys.Cooling.effective_system_cop if cond_sys.Cooling is not None else 1
         )
         dhw_cop = ops.DHW.effective_system_cop
-        heat_use = raw_series["Heating"] / heat_cop
-        cool_use = raw_series["Cooling"] / cool_cop
-        dhw_use = raw_series["Domestic Hot Water"] / dhw_cop
-        equip_lights_use = raw_series["Electricity"]
-        use_series = pd.Series(
-            {
-                "Heating": heat_use,
-                "Cooling": cool_use,
-                "Domestic Hot Water": dhw_use,
-                "Electricity": equip_lights_use,
-            },
-            name="kWh/m2",
+        heat_use = (
+            raw_monthly["Heating"] / heat_cop
+            if "Heating" in raw_monthly
+            else (raw_monthly["Lighting"] * 0).rename("Heating")
+        )
+        cool_use = (
+            raw_monthly["Cooling"] / cool_cop
+            if "Cooling" in raw_monthly
+            else (raw_monthly["Lighting"] * 0).rename("Cooling")
+        )
+        dhw_use = (
+            raw_monthly["Domestic Hot Water"] / dhw_cop
+            if "Domestic Hot Water" in raw_monthly
+            else (raw_monthly["Lighting"] * 0).rename("Domestic Hot Water")
+        )
+        lighting_use = raw_monthly["Lighting"]
+        equipment_use = raw_monthly["Equipment"]
+        end_use_df = pd.concat(
+            [lighting_use, equipment_use, heat_use, cool_use, dhw_use], axis=1
         )
 
         heat_fuel = cond_sys.Heating.Fuel if cond_sys.Heating is not None else None
         cool_fuel = cond_sys.Cooling.Fuel if cond_sys.Cooling is not None else None
         dhw_fuel = ops.DHW.FuelType
-        fuel_series = pd.Series(
-            dict.fromkeys([*FuelType.__args__, *DHWFuelType.__args__], 0.0),
-            name="kWh/m2",
+        all_fuels = {*FuelType.__args__, *DHWFuelType.__args__}
+        utilities_df = pd.DataFrame(
+            index=pd.RangeIndex(1, 13, 1, name="Month"),
+            columns=sorted(all_fuels),
+            dtype=float,
         )
+        utilities_df["Electricity"] = lighting_use + equipment_use
         if heat_fuel is not None:
-            fuel_series.loc[heat_fuel] += heat_use
+            utilities_df[heat_fuel] += heat_use
         if cool_fuel is not None:
-            fuel_series.loc[cool_fuel] += cool_use
-        fuel_series.loc[dhw_fuel] += dhw_use
-        fuel_series.loc["Electricity"] += equip_lights_use
-        data = pd.concat(
-            [raw_series, use_series, fuel_series],
-            axis=0,
+            utilities_df[cool_fuel] += cool_use
+        utilities_df[dhw_fuel] += dhw_use
+
+        dfs = pd.concat(
+            [raw_monthly, end_use_df, utilities_df],
+            axis=1,
             keys=["Raw", "End Uses", "Utilities"],
             names=["Aggregation", "Meter"],
-        )
+        ).unstack()
 
-        return cast(pd.Series, data)
+        return cast(pd.Series, dfs.fillna(0)).rename("kWh/m2")
 
     def run(
         self,
