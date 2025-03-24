@@ -40,7 +40,7 @@ def check_path_ends_with_zip(url: AnyUrl):
 
 
 WeatherUrl = Annotated[
-    Annotated[AnyUrl, UrlConstraints(allowed_schemes=["s3", "https", "http", "file"])],
+    Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https", "http"])],
     AfterValidator(check_path_ends_with_zip),
 ]
 
@@ -53,13 +53,13 @@ class BaseWeather(BaseModel):
     Also takes care of caching the weather files in a directory.
     """
 
-    Weather: WeatherUrl = Field(
+    Weather: WeatherUrl | Path = Field(
         default=WeatherUrl(  # pyright: ignore [reportCallIssue]
             "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
         )
     )
 
-    async def fetch_weather(self, cache_dir: Path | str):
+    async def fetch_weather(self, cache_dir: Path | str):  # noqa: C901
         """Fetch the weather file from the URL and extract the .epw and .ddy files.
 
         Args:
@@ -72,10 +72,27 @@ class BaseWeather(BaseModel):
         if isinstance(cache_dir, str):
             cache_dir = Path(cache_dir)
 
-        if not self.Weather.path or not self.Weather.path.endswith(".zip"):
+        if isinstance(self.Weather, AnyUrl) and (
+            not self.Weather.path or not self.Weather.path.endswith(".zip")
+        ):
             raise NotAZipError()
+        if isinstance(self.Weather, Path) and not self.Weather.suffix == ".zip":
+            raise NotAZipError()
+        if isinstance(self.Weather, Path) and not self.Weather.anchor:
+            msg = f"Invalid weather path: {self.Weather}"
+            raise ValueError(msg)
+        if isinstance(self.Weather, Path) and not self.Weather.exists():
+            msg = f"File {self.Weather} does not exist."
+            raise FileNotFoundError(msg)
 
-        weather_path = Path(self.Weather.path).relative_to("/")
+        if isinstance(self.Weather, AnyUrl) and self.Weather.path:
+            weather_path = Path(self.Weather.path).relative_to("/")
+        elif isinstance(self.Weather, Path):
+            weather_path = self.Weather.relative_to(self.Weather.anchor)
+        else:
+            msg = f"Invalid weather path: {self.Weather}"
+            raise ValueError(msg)
+
         weather_dir = cache_dir / weather_path.with_suffix("")
         epw_path = weather_dir / weather_path.with_suffix(".epw").name
         ddy_path = weather_dir / weather_path.with_suffix(".ddy").name
@@ -83,16 +100,39 @@ class BaseWeather(BaseModel):
         if not epw_path.exists() or not ddy_path.exists():
             logger.info(f"Fetching weather file from {self.Weather}")
             # fetch the .zip file, unzip it, and extract the .epw and .ddy files
-            client = httpx.AsyncClient()
-            response = await client.get(str(self.Weather))
-            with tempfile.TemporaryFile() as f:
-                f.write(response.content)
-                f.seek(0)
-                with zipfile.ZipFile(f, "r") as z:
-                    # z.extractall(weather_dir)
+            if isinstance(self.Weather, AnyUrl) and self.Weather.scheme in [
+                "https",
+                "http",
+            ]:
+                client = httpx.AsyncClient()
+                response = await client.get(str(self.Weather))
+                with tempfile.TemporaryFile() as f:
+                    f.write(response.content)
+                    f.seek(0)
+                    with zipfile.ZipFile(f, "r") as z:
+                        if epw_path.name not in z.namelist():
+                            msg = f"The .epw file {epw_path.name} was not found in the zip file."
+                            raise FileNotFoundError(msg)
+                        if ddy_path.name not in z.namelist():
+                            msg = f"The .ddy file {ddy_path.name} was not found in the zip file."
+                            raise FileNotFoundError(msg)
+                        z.extract(epw_path.name, weather_dir)
+                        z.extract(ddy_path.name, weather_dir)
+                await client.aclose()
+            elif isinstance(self.Weather, Path):
+                with zipfile.ZipFile(self.Weather, "r") as z:
+                    if epw_path.name not in z.namelist():
+                        msg = f"The .epw file {epw_path.name} was not found in the zip file."
+                        raise FileNotFoundError(msg)
+                    if ddy_path.name not in z.namelist():
+                        msg = f"The .ddy file {ddy_path.name} was not found in the zip file."
+                        raise FileNotFoundError(msg)
                     z.extract(epw_path.name, weather_dir)
                     z.extract(ddy_path.name, weather_dir)
-            await client.aclose()
+            else:
+                msg = f"Unsupported scheme: {self.Weather}"
+                raise ValueError(msg)
+
         else:
             logger.info(f"Using cached weather file from {weather_dir}")
         return epw_path, ddy_path
