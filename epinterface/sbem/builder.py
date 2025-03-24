@@ -882,6 +882,10 @@ class Model(BaseWeather, validate_assignment=True):
             utilities_df[cool_fuel] += cool_use
         utilities_df[dhw_fuel] += dhw_use
 
+        if not np.allclose(utilities_df.sum().sum(), end_use_df.sum().sum()):
+            msg = "Utilities df and end use df do not sum to the same value!"
+            raise ValueError(msg)
+
         dfs = pd.concat(
             [raw_monthly, end_use_df, utilities_df],
             axis=1,
