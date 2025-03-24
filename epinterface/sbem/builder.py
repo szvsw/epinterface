@@ -868,7 +868,6 @@ class Model(BaseWeather, validate_assignment=True):
         if cool_fuel is not None:
             utilities_df[cool_fuel] += cool_use
         utilities_df[dhw_fuel] += dhw_use
-        print(dhw_cop, dhw_fuel)
 
         dfs = pd.concat(
             [raw_monthly, end_use_df, utilities_df],
