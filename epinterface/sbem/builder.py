@@ -793,13 +793,23 @@ class Model(BaseWeather, validate_assignment=True):
             * kWh_per_GJ
         ) / normalizing_floor_area
         raw_df_others = raw_df.drop(
-            columns=["Electricity", "District Cooling", "District Heating"]
+            columns=["Electricity", "District Cooling", "District Heating", "Water"]
         )
+        if not np.allclose(raw_df_others.sum().sum(), 0):
+            cols = raw_df_others.sum(axis=0)
+            cols = cols[cols > 0].index.tolist()
+            rows = raw_df_others.sum(axis=1)
+            rows = rows[rows > 0].index.tolist()
+            msg = (
+                "There are end uses/fuels which are not accounted for in the standard postprocessing: "
+                + ", ".join(rows)
+                + " and "
+                + ", ".join(cols)
+            )
+            raise ValueError(msg)
         raw_series_hot_water = raw_df_relevant.loc["Water Systems"]
         raw_series = raw_df_relevant.loc["Total End Uses"] - raw_series_hot_water
         raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
-        print(raw_df_others.sum())
-        print(raw_df_others)
 
         raw_monthly = (
             (
