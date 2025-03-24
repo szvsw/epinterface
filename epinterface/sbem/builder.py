@@ -792,6 +792,11 @@ class Model(BaseWeather, validate_assignment=True):
             ].droplevel(-1, axis=1)
             * kWh_per_GJ
         ) / normalizing_floor_area
+        raw_df_others = raw_df.drop(
+            columns=["Electricity", "District Cooling", "District Heating"]
+        )
+        print(raw_df_others.sum())
+        print(raw_df_others)
 
         raw_monthly = (
             (
@@ -813,15 +818,13 @@ class Model(BaseWeather, validate_assignment=True):
         )
         raw_monthly.columns.name = "Meter"
 
-        # raw_series_hot_water = raw_df.loc["Water Systems"]
-        # raw_series = raw_df.loc["Total End Uses"] - raw_series_hot_water
-        # raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
+        raw_series_hot_water = raw_df.loc["Water Systems"]
+        raw_series = raw_df.loc["Total End Uses"] - raw_series_hot_water
+        raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
+        if not np.allclose(raw_series.sum(), raw_monthly.sum().sum()):
+            msg = "Raw series and raw monthly do not match"
+            raise ValueError(msg)
 
-        # raw_series.name = "kWh/m2"
-        # raw_series = raw_series.rename({
-        # "District Cooling": "Cooling",
-        # "District Heating": "Heating",
-        # })
         ops = self.Zone.Operations
         cond_sys = ops.HVAC.ConditioningSystems
         heat_cop = (
