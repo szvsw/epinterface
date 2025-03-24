@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, cast
 from uuid import uuid4
 
+import numpy as np
 import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
@@ -859,6 +860,7 @@ class Model(BaseWeather, validate_assignment=True):
             index=pd.RangeIndex(1, 13, 1, name="Month"),
             columns=sorted(all_fuels),
             dtype=float,
+            data=np.zeros((12, len(all_fuels))),
         )
         utilities_df["Electricity"] = lighting_use + equipment_use
         if heat_fuel is not None:
@@ -866,6 +868,7 @@ class Model(BaseWeather, validate_assignment=True):
         if cool_fuel is not None:
             utilities_df[cool_fuel] += cool_use
         utilities_df[dhw_fuel] += dhw_use
+        print(dhw_cop, dhw_fuel)
 
         dfs = pd.concat(
             [raw_monthly, end_use_df, utilities_df],
