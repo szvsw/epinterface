@@ -5,6 +5,7 @@ from typing import Literal, cast
 
 import numpy as np
 from archetypal.idfclass import IDF
+from geomeppy.geom.polygons import Polygon3D
 from geomeppy.geom.vectors import Vector2D
 from pydantic import BaseModel, Field
 from shapely import LineString, Polygon, from_wkt
@@ -493,10 +494,10 @@ def get_zone_floor_area(idf: IDF, zone_name: str) -> float:
     for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
         # TODO: ensure that this still works for basements and attics.
         if srf.Zone_Name == zone_name and srf.Surface_Type.lower() == "floor":
-            poly = Polygon(srf.coords)
+            poly = Polygon3D(srf.coords)
             if poly.area == 0:
                 raise ValueError(f"INVALID_FLOOR:{zone_name}:{srf.Name}")
-            area += poly.area
+            area += float(poly.area)
             area_ct += 1
     if area_ct > 1:
         raise ValueError(f"TOO_MANY_FLOORS:{zone_name}")
@@ -506,7 +507,7 @@ def get_zone_floor_area(idf: IDF, zone_name: str) -> float:
     return area
 
 
-def get_zone_glazed_area(idf: IDF, zone_name: str) -> float:
+def get_zone_glazed_area_alt(idf: IDF, zone_name: str) -> float:
     """Calculate the total area of windows for a specific zone in the IDF model.
 
     Args:
@@ -566,6 +567,45 @@ def get_zone_glazed_area(idf: IDF, zone_name: str) -> float:
             ) ** 0.5
             area = width * height
             total_window_area += area
+            total_windows += 1
+
+    if total_windows not in [0, 1, 4]:
+        msg = f"TOO_MANY_WINDOWS:{zone_name}:{total_windows}"
+        raise ValueError(msg)
+
+    alt_window_area = get_zone_glazed_area_alt(idf, zone_name)
+    if not np.allclose(total_window_area, alt_window_area):
+        msg = f"GLAZED_AREA_MISMATCH:{zone_name}:{total_window_area}:{alt_window_area}"
+        raise ValueError(msg)
+    return total_window_area
+
+
+def get_zone_glazed_area(idf: IDF, zone_name: str) -> float:
+    """Calculate the total area of windows for a specific zone in the IDF model.
+
+    Args:
+        idf (IDF): The IDF model.
+        zone_name (str): The name of the zone to calculate the window area for.
+
+    Returns:
+        float: The total area of windows in the specified zone.
+    """
+    total_window_area = 0.0
+    total_windows = 0
+
+    for window in idf.idfobjects["FENESTRATIONSURFACE:DETAILED"]:
+        parent_srf = idf.getobject(
+            "BUILDINGSURFACE:DETAILED", window.Building_Surface_Name
+        )
+        if parent_srf is None:
+            msg = f"BUILDINGSURFACE:DETAILED:{window.Building_Surface_Name} not found"
+            raise ValueError(msg)
+        if (
+            parent_srf.Zone_Name.lower() == zone_name.lower()
+            and window.Surface_Type.lower() == "window"
+        ):
+            poly = Polygon3D(window.coords)
+            total_window_area += float(poly.area)
             total_windows += 1
 
     if total_windows not in [0, 1, 4]:

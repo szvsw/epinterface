@@ -6,9 +6,7 @@ import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 
-from epinterface.constants import (
-    assumed_constants,
-)
+from epinterface.constants import assumed_constants
 from epinterface.geometry import get_zone_floor_area, get_zone_glazed_area
 from epinterface.interface import (
     HVACTemplateThermostat,
