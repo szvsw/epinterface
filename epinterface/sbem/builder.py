@@ -782,7 +782,7 @@ class Model(BaseWeather, validate_assignment=True):
         GJ_per_J = 1e-9
         normalizing_floor_area = self.total_conditioned_area
 
-        raw_df = (
+        raw_df_relevant = (
             raw_df[
                 [
                     "Electricity",
@@ -795,6 +795,9 @@ class Model(BaseWeather, validate_assignment=True):
         raw_df_others = raw_df.drop(
             columns=["Electricity", "District Cooling", "District Heating"]
         )
+        raw_series_hot_water = raw_df_relevant.loc["Water Systems"]
+        raw_series = raw_df_relevant.loc["Total End Uses"] - raw_series_hot_water
+        raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
         print(raw_df_others.sum())
         print(raw_df_others)
 
@@ -818,9 +821,6 @@ class Model(BaseWeather, validate_assignment=True):
         )
         raw_monthly.columns.name = "Meter"
 
-        raw_series_hot_water = raw_df.loc["Water Systems"]
-        raw_series = raw_df.loc["Total End Uses"] - raw_series_hot_water
-        raw_series["Domestic Hot Water"] = raw_series_hot_water.sum()
         if not np.allclose(raw_series.sum(), raw_monthly.sum().sum()):
             msg = "Raw series and raw monthly do not match"
             raise ValueError(msg)
