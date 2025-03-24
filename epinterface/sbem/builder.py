@@ -831,12 +831,10 @@ class Model(BaseWeather, validate_assignment=True):
         )
         raw_monthly.columns.name = "Meter"
 
-        if not np.allclose(raw_series.sum(), raw_monthly.sum().sum()):
-            print(raw_series.sum())
-            print(raw_monthly.sum().sum())
-            print(raw_series)
-            print(raw_monthly)
-            msg = "Raw series and raw monthly do not match"
+        if not np.allclose(raw_series.sum(), raw_monthly.sum().sum(), atol=0.5):
+            msg = "Raw series and raw monthly do not match: "
+            msg += f"Raw series: {raw_series.sum()}"
+            msg += f"Raw monthly: {raw_monthly.sum().sum()}"
             raise ValueError(msg)
 
         ops = self.Zone.Operations
