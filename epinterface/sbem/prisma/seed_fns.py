@@ -251,6 +251,9 @@ def create_hvac_systems(db: Prisma):
                     "FreshAirPerFloorArea": 0.0004 if typology == "office" else 0.0002,
                     "Type": "Natural",
                     "TechType": "HRV",
+                    "HRVType": "Sensible",
+                    "EconomizerType": "NoEconomizer",
+                    "DCVType": "NoDCV",
                 }
             )
             db.hvac.create(
