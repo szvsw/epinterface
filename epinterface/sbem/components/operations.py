@@ -219,15 +219,13 @@ class ZoneOperationsComponent(
             Outdoor_Air_Flow_Rate_per_Person=self.HVAC.Ventilation.FreshAirPerPerson,
             Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.HVAC.Ventilation.FreshAirPerFloorArea,
             Outdoor_Air_Flow_Rate_per_Zone=0,
-            Demand_Controlled_Ventilation_Type="OccupancySchedule"
-            if self.HVAC.Ventilation.TechType == "DCV"
-            else "None",
-            Outdoor_Air_Economizer_Type="DifferentialDryBulb"
-            if self.HVAC.Ventilation.TechType == "Economizer"
-            else "NoEconomizer",
-            Heat_Recovery_Type="Sensible"
-            if self.HVAC.Ventilation.TechType == "HRV"
-            else "None",
+            Demand_Controlled_Ventilation_Type="None"
+            if self.HVAC.Ventilation.DCVType == "NoDCV"
+            else self.HVAC.Ventilation.DCVType,
+            Outdoor_Air_Economizer_Type=self.HVAC.Ventilation.EconomizerType,
+            Heat_Recovery_Type="None"
+            if self.HVAC.Ventilation.HRVType == "NoHRV"
+            else self.HVAC.Ventilation.HRVType,
             Sensible_Heat_Recovery_Effectiveness=assumed_constants.Sensible_Heat_Recovery_Effectiveness,
             Latent_Heat_Recovery_Effectiveness=assumed_constants.Latent_Heat_Recovery_Effectiveness,
             Outdoor_Air_Method="Sum"

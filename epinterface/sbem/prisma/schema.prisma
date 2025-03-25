@@ -204,6 +204,9 @@ model Ventilation {
   FreshAirPerPerson    Float
   Type                 String // "Natural", "Mechanical", "Hybrid"
   TechType             String // "ERV", "HRV", "DCV", "None", "Custom"
+  HRVType              String // "NoHRV", "Sensible", "Enthalpy"
+  EconomizerType       String // "NoEconomizer", "DifferentialDryBulb", "DifferentialEnthalpy"
+  DCVType              String // "NoDCV", "OccupancySchedule", "CO2Setpoint"
 
   // Relations
   MetadataId String?

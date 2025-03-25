@@ -122,6 +122,13 @@ VentilationType = Literal["Natural", "Mechanical", "Hybrid"]
 VentilationTechType = Literal[
     "ERV", "HRV", "DCV", "Economizer", "NoMechanicalVentilation", "Custom"
 ]
+VentilationEconomizerType = Literal[
+    "NoEconomizer", "DifferentialDryBulb", "DifferentialEnthalpy"
+]
+
+VentilationHRVType = Literal["NoHRV", "Sensible", "Enthalpy"]
+
+VentilationDCVType = Literal["NoDCV", "OccupancySchedule", "CO2Setpoint"]
 
 
 class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
@@ -143,6 +150,11 @@ class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
     Schedule: YearComponent = Field(..., title="Ventilation schedule of the object")
     Type: VentilationType = Field(..., title="Type of the object")
     TechType: VentilationTechType = Field(..., title="Technology type of the object")
+    HRVType: VentilationHRVType = Field(..., title="HRV type of the object")
+    EconomizerType: VentilationEconomizerType = Field(
+        ..., title="Economizer type of the object"
+    )
+    DCVType: VentilationDCVType = Field(..., title="DCV type of the object")
 
 
 class ZoneHVACComponent(

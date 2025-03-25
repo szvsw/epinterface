@@ -35,6 +35,9 @@ from epinterface.sbem.components.systems import (
     DHWComponent,
     ThermalSystemComponent,
     VentilationComponent,
+    VentilationDCVType,
+    VentilationEconomizerType,
+    VentilationHRVType,
     VentilationTechType,
     VentilationType,
     ZoneHVACComponent,
@@ -55,6 +58,9 @@ class FlatParameters(BaseModel):
     VentFlowRatePerArea: float
     VentTechType: VentilationTechType
     VentType: VentilationType
+    VentHRVType: VentilationHRVType
+    VentEconomizerType: VentilationEconomizerType
+    VentDCVType: VentilationDCVType
 
     DHWFlowRatePerPerson: float
 
@@ -459,8 +465,8 @@ class FlatParameters(BaseModel):
         heating_system = ThermalSystemComponent(
             Name="heating_system",
             ConditioningType="Heating",
-            Fuel="Electricity",
-            SystemCOP=3.2,
+            Fuel="NaturalGas",
+            SystemCOP=0.81,
             DistributionCOP=0.95,
         )
 
@@ -542,6 +548,9 @@ class FlatParameters(BaseModel):
             FreshAirPerPerson=self.VentFlowRatePerPerson,
             Type=self.VentType,
             TechType=self.VentTechType,
+            HRVType=self.VentHRVType,
+            EconomizerType=self.VentEconomizerType,
+            DCVType=self.VentDCVType,
         )
 
         dhw = DHWComponent(
@@ -867,20 +876,25 @@ class FlatParameters(BaseModel):
 
 
 # TODO:Material defintions
+
+# TODO: check the weather file - can we use the ground temperature to adjust to the water inlet?
 if __name__ == "__main__":
     weather_url = "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
     params = FlatParameters(
         CoolingSetpoint=24,
         HeatingSetpoint=20,
-        EquipmentPowerDensity=10.7,
+        EquipmentPowerDensity=4.7,
         LightingPowerDensity=2.6,
         PeopleDensity=0.016,
-        VentFlowRatePerPerson=0.006,
-        VentFlowRatePerArea=0.0005,
+        VentFlowRatePerPerson=0,
+        VentFlowRatePerArea=0,
         VentTechType="Custom",
         VentType="Mechanical",
+        VentHRVType="Sensible",
+        VentDCVType="NoDCV",
+        VentEconomizerType="NoEconomizer",
         DHWFlowRatePerPerson=0.052,
-        InfiltrationACH=0.3,
+        InfiltrationACH=0.2,
         WindowUValue=1.493,
         WindowSHGF=0.373,
         WindowTVis=0.769,
@@ -889,9 +903,9 @@ if __name__ == "__main__":
         SlabRValue=3,
         WWR=0.25,
         f2f_height=3.5,
-        num_stories=3,
-        width=20,
-        depth=10,
+        num_stories=2,
+        width=10,
+        depth=15,
         weather_url=weather_url,
     )
     # Test types:
@@ -904,8 +918,14 @@ if __name__ == "__main__":
         output_dir = Path(temp_dir)
         config = SimulationPathConfig(output_dir=output_dir)
         idf = model.build(config)
+        # save idf to file
         # idf.view_model()
 
     idf, results, err_text = model.run()
-
-    print(results)
+    idf.saveas("model.idf")
+    # save results
+    results.to_csv("results.csv")
+    agg_results = results.groupby(["Meter", "Aggregation"]).sum()
+    # summarize the results by meter column across all timesteps
+    print(results.groupby(["Meter", "Aggregation"]).sum())
+    print("Total EUI:", results.groupby(["Aggregation"]).sum())

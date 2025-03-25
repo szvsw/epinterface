@@ -151,7 +151,7 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
     # Drop rows with NaNs because we want to be able to have
     # template rows in the sheet.
     for sheet, df in component_dfs_dict.items():
-        if sheet in ["Materials", "Construction_components"]:
+        if sheet in ["Materials", "Construction_components", "Construction_assembly"]:
             mask = df["Name"].isna()
         else:
             mask = df.isna().any(axis=1)
@@ -388,6 +388,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "FreshAirPerFloorArea": row["Fresh_air_per_m2"],
                     "Type": row["Ventilation_type"],
                     "TechType": row["Tech_type"],
+                    "HRVType": row["HRV"],
+                    "EconomizerType": row["Economizer"],
+                    "DCVType": row["DCV"],
                     "Schedule": {"connect": {"Name": row["Window_schedule"]}},
                 },
                 include=VENTILATION_INCLUDE,
