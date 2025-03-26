@@ -42,6 +42,5 @@ runs:
       shell: bash
 
     - name: Install Prisma
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: make prisma-generate
       shell: bash
