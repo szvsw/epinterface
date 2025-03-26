@@ -249,8 +249,10 @@ def create_hvac_systems(db: Prisma):
                     "Schedule": {"connect": {"Name": "Ventilation_Year"}},
                     "FreshAirPerPerson": 0.008 if location == "cold" else 0.006,
                     "FreshAirPerFloorArea": 0.0004 if typology == "office" else 0.0002,
-                    "Type": "Natural",
-                    "TechType": "HRV",
+                    "Provider": "Mechanical",
+                    "HRV": "Sensible",
+                    "Economizer": "NoEconomizer",
+                    "DCV": "NoDCV",
                 }
             )
             db.hvac.create(
