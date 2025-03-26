@@ -118,7 +118,7 @@ class ConditioningSystemsComponent(NamedObject, MetadataMixin, extra="forbid"):
         return self
 
 
-VentilationProvider = Literal["Natural", "Mechanical", "Both"]
+VentilationProvider = Literal["None", "Natural", "Mechanical", "Both"]
 
 EconomizerMethod = Literal[
     "NoEconomizer", "DifferentialDryBulb", "DifferentialEnthalpy"
@@ -166,6 +166,16 @@ class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
                 raise ValueError(msg)
             if self.Economizer != "NoEconomizer":
                 msg = "Natural ventilation systems can't have an Economizer."
+                raise ValueError(msg)
+        if self.Provider == "None":
+            if self.HRV != "NoHRV":
+                msg = "None ventilation systems can't have HRV."
+                raise ValueError(msg)
+            if self.DCV != "NoDCV":
+                msg = "None ventilation systems can't have DCV."
+                raise ValueError(msg)
+            if self.Economizer != "NoEconomizer":
+                msg = "None ventilation systems can't have an Economizer."
                 raise ValueError(msg)
         return self
 
