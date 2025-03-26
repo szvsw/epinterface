@@ -34,9 +34,14 @@ runs:
       uses: actions/cache@v4
       with:
         path: .venv
-        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('poetry.lock') }}
+        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('poetry.lock') }}-${{ hashFiles('epinterface/sbem/prisma/schema.prisma') }}
 
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: poetry install --no-interaction
+      shell: bash
+
+    - name: Install Prisma
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: make prisma-generate
       shell: bash
