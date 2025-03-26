@@ -199,10 +199,10 @@ class ZoneOperationsComponent(
     def add_conditioning_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
         """Add conditioning to an IDF zone."""
         thermostat = self.add_thermostat_to_idf_zone(idf, target_zone_name)
-        if self.HVAC.Ventilation.TechType == "DCV":
+        if self.HVAC.Ventilation.DCV != "NoDCV":
             # check the design spec outdoor air for the DCV
             raise NotImplementedError("DCV not implemented.")
-        if self.HVAC.Ventilation.TechType == "Economizer":
+        if self.HVAC.Ventilation.Economizer != "NoEconomizer":
             # check the differential dry bulb vs. differential enthalpy for the economizer
             raise NotImplementedError("Economizer not implemented")
         hvac_template = HVACTemplateZoneIdealLoadsAirSystem(
@@ -220,22 +220,22 @@ class ZoneOperationsComponent(
             Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.HVAC.Ventilation.FreshAirPerFloorArea,
             Outdoor_Air_Flow_Rate_per_Zone=0,
             Demand_Controlled_Ventilation_Type="None"
-            if self.HVAC.Ventilation.DCVType == "NoDCV"
-            else self.HVAC.Ventilation.DCVType,
-            Outdoor_Air_Economizer_Type=self.HVAC.Ventilation.EconomizerType,
+            if self.HVAC.Ventilation.DCV == "NoDCV"
+            else self.HVAC.Ventilation.DCV,
+            Outdoor_Air_Economizer_Type=self.HVAC.Ventilation.Economizer,
             Heat_Recovery_Type="None"
-            if self.HVAC.Ventilation.HRVType == "NoHRV"
-            else self.HVAC.Ventilation.HRVType,
+            if self.HVAC.Ventilation.HRV == "NoHRV"
+            else self.HVAC.Ventilation.HRV,
             Sensible_Heat_Recovery_Effectiveness=assumed_constants.Sensible_Heat_Recovery_Effectiveness,
             Latent_Heat_Recovery_Effectiveness=assumed_constants.Latent_Heat_Recovery_Effectiveness,
             Outdoor_Air_Method="Sum"
-            if self.HVAC.Ventilation.Type == "Mechanical"
-            or self.HVAC.Ventilation.Type == "Hybrid"
+            if self.HVAC.Ventilation.Provider == "Mechanical"
+            or self.HVAC.Ventilation.Provider == "Hybrid"
             else "None",
         )
         idf = hvac_template.add(idf)
 
-        if self.HVAC.Ventilation.Type == "Natural":
+        if self.HVAC.Ventilation.Provider == "Natural":
             # total_window_area = calculate_window_area_for_zone(idf, target_zone_name)
             total_window_area = get_zone_glazed_area(idf, target_zone_name)
 

@@ -32,14 +32,13 @@ from epinterface.sbem.components.space_use import (
 )
 from epinterface.sbem.components.systems import (
     ConditioningSystemsComponent,
+    DCVMethod,
     DHWComponent,
+    EconomizerMethod,
+    HRVMethod,
     ThermalSystemComponent,
     VentilationComponent,
-    VentilationDCVType,
-    VentilationEconomizerType,
-    VentilationHRVType,
-    VentilationTechType,
-    VentilationType,
+    VentilationProvider,
     ZoneHVACComponent,
 )
 from epinterface.sbem.components.zones import ZoneComponent
@@ -56,11 +55,10 @@ class FlatParameters(BaseModel):
 
     VentFlowRatePerPerson: float
     VentFlowRatePerArea: float
-    VentTechType: VentilationTechType
-    VentType: VentilationType
-    VentHRVType: VentilationHRVType
-    VentEconomizerType: VentilationEconomizerType
-    VentDCVType: VentilationDCVType
+    VentProvider: VentilationProvider
+    VentHRV: HRVMethod
+    VentEconomizer: EconomizerMethod
+    VentDCV: DCVMethod
 
     DHWFlowRatePerPerson: float
 
@@ -546,11 +544,10 @@ class FlatParameters(BaseModel):
             Schedule=vent_schedule_year,
             FreshAirPerFloorArea=self.VentFlowRatePerArea,
             FreshAirPerPerson=self.VentFlowRatePerPerson,
-            Type=self.VentType,
-            TechType=self.VentTechType,
-            HRVType=self.VentHRVType,
-            EconomizerType=self.VentEconomizerType,
-            DCVType=self.VentDCVType,
+            Provider=self.VentProvider,
+            HRV=self.VentHRV,
+            Economizer=self.VentEconomizer,
+            DCV=self.VentDCV,
         )
 
         dhw = DHWComponent(
@@ -888,11 +885,10 @@ if __name__ == "__main__":
         PeopleDensity=0.016,
         VentFlowRatePerPerson=0,
         VentFlowRatePerArea=0,
-        VentTechType="Custom",
-        VentType="Mechanical",
-        VentHRVType="Sensible",
-        VentDCVType="NoDCV",
-        VentEconomizerType="NoEconomizer",
+        VentProvider="Mechanical",
+        VentHRV="Sensible",
+        VentDCV="NoDCV",
+        VentEconomizer="NoEconomizer",
         DHWFlowRatePerPerson=0.052,
         InfiltrationACH=0.2,
         WindowUValue=1.493,

@@ -118,17 +118,15 @@ class ConditioningSystemsComponent(NamedObject, MetadataMixin, extra="forbid"):
         return self
 
 
-VentilationType = Literal["Natural", "Mechanical", "Hybrid"]
-VentilationTechType = Literal[
-    "ERV", "HRV", "DCV", "Economizer", "NoMechanicalVentilation", "Custom"
-]
-VentilationEconomizerType = Literal[
+VentilationProvider = Literal["Natural", "Mechanical", "Both"]
+
+EconomizerMethod = Literal[
     "NoEconomizer", "DifferentialDryBulb", "DifferentialEnthalpy"
 ]
 
-VentilationHRVType = Literal["NoHRV", "Sensible", "Enthalpy"]
+HRVMethod = Literal["NoHRV", "Sensible", "Enthalpy"]
 
-VentilationDCVType = Literal["NoDCV", "OccupancySchedule", "CO2Setpoint"]
+DCVMethod = Literal["NoDCV", "OccupancySchedule", "CO2Setpoint"]
 
 
 class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
@@ -148,13 +146,28 @@ class VentilationComponent(NamedObject, MetadataMixin, extra="forbid"):
         le=0.05,
     )
     Schedule: YearComponent = Field(..., title="Ventilation schedule of the object")
-    Type: VentilationType = Field(..., title="Type of the object")
-    TechType: VentilationTechType = Field(..., title="Technology type of the object")
-    HRVType: VentilationHRVType = Field(..., title="HRV type of the object")
-    EconomizerType: VentilationEconomizerType = Field(
-        ..., title="Economizer type of the object"
-    )
-    DCVType: VentilationDCVType = Field(..., title="DCV type of the object")
+    Provider: VentilationProvider = Field(..., title="Type of the object")
+    HRV: HRVMethod = Field(..., title="HRV type of the object")
+    Economizer: EconomizerMethod = Field(..., title="Economizer type of the object")
+    DCV: DCVMethod = Field(..., title="DCV type of the object")
+
+    @model_validator(mode="after")
+    def validate_ventilation_systems(self):
+        """Validate that the ventilation systems are correct.
+
+        If the ventilation type is natural, then the zone cannot have variants of mechanical ventilation systems (e.g, HRV, DCV, Economizer).
+        """
+        if self.Provider == "Natural":
+            if self.HRV != "NoHRV":
+                msg = "Natural ventilation systems can't have HRV."
+                raise ValueError(msg)
+            if self.DCV != "NoDCV":
+                msg = "Natural ventilation systems can't have DCV."
+                raise ValueError(msg)
+            if self.Economizer != "NoEconomizer":
+                msg = "Natural ventilation systems can't have an Economizer."
+                raise ValueError(msg)
+        return self
 
 
 class ZoneHVACComponent(
