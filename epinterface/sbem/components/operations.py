@@ -230,7 +230,7 @@ class ZoneOperationsComponent(
             Latent_Heat_Recovery_Effectiveness=assumed_constants.Latent_Heat_Recovery_Effectiveness,
             Outdoor_Air_Method="Sum"
             if self.HVAC.Ventilation.Provider == "Mechanical"
-            or self.HVAC.Ventilation.Provider == "Hybrid"
+            or self.HVAC.Ventilation.Provider == "Both"
             else "None",
         )
         idf = hvac_template.add(idf)
