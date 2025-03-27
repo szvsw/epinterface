@@ -360,6 +360,22 @@ class AddedZoneLists:
     main_zone_list: ZoneList
 
 
+class AtticAssumptions(BaseModel):
+    """The conditions of the attic."""
+
+    UseFraction: float | None = Field(..., ge=0, le=1)
+    Conditioned: bool
+    InsulationSurface: AtticInsulationSurfaceOption
+
+
+class BasementAssumptions(BaseModel):
+    """The conditions of the basement."""
+
+    UseFraction: float | None = Field(..., ge=0, le=1)
+    Conditioned: bool
+    InsulationSurface: BasementInsulationSurfaceOption
+
+
 class Model(BaseWeather, validate_assignment=True):
     """A simple model constructor for the IDF model.
 
@@ -367,13 +383,9 @@ class Model(BaseWeather, validate_assignment=True):
     """
 
     geometry: ShoeboxGeometry
-    attic_insulation_surface: AtticInsulationSurfaceOption
+    Attic: AtticAssumptions
+    Basement: BasementAssumptions
     # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
-    conditioned_attic: bool
-    attic_use_fraction: float | None = Field(..., ge=0, le=1)
-    basement_use_fraction: float | None = Field(..., ge=0, le=1)
-    conditioned_basement: bool
-    basement_insulation_surface: BasementInsulationSurfaceOption
     Zone: ZoneComponent
 
     @property
@@ -384,9 +396,9 @@ class Model(BaseWeather, validate_assignment=True):
             area (float): The total conditioned area of the model.
         """
         conditioned_area = self.geometry.total_living_area
-        if self.geometry.basement and self.conditioned_basement:
+        if self.geometry.basement and self.Basement.Conditioned:
             conditioned_area += self.geometry.footprint_area
-        if self.geometry.roof_height and self.conditioned_attic:
+        if self.geometry.roof_height and self.Attic.Conditioned:
             conditioned_area += self.geometry.footprint_area
         return conditioned_area
 
@@ -398,12 +410,15 @@ class Model(BaseWeather, validate_assignment=True):
             ppl (float): The total number of people in the model
 
         """
+        raise NotImplementedError(
+            "Total people is not yet implemented because of attics/basements etc."
+        )
         ppl_per_m2 = (
             self.Zone.Operations.SpaceUse.Occupancy.PeopleDensity
             if self.Zone.Operations.SpaceUse.Occupancy.IsOn
             else 0
         )
-        total_area = self.total_conditioned_area
+        total_area = self.total_conditioned_area  # this is wrong - it should be based off of occupied area which may be different depending on attic/basement use fractions.
         total_ppl = ppl_per_m2 * total_area
         return total_ppl
 
@@ -420,18 +435,15 @@ class Model(BaseWeather, validate_assignment=True):
         Raises:
             ValueError
         """
-        if (
-            self.attic_insulation_surface == "roof"
-            and self.geometry.roof_height is None
-        ):
+        if self.Attic.InsulationSurface == "roof" and self.geometry.roof_height is None:
             msg = "Cannot have roof-surface insulation if there is no roof height."
             raise ValueError(msg)
 
-        if self.conditioned_attic and self.geometry.roof_height is None:
+        if self.Attic.Conditioned and self.geometry.roof_height is None:
             msg = "Cannot have a conditioned attic if there is no roof height."
             raise ValueError(msg)
 
-        if self.attic_use_fraction and self.geometry.roof_height is None:
+        if self.Attic.UseFraction and self.geometry.roof_height is None:
             msg = "Cannot have an occupied attic if there is no roof height."
             raise ValueError(msg)
         return self
@@ -447,15 +459,15 @@ class Model(BaseWeather, validate_assignment=True):
         Raises:
             ValueError
         """
-        if self.basement_insulation_surface is not None and not self.geometry.basement:
+        if self.Basement.InsulationSurface is not None and not self.geometry.basement:
             msg = "Cannot have basement walls/ceiling insulated if there is no basement in self.geometry."
             raise ValueError(msg)
 
-        if self.conditioned_basement and not self.geometry.basement:
+        if self.Basement.Conditioned and not self.geometry.basement:
             msg = "Cannot have a conditioned basement if there is no basement in self.geometry."
             raise ValueError(msg)
 
-        if self.basement_use_fraction and not self.geometry.basement:
+        if self.Basement.UseFraction and not self.geometry.basement:
             msg = "Cannot have an occupied basement if there is no basement in self.geometry."
             raise ValueError(msg)
 
@@ -496,13 +508,13 @@ class Model(BaseWeather, validate_assignment=True):
             )
             is_normal_zone = not is_attic and not is_basement
             should_condition = (
-                (is_attic and self.conditioned_attic)
-                or (is_basement and self.conditioned_basement)
+                (is_attic and self.Attic.Conditioned)
+                or (is_basement and self.Basement.Conditioned)
                 or is_normal_zone
             )
             should_be_occupied = (
-                (is_attic and self.attic_use_fraction is not None)
-                or (is_basement and self.basement_use_fraction is not None)
+                (is_attic and self.Attic.UseFraction is not None)
+                or (is_basement and self.Basement.UseFraction is not None)
                 or is_normal_zone
             )
             if should_condition:
@@ -520,11 +532,11 @@ class Model(BaseWeather, validate_assignment=True):
         # attic never gets partitioned so it only ever contributes 1
         # to the conditioned storey count
         conditioned_storey_count = self.geometry.num_stories + (
-            1 if self.conditioned_basement else 0
+            1 if self.Basement.Conditioned else 0
         )
         zones_per_storey = self.geometry.zones_per_storey
         expected_zone_count = conditioned_storey_count * zones_per_storey + (
-            1 if self.conditioned_attic else 0
+            1 if self.Attic.Conditioned else 0
         )
         if len(conditioned_zone_names) != expected_zone_count:
             msg = f"Expected {expected_zone_count} zones, but found {len(conditioned_zone_names)}."
@@ -682,13 +694,49 @@ class Model(BaseWeather, validate_assignment=True):
         for zone in added_zone_lists.main_zone_list.Names:
             self.Zone.add_to_idf_zone(idf, zone)
 
-        # TODO: Handle Basements:
-        # TODO: Handle Attic:
+        # handle basements
+        if self.Basement.UseFraction or self.Basement.Conditioned:
+            new_zone_def = self.Zone.model_copy(deep=True)
+            frac = self.Basement.UseFraction or 0
+            pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
+            epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
+            lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+
+            new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
+            new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
+            new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
+
+            if not self.Basement.Conditioned:
+                new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
+                new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+
+            for zone in added_zone_lists.basement_zone_list.Names:
+                new_zone_def.add_to_idf_zone(idf, zone)
+
+        if self.Attic.UseFraction or self.Attic.Conditioned:
+            new_zone_def = self.Zone.model_copy(deep=True)
+            frac = self.Attic.UseFraction or 0
+            pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
+            epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
+            lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+
+            new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
+            new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
+            new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
+
+            if not self.Attic.Conditioned:
+                new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
+                new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+
+            # TODO: handle mutating infiltration object when "ventilated attics" are set
+            for zone in added_zone_lists.attic_zone_list.Names:
+                new_zone_def.add_to_idf_zone(idf, zone)
 
         idf = self.add_constructions(
             idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
         )
-        # self.add_infiltration(idf, infiltration, inf_zone_list)
 
         # > operations
         # ----> space use
@@ -963,18 +1011,23 @@ if __name__ == "__main__":
             create_zone(settings.db)
 
             _, zone = deep_fetcher.Zone.get_deep_object("default_zone", settings.db)
+            deep_fetcher.SpaceUse.get_deep_object("default_space_use", settings.db)
 
             model = Model(
                 Weather=(
                     "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
                 ),  # pyright: ignore [reportArgumentType]
                 Zone=zone,
-                basement_insulation_surface=None,
-                conditioned_basement=False,
-                basement_use_fraction=None,
-                attic_insulation_surface=None,
-                conditioned_attic=False,
-                attic_use_fraction=None,
+                Attic=AtticAssumptions(
+                    InsulationSurface=None,
+                    Conditioned=False,
+                    UseFraction=None,
+                ),
+                Basement=BasementAssumptions(
+                    InsulationSurface=None,
+                    Conditioned=False,
+                    UseFraction=None,
+                ),
                 geometry=ShoeboxGeometry(
                     x=0,
                     y=0,

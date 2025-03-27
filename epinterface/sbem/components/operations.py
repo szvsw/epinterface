@@ -208,6 +208,12 @@ class ZoneOperationsComponent(
         hvac_template = HVACTemplateZoneIdealLoadsAirSystem(
             Zone_Name=target_zone_name,
             Template_Thermostat_Name=thermostat.Name,
+            Heating_Availability_Schedule_Name=None
+            if self.HVAC.ConditioningSystems.Heating
+            else "AlwaysOff",
+            Cooling_Availability_Schedule_Name=None
+            if self.HVAC.ConditioningSystems.Cooling
+            else "AlwaysOff",
             Maximum_Heating_Air_Flow_Rate="autosize",
             Heating_Limit="NoLimit",
             Maximum_Sensible_Heating_Capacity="autosize",
