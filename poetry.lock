@@ -57,13 +57,13 @@ files = [
 
 [[package]]
 name = "archetypal"
-version = "2.18.4"
+version = "2.18.5"
 description = "Retrieve, construct, simulate, convert and analyse building archetypes"
 optional = false
 python-versions = "<4.0,>=3.9"
 files = [
-    {file = "archetypal-2.18.4-py3-none-any.whl", hash = "sha256:b7a8908540e830d375553229045aa3c4f4dcff6124cec9b36c9ed37d9a239704"},
-    {file = "archetypal-2.18.4.tar.gz", hash = "sha256:b39db53adb25432965d331726ca08146ed99455f890d04c011cb54372ee27f0c"},
+    {file = "archetypal-2.18.5-py3-none-any.whl", hash = "sha256:8f6b7ea9d624225d9007f99dbac153a9e370b5084f7007b21276304bf2de10c8"},
+    {file = "archetypal-2.18.5.tar.gz", hash = "sha256:57e6f3e976c69adf22ccc79cbcbb08fd331029fe7956389eec07eb292ccf7c96"},
 ]
 
 [package.dependencies]
@@ -5084,4 +5084,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "e47a0b98343e086035c101d3821ab57d440f1eb361b1c3d7bf07ff6b6c300cf6"
+content-hash = "0af68700a7d0a65859b65009d725fbe5d1477765b05efaba4313f461d22022f1"

@@ -17,7 +17,7 @@ epi = "epinterface.cli:cli"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
-archetypal = "^2.18.4"
+archetypal = "^2.18.5"
 geopandas = "^1.0.1"
 pydantic = "^2.9.2"
 pandas = "^2.2.3"
