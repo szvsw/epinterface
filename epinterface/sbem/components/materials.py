@@ -78,6 +78,15 @@ ConstructionMaterialType = Literal[
     "Sealing",
 ]
 
+MaterialRoughness = Literal[
+    "VeryRough",
+    "Rough",
+    "MediumRough",
+    "MediumSmooth",
+    "Smooth",
+    "VerySmooth",
+]
+
 
 class ConstructionMaterialProperties(
     CommonMaterialPropertiesMixin,
@@ -86,7 +95,7 @@ class ConstructionMaterialProperties(
     """Properties of an opaque material."""
 
     # add in the commonMaterialsPropertis
-    Roughness: str = Field(..., title="Roughness of the opaque material")
+    Roughness: MaterialRoughness = Field(..., title="Roughness of the opaque material")
     SpecificHeat: float = Field(
         ...,
         title="Specific heat [J/kgK]",
