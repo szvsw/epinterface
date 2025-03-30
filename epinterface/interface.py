@@ -1054,3 +1054,17 @@ def add_default_schedules(idf: IDF) -> tuple[IDF, dict[str, Schedule]]:
     year.to_epbunch(idf)
 
     return idf, all_scheds
+
+
+PROTECTED_SCHEDULE_NAMES = {
+    "Always_On",
+    "Always_Off",
+    "Always On",
+    "Always Off",
+    "AlwaysOn",
+    "AlwaysOff",
+    "On",
+    "Off",
+    "AllOn",
+    "AllOff",
+}

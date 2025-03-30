@@ -4,9 +4,10 @@ import calendar
 from typing import Literal
 
 from archetypal.idfclass.idf import IDF
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from epinterface.interface import (
+    PROTECTED_SCHEDULE_NAMES,
     ScheduleDayHourly,
     ScheduleTypeLimits,
     ScheduleWeekDaily,
@@ -608,3 +609,11 @@ class YearComponent(NamedObject, extra="forbid"):
         days_in_year = calendar.isleap(year) * 366 + (1 - calendar.isleap(year)) * 365
 
         return annual_sum / (days_in_year * 24)
+
+    @field_validator("Name")
+    def validate_name(cls, v):
+        """Validate the name of the schedule, specifically that it cannot be a protected name."""
+        if v in PROTECTED_SCHEDULE_NAMES or "Activity_Schedule" in v:
+            msg = f"Schedule name {v} is protected, please choose another name."
+            raise ValueError(msg)
+        return v
