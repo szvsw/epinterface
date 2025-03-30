@@ -1,7 +1,6 @@
 """A module for specifying the fields in the GIS data."""
 
-from pathlib import Path
-from typing import Generic, TypeVar, cast
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -83,55 +82,4 @@ class SemanticModelFields(BaseModel):
         )
         return grid.to_frame(index=False)
 
-
-if __name__ == "__main__":
-    import yaml
-
-    from epinterface.sbem.components.composer import (
-        construct_composer_model,
-        construct_graph,
-    )
-    from epinterface.sbem.components.zones import ZoneComponent
-    from epinterface.sbem.prisma.client import PrismaSettings
-
-    component_map_path = "tests/data/component-map-ma-simple.yml"
-    semantic_fields_path = "tests/data/semantic-fields-ma-simple.yml"
-    db_path = "tests/data/components-ma-simple.db"
-
-    with open(semantic_fields_path) as f:
-        semantic_fields_yaml = yaml.safe_load(f)
-    model = SemanticModelFields.model_validate(semantic_fields_yaml)
-    print(model.make_grid(numerical_discretization=10))
-
-    g = construct_graph(ZoneComponent)
-    SelectorModel = construct_composer_model(
-        g,
-        ZoneComponent,
-        use_children=False,
-    )
-
-    with open(component_map_path) as f:
-        component_map_yaml = yaml.safe_load(f)
-    selector = SelectorModel.model_validate(component_map_yaml)
-
-    # TODO: make sure we are okay with accwssing the same db
-    # across workers executing the same experiment.
-    settings = PrismaSettings.New(
-        database_path=Path(db_path), if_exists="ignore", auto_register=False
-    )
-    db = settings.db
-
-    from tqdm.autonotebook import tqdm
-
-    grid = model.make_grid(numerical_discretization=10).sample(100)
-
-    with db:
-        for _ix, row in tqdm(grid.iterrows(), total=len(grid)):
-            context = row.to_dict()
-            try:
-                component = cast(
-                    ZoneComponent, selector.get_component(context=context, db=db)
-                )
-                print(component.Name)
-            except Exception as e:
-                print(f"\nError: {e}, context: {context}\n")
+    # TODO: add a method which dumps it to a yaml string rather than json

@@ -10,6 +10,7 @@ As such, we need to provide a way to generate the prisma client by passing the -
 import shutil
 import subprocess
 import sys
+import tempfile
 from importlib.resources import files
 from pathlib import Path
 from typing import Literal
@@ -211,3 +212,73 @@ def template(path: Path):
     template_yaml = model.create_data_entry_template()
     with open(path, "w") as f:
         f.write(template_yaml)
+
+
+@components.command(
+    help="Check if all semantic field combinations resolve to a valid zone component.  Will randomly sample the semantic fields as listed in the semantic fields file."
+)
+@click.option(
+    "--component-map-path",
+    type=click.Path(
+        exists=True,
+        path_type=Path,
+    ),
+    prompt="Path to the component map file",
+)
+@click.option(
+    "--semantic-fields-path",
+    type=click.Path(
+        exists=True,
+        path_type=Path,
+    ),
+    prompt="Path to the semantic fields file",
+)
+@click.option(
+    "--db-path",
+    type=click.Path(
+        exists=True,
+        path_type=Path,
+    ),
+    prompt="Path to the database file",
+)
+@click.option(
+    "--max-tests",
+    type=int,
+    default=100,
+    prompt="Maximum number of tests to run",
+)
+def check(
+    component_map_path: Path, semantic_fields_path: Path, db_path: Path, max_tests: int
+):
+    """Check if all semantic field combinations resolve to a valid zone component."""
+    from epinterface.sbem.interface import add_excel_to_db
+    from epinterface.sbem.prisma.client import PrismaSettings
+    from epinterface.sbem.utils import check_model_existence
+
+    if db_path.suffix == ".xlsx":
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = Path(temp_dir)
+            actual_db_path = temp_dir / "components.db"
+            settings = PrismaSettings.New(
+                database_path=actual_db_path, if_exists="raise", auto_register=False
+            )
+            try:
+                with settings.db:
+                    add_excel_to_db(db_path, settings.db, erase_db=True)
+            except Exception as e:
+                click.echo(f"Error: {e}", err=True)
+                sys.exit(1)
+            db_path = actual_db_path
+            check_model_existence(
+                component_map_path=component_map_path,
+                semantic_fields_path=semantic_fields_path,
+                db_path=db_path,
+                max_tests=max_tests,
+            )
+    else:
+        check_model_existence(
+            component_map_path=component_map_path,
+            semantic_fields_path=semantic_fields_path,
+            db_path=db_path,
+            max_tests=max_tests,
+        )

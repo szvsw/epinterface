@@ -580,3 +580,4 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 include=ENVELOPE_INCLUDE,
             )
             ZoneEnvelopeComponent.model_validate(envelope, from_attributes=True)
+    print("Done adding components to db.")
