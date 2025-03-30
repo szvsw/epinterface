@@ -1,5 +1,6 @@
 """This module contains the definitions for the schedules."""
 
+import calendar
 from typing import Literal
 
 from archetypal.idfclass.idf import IDF
@@ -440,3 +441,155 @@ class YearComponent(NamedObject, extra="forbid"):
             lim.add(idf)
 
         return idf, year_sched.Name
+
+    def fractional_year_sum(self, year: int):
+        """Compute the sum of the year as a fraction of the year."""
+        if self.schedule_type_limits != "Fraction":
+            msg = "Schedule type limits are not Fraction, cannot compute year sum."
+            raise ValueError(msg)
+
+        # get the numer of Mondays in each month, tuesdays in each month, etc.
+
+        def get_num_days_in_month(
+            month: Literal[
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ],
+            year: int,
+            day_of_week: Literal[
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ],
+        ):
+            """Get the number of days in a month for a given year and day of the week."""
+            # get the number of days in the month
+            month_map = {
+                "January": 1,
+                "February": 2,
+                "March": 3,
+                "April": 4,
+                "May": 5,
+                "June": 6,
+                "July": 7,
+                "August": 8,
+                "September": 9,
+                "October": 10,
+                "November": 11,
+                "December": 12,
+            }
+            _weekday, num_days = calendar.monthrange(year, month_map[month])
+
+            # get the number of days of the week in the month
+            days_of_week = [calendar.day_name[(day + 1) % 7] for day in range(num_days)]
+            return days_of_week.count(day_of_week)
+
+        # get the number of Mondays in each month
+        months: list[
+            Literal[
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ]
+        ] = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ]
+        num_mondays = [get_num_days_in_month(month, year, "Monday") for month in months]
+        num_tuesdays = [
+            get_num_days_in_month(month, year, "Tuesday") for month in months
+        ]
+        num_wednesdays = [
+            get_num_days_in_month(month, year, "Wednesday") for month in months
+        ]
+        num_thursdays = [
+            get_num_days_in_month(month, year, "Thursday") for month in months
+        ]
+        num_fridays = [get_num_days_in_month(month, year, "Friday") for month in months]
+        num_saturdays = [
+            get_num_days_in_month(month, year, "Saturday") for month in months
+        ]
+        num_sundays = [get_num_days_in_month(month, year, "Sunday") for month in months]
+
+        monday_sums = [
+            sum(getattr(self, month).Monday.Values) * num_days
+            for month, num_days in zip(months, num_mondays, strict=True)
+        ]
+        tuesday_sums = [
+            sum(getattr(self, month).Tuesday.Values) * num_days
+            for month, num_days in zip(months, num_tuesdays, strict=True)
+        ]
+        wednesday_sums = [
+            sum(getattr(self, month).Wednesday.Values) * num_days
+            for month, num_days in zip(months, num_wednesdays, strict=True)
+        ]
+        thursday_sums = [
+            sum(getattr(self, month).Thursday.Values) * num_days
+            for month, num_days in zip(months, num_thursdays, strict=True)
+        ]
+        friday_sums = [
+            sum(getattr(self, month).Friday.Values) * num_days
+            for month, num_days in zip(months, num_fridays, strict=True)
+        ]
+        saturday_sums = [
+            sum(getattr(self, month).Saturday.Values) * num_days
+            for month, num_days in zip(months, num_saturdays, strict=True)
+        ]
+        sunday_sums = [
+            sum(getattr(self, month).Sunday.Values) * num_days
+            for month, num_days in zip(months, num_sundays, strict=True)
+        ]
+
+        monday_sum = sum(monday_sums)
+        tuesday_sum = sum(tuesday_sums)
+        wednesday_sum = sum(wednesday_sums)
+        thursday_sum = sum(thursday_sums)
+        friday_sum = sum(friday_sums)
+        saturday_sum = sum(saturday_sums)
+        sunday_sum = sum(sunday_sums)
+
+        annual_sum = (
+            monday_sum
+            + tuesday_sum
+            + wednesday_sum
+            + thursday_sum
+            + friday_sum
+            + saturday_sum
+            + sunday_sum
+        )
+        days_in_year = calendar.isleap(year) * 366 + (1 - calendar.isleap(year)) * 365
+
+        return annual_sum / (days_in_year * 24)

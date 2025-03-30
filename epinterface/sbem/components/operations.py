@@ -2,7 +2,6 @@
 
 from logging import getLogger
 
-import numpy as np
 from archetypal.idfclass import IDF
 from archetypal.schedule import Schedule, ScheduleTypeLimits
 
@@ -130,10 +129,12 @@ class ZoneOperationsComponent(
         idf, water_use_frac_sch_name = water_use_frac_sched.add_year_to_idf(
             idf, name_prefix=water_use_name
         )
-        sch_obj = idf.getobject("SCHEDULE:YEAR", water_use_frac_sch_name)
-        arch_sch = Schedule.from_epbunch(sch_obj)
-        values = np.array(arch_sch.Values)
-        avg_fractional_value = np.sum(values) / 8760
+        # sch_obj = idf.getobject("SCHEDULE:YEAR", water_use_frac_sch_name)
+        # arch_sch = Schedule.from_epbunch(sch_obj)
+        # values = np.array(arch_sch.Values)
+        # avg_fractional_value = np.sum(values) / 8760
+        logger.warning("USING HARDCODED 2018 to compute avg fractional value")
+        avg_fractional_value = water_use_frac_sched.fractional_year_sum(2018)
         # total_fractional_value * peak_flow_rate_per_s = avg_float_per_s
         peak_flow_rate_per_s = avg_flow_per_s / avg_fractional_value
 
