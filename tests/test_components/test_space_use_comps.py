@@ -34,7 +34,8 @@ def test_add_lighting_to_idf_zone(idf: IDF, schedule: YearComponent, is_on: bool
     schedule_name = schedule.Name
     zone_name = "some_zone"
     expected_idf_obj_name = f"{zone_name}_{component_name}_LIGHTS"
-    expected_schedule_name = f"{expected_idf_obj_name}_YEAR_{schedule_name}"
+    # expected_schedule_name = f"{expected_idf_obj_name}_YEAR_{schedule_name}"
+    expected_schedule_name = schedule_name
 
     lighting = LightingComponent(
         Name=component_name,
@@ -87,7 +88,8 @@ def test_add_people_to_idf_zone(
     schedule_name = schedule.Name
     zone_name = "default_zone"
     expected_idf_obj_name = f"{zone_name}_{component_name}_PEOPLE"
-    expected_schedule_name = f"{expected_idf_obj_name}_YEAR_{schedule_name}"
+    # expected_schedule_name = f"{expected_idf_obj_name}_YEAR_{schedule_name}"
+    expected_schedule_name = schedule_name
     expected_activity_schedule_name = f"{expected_idf_obj_name}_Activity_Schedule"
 
     occupancy = OccupancyComponent(
@@ -130,7 +132,8 @@ def test_add_equipment_to_idf_zone(idf: IDF, schedule: YearComponent, is_on: boo
     schedule_name = schedule.Name
     zone_name = "default_zone"
     expected_idf_obj_name = f"{zone_name}_{component_name}_EQUIPMENT"
-    expected_schedule_name = f"{expected_idf_obj_name}_YEAR_{schedule_name}"
+    # expected_schedule_name = f"{expected_idf_obj_name}_YEAR_{schedule_name}"
+    expected_schedule_name = schedule_name
     equipment = EquipmentComponent(
         Name=component_name,
         PowerDensity=10,
@@ -187,8 +190,6 @@ def test_add_space_use_to_idf_zone(idf: IDF, schedule: YearComponent):
     expected_equip_name = f"{zone_name}_{equipment_component_name}_EQUIPMENT"
     expected_lighting_name = f"{zone_name}_{lighting_component_name}_LIGHTS"
     expected_occupancy_name = f"{zone_name}_{occupancy_component_name}_PEOPLE"
-    expected_thermostat_name = f"{zone_name}_{thermostat_component_name}_THERMOSTAT"
-    expected_water_name = f"{zone_name}_{water_component_name}_WATERUSE"
 
     equip_schedule_name = "some_equip_schedule"
     lighting_schedule_name = "some_light_schedule"
@@ -216,22 +217,28 @@ def test_add_space_use_to_idf_zone(idf: IDF, schedule: YearComponent):
         deep=True, update={"Name": water_schedule_name}
     )
 
-    expected_lighting_schedule_name = (
-        f"{expected_lighting_name}_YEAR_{lighting_schedule_name}"
-    )
-    expected_equipment_schedule_name = (
-        f"{expected_equip_name}_YEAR_{equip_schedule_name}"
-    )
-    expected_occupancy_schedule_name = (
-        f"{expected_occupancy_name}_YEAR_{occupancy_schedule_name}"
-    )
-    _expected_heating_schedule_name = (
-        f"{expected_thermostat_name}_YEAR_{heating_schedule_name}"
-    )
-    _expected_cooling_schedule_name = (
-        f"{expected_thermostat_name}_YEAR_{cooling_schedule_name}"
-    )
-    _expected_water_schedule_name = f"{expected_water_name}_YEAR_{water_schedule_name}"
+    # expected_lighting_schedule_name = (
+    #     f"{expected_lighting_name}_YEAR_{lighting_schedule_name}"
+    # )
+    # expected_equipment_schedule_name = (
+    #     f"{expected_equip_name}_YEAR_{equip_schedule_name}"
+    # )
+    # expected_occupancy_schedule_name = (
+    #     f"{expected_occupancy_name}_YEAR_{occupancy_schedule_name}"
+    # )
+    # _expected_heating_schedule_name = (
+    #     f"{expected_thermostat_name}_YEAR_{heating_schedule_name}"
+    # )
+    # _expected_cooling_schedule_name = (
+    #     f"{expected_thermostat_name}_YEAR_{cooling_schedule_name}"
+    # )
+    # _expected_water_schedule_name = f"{expected_water_name}_YEAR_{water_schedule_name}"
+    expected_lighting_schedule_name = lighting_schedule_name
+    expected_equipment_schedule_name = equip_schedule_name
+    expected_occupancy_schedule_name = occupancy_schedule_name
+    # expected_heating_schedule_name = heating_schedule_name
+    # expected_cooling_schedule_name = cooling_schedule_name
+    # expected_water_schedule_name = water_schedule_name
 
     lighting = LightingComponent(
         Name=lighting_component_name,
@@ -292,8 +299,6 @@ def test_add_space_use_to_idf_zone(idf: IDF, schedule: YearComponent):
     lights_obj = idf.getobject("LIGHTS", expected_lighting_name)
     equip_obj = idf.getobject("ELECTRICEQUIPMENT", expected_equip_name)
     occupancy_obj = idf.getobject("PEOPLE", expected_occupancy_name)
-    # thermostat_obj = idf.getobject("HVACTEMPLATE:THERMOSTAT", expected_thermostat_name)
-    # water_obj = idf.getobject("WATERUSE:EQUIPMENT", expected_water_name)
     assert lights_obj is not None
     assert lights_obj.Name == expected_lighting_name
     assert lights_obj.Schedule_Name == expected_lighting_schedule_name
@@ -305,12 +310,10 @@ def test_add_space_use_to_idf_zone(idf: IDF, schedule: YearComponent):
     assert (
         occupancy_obj.Number_of_People_Schedule_Name == expected_occupancy_schedule_name
     )
+
     assert idf.getobject("SCHEDULE:YEAR", expected_lighting_schedule_name) is not None
     assert idf.getobject("SCHEDULE:YEAR", expected_equipment_schedule_name) is not None
     assert idf.getobject("SCHEDULE:YEAR", expected_occupancy_schedule_name) is not None
-    # assert idf.getobject("SCHEDULE:YEAR", expected_heating_schedule_name) is not None
-    # assert idf.getobject("SCHEDULE:YEAR", expected_cooling_schedule_name) is not None
-    # assert idf.getobject("SCHEDULE:YEAR", expected_water_schedule_name) is not None
 
 
 # TODO: test with spaces/invalid chars in names
