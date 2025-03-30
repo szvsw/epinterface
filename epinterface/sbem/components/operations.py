@@ -127,7 +127,7 @@ class ZoneOperationsComponent(
             raise ValueError(msg)
 
         idf, water_use_frac_sch_name = water_use_frac_sched.add_year_to_idf(
-            idf, name_prefix=water_use_name
+            idf, name_prefix=None
         )
         # sch_obj = idf.getobject("SCHEDULE:YEAR", water_use_frac_sch_name)
         # arch_sch = Schedule.from_epbunch(sch_obj)
@@ -174,11 +174,11 @@ class ZoneOperationsComponent(
         cooling_schedule_name = None
         if heating_schedule is not None:
             idf, heating_schedule_name = heating_schedule.add_year_to_idf(
-                idf, name_prefix=thermostat_name
+                idf, name_prefix=None
             )
         if cooling_schedule is not None:
             idf, cooling_schedule_name = cooling_schedule.add_year_to_idf(
-                idf, name_prefix=thermostat_name
+                idf, name_prefix=None
             )
 
         thermostat = HVACTemplateThermostat(
@@ -247,7 +247,7 @@ class ZoneOperationsComponent(
                 return idf
             vent_wind_stack_name = f"{target_zone_name}_{self.SpaceUse.Thermostat.safe_name}_{self.HVAC.Ventilation.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA"
             idf, vent_wind_stack_name = self.HVAC.Ventilation.Schedule.add_year_to_idf(
-                idf, name_prefix=vent_wind_stack_name
+                idf, name_prefix=None
             )
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
                 Name=vent_wind_stack_name,

@@ -127,8 +127,15 @@ class DayComponent(NamedObject, extra="forbid"):
             idf (IDF): The IDF object with the day added.
             day_name (str): The name of the day schedule.
         """
+        desired_name = self.Name
+        if name_prefix is not None:
+            desired_name = f"{name_prefix}_DAY_{desired_name}"
+
+        if idf.getobject("SCHEDULE:DAY:HOURLY", desired_name):
+            return idf, desired_name
+
         day_sched = ScheduleDayHourly(
-            Name=self.Name,
+            Name=desired_name,
             Schedule_Type_Limits_Name=self.Type,
             Hour_1=self.Hour_00,
             Hour_2=self.Hour_01,
@@ -155,8 +162,6 @@ class DayComponent(NamedObject, extra="forbid"):
             Hour_23=self.Hour_22,
             Hour_24=self.Hour_23,
         )
-        if name_prefix is not None:
-            day_sched.Name = f"{name_prefix}_DAY_{day_sched.Name}"
         idf = day_sched.add(idf)
         return idf, day_sched.Name
 
@@ -208,6 +213,13 @@ class WeekComponent(NamedObject, extra="forbid"):
             idf (IDF): The IDF object with the week added.
             week_name (str): The name of the week schedule.
         """
+        desired_name = self.Name
+        if name_prefix is not None:
+            desired_name = f"{name_prefix}_WEEK_{desired_name}"
+
+        if idf.getobject("SCHEDULE:WEEK:DAILY", desired_name):
+            return idf, desired_name
+
         idf, monday_name = self.Monday.add_day_to_idf(idf, name_prefix)
         idf, tuesday_name = self.Tuesday.add_day_to_idf(idf, name_prefix)
         idf, wednesday_name = self.Wednesday.add_day_to_idf(idf, name_prefix)
@@ -216,7 +228,7 @@ class WeekComponent(NamedObject, extra="forbid"):
         idf, saturday_name = self.Saturday.add_day_to_idf(idf, name_prefix)
         idf, sunday_name = self.Sunday.add_day_to_idf(idf, name_prefix)
         week_sched = ScheduleWeekDaily(
-            Name=self.Name,
+            Name=desired_name,
             Monday_ScheduleDay_Name=monday_name,
             Tuesday_ScheduleDay_Name=tuesday_name,
             Wednesday_ScheduleDay_Name=wednesday_name,
@@ -225,8 +237,6 @@ class WeekComponent(NamedObject, extra="forbid"):
             Saturday_ScheduleDay_Name=saturday_name,
             Sunday_ScheduleDay_Name=sunday_name,
         )
-        if name_prefix is not None:
-            week_sched.Name = f"{name_prefix}_WEEK_{week_sched.Name}"
         idf = week_sched.add(idf)
         return idf, week_sched.Name
 
@@ -352,6 +362,13 @@ class YearComponent(NamedObject, extra="forbid"):
             idf (IDF): The IDF object with the year added.
             year_name (str): The name of the year schedule.
         """
+        desired_name = self.Name
+        if name_prefix is not None:
+            desired_name = f"{name_prefix}_YEAR_{desired_name}"
+
+        if idf.getobject("SCHEDULE:YEAR", desired_name):
+            return idf, desired_name
+
         idf, jan_name = self.January.add_week_to_idf(idf, name_prefix)
         idf, feb_name = self.February.add_week_to_idf(idf, name_prefix)
         idf, mar_name = self.March.add_week_to_idf(idf, name_prefix)
@@ -428,8 +445,6 @@ class YearComponent(NamedObject, extra="forbid"):
             End_Month_12=12,
             End_Day_12=31,
         )
-        if name_prefix is not None:
-            year_sched.Name = f"{name_prefix}_YEAR_{year_sched.Name}"
         idf = year_sched.add(idf)
 
         type_lim = self.schedule_type_limits
