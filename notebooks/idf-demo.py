@@ -920,13 +920,6 @@ if __name__ == "__main__":
 
     model = params.to_model()
 
-    # with tempfile.TemporaryDirectory() as temp_dir:
-    #     output_dir = Path(temp_dir)
-    #     config = SimulationPathConfig(output_dir=output_dir)
-    #     idf = model.build(config)
-    # save idf to file
-    # idf.view_model()
-
     idf, results, err_text = model.run()
     idf.saveas("model.idf")
     # save results
