@@ -551,6 +551,82 @@ def create_construction_assemblies(db: Prisma):
         }
     )
 
+    db.constructionassembly.create(
+        data={  # pyright: ignore [reportArgumentType]
+            "Name": "AtticFloor",
+            "Type": "Slab",
+            "Layers": {
+                "create": [
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Concrete"}},
+                        "Thickness": 0.1,
+                        "LayerOrder": 0,
+                    },
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "XPS"}},
+                        "Thickness": 0.05,
+                        "LayerOrder": 1,
+                    },
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Gypsum"}},
+                        "Thickness": 0.01,
+                        "LayerOrder": 2,
+                    },
+                ]
+            },
+        }
+    )
+    db.constructionassembly.create(
+        data={  # pyright: ignore [reportArgumentType]
+            "Name": "AtticRoof",
+            "Type": "Roof",
+            "Layers": {
+                "create": [
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Concrete"}},
+                        "Thickness": 0.1,
+                        "LayerOrder": 0,
+                    },
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "XPS"}},
+                        "Thickness": 0.05,
+                        "LayerOrder": 1,
+                    },
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Gypsum"}},
+                        "Thickness": 0.01,
+                        "LayerOrder": 2,
+                    },
+                ]
+            },
+        }
+    )
+    db.constructionassembly.create(
+        data={  # pyright: ignore [reportArgumentType]
+            "Name": "BasementCeiling",
+            "Type": "Slab",
+            "Layers": {
+                "create": [
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Concrete"}},
+                        "Thickness": 0.1,
+                        "LayerOrder": 0,
+                    },
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "XPS"}},
+                        "Thickness": 0.05,
+                        "LayerOrder": 1,
+                    },
+                    {
+                        "ConstructionMaterial": {"connect": {"Name": "Gypsum"}},
+                        "Thickness": 0.01,
+                        "LayerOrder": 2,
+                    },
+                ]
+            },
+        }
+    )
+
 
 def create_envelope_assemblies(db: Prisma):
     """Create envelope assemblies for the given database."""
@@ -559,17 +635,15 @@ def create_envelope_assemblies(db: Prisma):
     db.envelopeassembly.create(
         data={
             "Name": "default",
-            "GroundIsAdiabatic": False,
-            "RoofIsAdiabatic": False,
-            "FacadeIsAdiabatic": False,
-            "SlabIsAdiabatic": False,
-            "PartitionIsAdiabatic": False,
-            "RoofAssembly": {"connect": {"Name": "Roof"}},
+            "FlatRoofAssembly": {"connect": {"Name": "Roof"}},
             "FacadeAssembly": {"connect": {"Name": "Facade"}},
-            "SlabAssembly": {"connect": {"Name": "Slab"}},
+            "FloorCeilingAssembly": {"connect": {"Name": "Slab"}},
+            "AtticRoofAssembly": {"connect": {"Name": "AtticRoof"}},
+            "AtticFloorAssembly": {"connect": {"Name": "AtticFloor"}},
             "PartitionAssembly": {"connect": {"Name": "Partition"}},
             "GroundSlabAssembly": {"connect": {"Name": "GroundSlab"}},
             "GroundWallAssembly": {"connect": {"Name": "GroundWall"}},
+            "BasementCeilingAssembly": {"connect": {"Name": "BasementCeiling"}},
             "ExternalFloorAssembly": {"connect": {"Name": "ExternalFloor"}},
             "InternalMassAssembly": {"connect": {"Name": "InternalMass"}},
             "InternalMassExposedAreaPerArea": 0.2,
@@ -640,6 +714,7 @@ def create_envelope(db: Prisma):
             "Name": "default_env",
             "Assemblies": {"connect": {"Name": "default"}},
             "Infiltration": {"connect": {"Name": "office_unweatherized"}},
+            "AtticInfiltration": {"connect": {"Name": "office_unweatherized"}},
             "Window": {"connect": {"Name": "single"}},
         }
     )

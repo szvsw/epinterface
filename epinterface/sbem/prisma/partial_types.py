@@ -148,18 +148,24 @@ ConstructionAssembly.create_partial(
 EnvelopeAssembly.create_partial(
     name="EnvelopeAssemblyWithChildren",
     required={
-        "RoofAssembly",
+        "FlatRoofAssembly",
         "FacadeAssembly",
-        "SlabAssembly",
+        "FloorCeilingAssembly",
+        "AtticRoofAssembly",
+        "AtticFloorAssembly",
+        "BasementCeilingAssembly",
         "PartitionAssembly",
         "ExternalFloorAssembly",
         "GroundSlabAssembly",
         "GroundWallAssembly",
     },
     relations={
-        "RoofAssembly": "ConstructionAssemblyWithLayers",
+        "FlatRoofAssembly": "ConstructionAssemblyWithLayers",
         "FacadeAssembly": "ConstructionAssemblyWithLayers",
-        "SlabAssembly": "ConstructionAssemblyWithLayers",
+        "FloorCeilingAssembly": "ConstructionAssemblyWithLayers",
+        "AtticRoofAssembly": "ConstructionAssemblyWithLayers",
+        "AtticFloorAssembly": "ConstructionAssemblyWithLayers",
+        "BasementCeilingAssembly": "ConstructionAssemblyWithLayers",
         "PartitionAssembly": "ConstructionAssemblyWithLayers",
         "ExternalFloorAssembly": "ConstructionAssemblyWithLayers",
         "GroundSlabAssembly": "ConstructionAssemblyWithLayers",
@@ -170,7 +176,7 @@ EnvelopeAssembly.create_partial(
 
 Envelope.create_partial(
     name="EnvelopeWithChildren",
-    required={"Assemblies", "Infiltration", "Window"},
+    required={"Assemblies", "Infiltration", "AtticInfiltration", "Window"},
     relations={"Assemblies": "EnvelopeAssemblyWithChildren"},
 )
 

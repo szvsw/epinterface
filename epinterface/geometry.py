@@ -499,8 +499,8 @@ def get_zone_floor_area(idf: IDF, zone_name: str) -> float:
                 raise ValueError(f"INVALID_FLOOR:{zone_name}:{srf.Name}")
             area += float(poly.area)
             area_ct += 1
-    if area_ct > 1:
-        raise ValueError(f"TOO_MANY_FLOORS:{zone_name}")
+    if area_ct not in [1, 5]:
+        raise ValueError(f"TOO_MANY_FLOORS:{zone_name}:{area_ct}")
     if area == 0 or area_ct == 0:
         raise ValueError(f"NO_AREA:{zone_name}")
 

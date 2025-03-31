@@ -286,40 +286,47 @@ class EnvelopeAssemblyComponent(
 ):
     """Zone construction object."""
 
-    RoofAssembly: ConstructionAssemblyComponent = Field(
-        ..., title="Roof construction object name"
+    FlatRoofAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Flat roof construction object; only used when no attic is present."
     )
     FacadeAssembly: ConstructionAssemblyComponent = Field(
-        ..., title="Facade construction object name"
+        ..., title="Facade construction object"
     )
-    SlabAssembly: ConstructionAssemblyComponent = Field(
-        ..., title="Slab construction object name"
+    FloorCeilingAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Floor/ceiling construction object"
+    )
+    AtticRoofAssembly: ConstructionAssemblyComponent = Field(
+        ...,
+        title="Attic roof construction object (outer surface) - only used when attic is present.",
+    )
+    AtticFloorAssembly: ConstructionAssemblyComponent = Field(
+        ..., title="Attic floor construction object  - only used when attic is present."
     )
     PartitionAssembly: ConstructionAssemblyComponent = Field(
-        ..., title="Partition construction object name"
+        ..., title="Partition construction object"
     )
     ExternalFloorAssembly: ConstructionAssemblyComponent = Field(
-        ..., title="External floor construction object name"
+        ..., title="External floor construction object"
     )
     GroundSlabAssembly: ConstructionAssemblyComponent = Field(
-        ..., title="Ground slab construction object name"
+        ..., title="Ground slab construction object"
     )
     GroundWallAssembly: ConstructionAssemblyComponent = Field(
-        ..., title="Ground wall construction object name"
+        ...,
+        title="Ground wall construction object (only used when basement is present)",
+    )
+    BasementCeilingAssembly: ConstructionAssemblyComponent = Field(
+        ...,
+        title="Basement ceiling construction object (only used when basement is present)",
     )
     InternalMassAssembly: ConstructionAssemblyComponent | None = Field(
-        default=None, title="Internal mass construction object name"
+        default=None, title="Internal mass construction object"
     )
     InternalMassExposedAreaPerArea: float | None = Field(
         default=None,
         title="Internal mass exposed area per area [m²/m²]",
         ge=0,
     )
-    GroundIsAdiabatic: BoolStr = Field(..., title="Ground is adiabatic")
-    RoofIsAdiabatic: BoolStr = Field(..., title="Roof is adiabatic")
-    FacadeIsAdiabatic: BoolStr = Field(..., title="Facade is adiabatic")
-    SlabIsAdiabatic: BoolStr = Field(..., title="Slab is adiabatic")
-    PartitionIsAdiabatic: BoolStr = Field(..., title="Partition is adiabatic")
 
     @model_validator(mode="after")
     def validate_internal_mass_exposed_area_per_area(self):
@@ -344,6 +351,7 @@ class ZoneEnvelopeComponent(NamedObject, MetadataMixin, extra="forbid"):
 
     Assemblies: EnvelopeAssemblyComponent
     Infiltration: InfiltrationComponent
+    AtticInfiltration: InfiltrationComponent
     Window: GlazingConstructionSimpleComponent | None
 
     # Foundation: Foundation | None
