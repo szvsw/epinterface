@@ -922,7 +922,6 @@ if __name__ == "__main__":
 
     idf, results, err_text = model.run()
     idf.saveas("model.idf")
-    # save results
     results.to_csv("results.csv")
     agg_results = results.groupby(["Meter", "Aggregation"]).sum()
     # summarize the results by meter column across all timesteps
