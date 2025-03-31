@@ -360,7 +360,7 @@ def create_construction_assemblies(db: Prisma):
     db.constructionassembly.create(
         data={  # pyright: ignore [reportArgumentType]
             "Name": "Roof",
-            "Type": "Roof",
+            "Type": "FlatRoof",
             "Layers": {
                 "create": [
                     {
@@ -554,7 +554,7 @@ def create_construction_assemblies(db: Prisma):
     db.constructionassembly.create(
         data={  # pyright: ignore [reportArgumentType]
             "Name": "AtticFloor",
-            "Type": "Slab",
+            "Type": "AtticFloor",
             "Layers": {
                 "create": [
                     {
@@ -579,7 +579,7 @@ def create_construction_assemblies(db: Prisma):
     db.constructionassembly.create(
         data={  # pyright: ignore [reportArgumentType]
             "Name": "AtticRoof",
-            "Type": "Roof",
+            "Type": "AtticRoof",
             "Layers": {
                 "create": [
                     {
@@ -604,7 +604,7 @@ def create_construction_assemblies(db: Prisma):
     db.constructionassembly.create(
         data={  # pyright: ignore [reportArgumentType]
             "Name": "BasementCeiling",
-            "Type": "Slab",
+            "Type": "BasementCeiling",
             "Layers": {
                 "create": [
                     {

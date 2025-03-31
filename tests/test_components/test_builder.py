@@ -18,12 +18,10 @@ def test_builder(preseeded_readonly_db: Prisma):
         ),
         Zone=zone,
         Basement=BasementAssumptions(
-            InsulationSurface=None,
             Conditioned=False,
             UseFraction=None,
         ),
         Attic=AtticAssumptions(
-            InsulationSurface=None,
             Conditioned=False,
             UseFraction=None,
         ),
