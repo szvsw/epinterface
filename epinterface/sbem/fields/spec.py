@@ -62,24 +62,34 @@ class SemanticModelFields(BaseModel):
 
     def make_grid(self, numerical_discretization: int = 10):
         """Make a grid of the fields."""
+        import gc
+
         import numpy as np
         import pandas as pd
 
         options = []
+        option_vals = {}
         for field in self.Fields:
             if isinstance(field, CategoricalFieldSpec):
-                options.append(field.Options)
+                options.append(list(range(len(field.Options))))
+                option_vals[field.Name] = field.Options
             elif isinstance(field, NumericFieldSpec):
-                options.append(
-                    np.linspace(field.Min, field.Max, numerical_discretization)
+                options.append(list(range(numerical_discretization)))
+                option_vals[field.Name] = np.linspace(
+                    field.Min, field.Max, numerical_discretization
                 )
             else:
                 msg = f"Unexpected field type: {type(field)}"
                 raise TypeError(msg)
+        options = [np.array(opt, dtype=np.int8) for opt in options]
 
-        grid = pd.MultiIndex.from_product(
-            options, names=[field.Name for field in self.Fields]
-        )
-        return grid.to_frame(index=False)
-
-    # TODO: add a method which dumps it to a yaml string rather than json
+        arrs = np.meshgrid(*options, indexing="ij", copy=False)
+        df = pd.DataFrame()
+        for arr, field in zip(arrs, self.Fields, strict=True):
+            df[field.Name] = arr.ravel()
+            del arr
+            gc.collect()
+        # df = pd.DataFrame(
+        #     np.column_stack(arrs), columns=[field.Name for field in self.Fields]
+        # )
+        return df, option_vals

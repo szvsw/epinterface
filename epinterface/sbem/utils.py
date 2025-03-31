@@ -57,13 +57,15 @@ def check_model_existence(
     )
     db = settings.db
 
-    grid = model.make_grid(numerical_discretization=10)
+    grid, field_vals = model.make_grid(numerical_discretization=10)
     grid = grid.sample(min(max_tests, len(grid)))
 
     # Checks that things that should be in the db are in the db
     with db:
         for _ix, row in tqdm(grid.iterrows(), total=len(grid)):
             context = row.to_dict()
+            for field_name, field_val in field_vals.items():
+                context[field_name] = field_val[context[field_name]]
             try:
                 _component = cast(
                     ZoneComponent, selector.get_component(context=context, db=db)
