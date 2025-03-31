@@ -33,10 +33,7 @@ from epinterface.sbem.components.envelope import (
 )
 from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
-from epinterface.sbem.exceptions import (
-    NotImplementedParameter,
-    SBEMBuilderNotImplementedError,
-)
+from epinterface.sbem.exceptions import NotImplementedParameter
 from epinterface.weather import BaseWeather
 
 DESIRED_METERS = (
@@ -61,10 +58,6 @@ class SimulationPathConfig(BaseModel):
     )
 
 
-AtticInsulationSurfaceOption = Literal["roof", "floor", None]
-BasementInsulationSurfaceOption = Literal["walls", "ceiling", None]
-
-
 class SurfaceHandler(BaseModel):
     """A handler for filtering and adding surfaces to a model."""
 
@@ -72,6 +65,19 @@ class SurfaceHandler(BaseModel):
     original_construction_name: str | None
     original_surface_type: str | None
     surface_group: Literal["glazing", "opaque", "internal_mass"]
+    zone_name_contains: str | None
+    outside_boundary_condition_object_contains: str | None
+
+    @model_validator(mode="after")
+    def check_no_obco_if_not_bc_surface(self):
+        """An outside boundary condition object is only specifiable if the boundary condition is `surface`."""
+        if (
+            self.outside_boundary_condition_object_contains is not None
+            and self.boundary_condition != "surface"
+        ):
+            msg = "An outside boundary condition object is only specifiable if the boundary condition is `surface`."
+            raise ValueError(msg)
+        return self
 
     def assign_constructions_to_objs(
         self,
@@ -131,6 +137,8 @@ class SurfaceHandler(BaseModel):
             self.check_construction_type(srf)
             and self.check_boundary(srf)
             and self.check_construction_name(srf)
+            and self.check_zone_name(srf)
+            and self.check_outside_boundary_condition_object(srf)
         )
 
     def check_construction_type(self, srf):
@@ -184,70 +192,134 @@ class SurfaceHandler(BaseModel):
         # Check the original construction name
         return srf.Construction_Name.lower() == self.original_construction_name.lower()
 
+    # TODO: convert this to a regex for better control
+    def check_zone_name(self, srf):
+        """Check that the zone name for the surface contains the expected substring."""
+        if self.zone_name_contains is None:
+            # Ignore the zone name check when filter not provided
+            return True
+        if self.surface_group == "glazing":
+            # Ignore the zone name check for windows
+            return True
+        # Check the zone name
+        zone_name = srf.Zone_Name
+        return self.zone_name_contains.lower() in zone_name.lower()
+
+    def check_outside_boundary_condition_object(self, srf):
+        """Check if the surface's outside boundary condition object contains the desired substring."""
+        if self.outside_boundary_condition_object_contains is None:
+            # Ignore the outside boundary condition object check when filter not provided
+            return True
+        # Check the outside boundary condition object
+        if self.surface_group == "glazing":
+            # Ignore the outside boundary condition object check for windows
+            return True
+        return (
+            self.outside_boundary_condition_object_contains.lower()
+            in srf.Outside_Boundary_Condition_Object.lower()
+        )
+
 
 class SurfaceHandlers(BaseModel):
     """A collection of surface handlers for different surface types."""
 
-    Roof: SurfaceHandler
+    RoofOutdoorBC: SurfaceHandler
+    AtticFloorFloor: SurfaceHandler
+    AtticFloorCeiling: SurfaceHandler
     Facade: SurfaceHandler
-    Slab: SurfaceHandler
-    Ceiling: SurfaceHandler
+    FloorCeilingFloor: SurfaceHandler
+    FloorCeilingCeiling: SurfaceHandler
     Partition: SurfaceHandler
     InternalMass: SurfaceHandler
     GroundSlab: SurfaceHandler
     GroundWall: SurfaceHandler
+    BasementCeilingCeiling: SurfaceHandler
+    BasementCeilingFloor: SurfaceHandler
     Window: SurfaceHandler
 
     @classmethod
-    def Default(cls):
+    def Default(cls, basement_suffix: str):
         """Get the default surface handlers."""
-        roof_handler = SurfaceHandler(
+        roof_outdoor_bc_handler = SurfaceHandler(
             boundary_condition="outdoors",
             original_construction_name=None,
             original_surface_type="roof",
             surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
+
         facade_handler = SurfaceHandler(
             boundary_condition="outdoors",
             original_construction_name=None,
             original_surface_type="wall",
             surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
         partition_handler = SurfaceHandler(
             boundary_condition="surface",
             original_construction_name=None,
             original_surface_type="wall",
             surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
         ground_wall_handler = SurfaceHandler(
             boundary_condition="ground",
             original_construction_name=None,
             original_surface_type="wall",
             surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
-        slab_handler = SurfaceHandler(
+        floor_ceiling_floor_handler = SurfaceHandler(
             boundary_condition="surface",
             original_construction_name=None,
             original_surface_type="floor",
             surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
-        ceiling_handler = SurfaceHandler(
+        floor_ceiling_ceiling_handler = SurfaceHandler(
             boundary_condition="surface",
             original_construction_name=None,
             original_surface_type="ceiling",
             surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
         ground_slab_handler = SurfaceHandler(
             boundary_condition="ground",
             original_construction_name=None,
             original_surface_type="floor",
             surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
+        )
+        basement_ceiling_ceiling_handler = SurfaceHandler(
+            boundary_condition="surface",
+            original_construction_name=None,
+            original_surface_type="ceiling",
+            surface_group="opaque",
+            zone_name_contains=basement_suffix,  # this is because the basement will always `Block shoebox .* -1/0` (depends on core/perim vs by_storey)
+            outside_boundary_condition_object_contains=None,
+        )
+        basement_ceiling_floor_handler = SurfaceHandler(
+            boundary_condition="surface",
+            original_construction_name=None,
+            original_surface_type="floor",
+            surface_group="opaque",
+            zone_name_contains=None,  # this is because the basement will always `Block shoebox .* -1/0` (depends on core/perim vs by_storey)
+            outside_boundary_condition_object_contains=basement_suffix,
         )
         window_handler = SurfaceHandler(
             boundary_condition=None,
             original_construction_name=None,
             original_surface_type=None,
             surface_group="glazing",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
 
         internal_mass_handler = SurfaceHandler(
@@ -255,17 +327,39 @@ class SurfaceHandlers(BaseModel):
             original_construction_name=None,
             original_surface_type=None,
             surface_group="internal_mass",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains=None,
         )
 
+        attic_floor_floor_handler = SurfaceHandler(
+            boundary_condition="surface",
+            original_construction_name=None,
+            original_surface_type="floor",
+            surface_group="opaque",
+            zone_name_contains="attic",
+            outside_boundary_condition_object_contains=None,
+        )
+        attic_floor_ceiling_handler = SurfaceHandler(
+            boundary_condition="surface",
+            original_construction_name=None,
+            original_surface_type="ceiling",
+            surface_group="opaque",
+            zone_name_contains=None,
+            outside_boundary_condition_object_contains="attic",
+        )
         return cls(
-            Roof=roof_handler,
+            RoofOutdoorBC=roof_outdoor_bc_handler,
+            AtticFloorFloor=attic_floor_floor_handler,
+            AtticFloorCeiling=attic_floor_ceiling_handler,
             Facade=facade_handler,
-            Slab=slab_handler,
-            Ceiling=ceiling_handler,
+            FloorCeilingFloor=floor_ceiling_floor_handler,
+            FloorCeilingCeiling=floor_ceiling_ceiling_handler,
             Partition=partition_handler,
             InternalMass=internal_mass_handler,
             GroundSlab=ground_slab_handler,
             GroundWall=ground_wall_handler,
+            BasementCeilingCeiling=basement_ceiling_ceiling_handler,
+            BasementCeilingFloor=basement_ceiling_floor_handler,
             Window=window_handler,
         )
 
@@ -274,6 +368,8 @@ class SurfaceHandlers(BaseModel):
         idf: IDF,
         constructions: EnvelopeAssemblyComponent,
         window: GlazingConstructionSimpleComponent | None,
+        with_attic: bool,
+        with_basement: bool,
     ):
         """Assign the envelope to the IDF model.
 
@@ -283,44 +379,65 @@ class SurfaceHandlers(BaseModel):
             idf (IDF): The IDF model to add the envelope to.
             constructions (ZoneConstruction): The construction names for the envelope.
             window (GlazingConstructionSimpleComponent | None): The window definition.
+            with_attic (bool): Whether to add the attic floor and ceiling constructions.
+            with_basement (bool): Whether to add the basement floor and ceiling constructions.
 
         Returns:
             idf (IDF): The updated IDF model.
         """
-        # outside walls are the ones with outdoor boundary condition and vertical orientation
-        # def make_reversed(const: ConstructionAssemblyComponent):
-        #     new_const = const.model_copy(deep=True)
-        #     sorted_layers = sorted(new_const.Layers, key=lambda x: x.LayerOrder)
-        #     for i, layer in enumerate(sorted_layers[::-1]):
-        #         layer.LayerOrder = i
-        #     resorted_layers = sorted(sorted_layers, key=lambda x: x.LayerOrder)
-        #     new_const.Layers = resorted_layers
-        #     new_const.Name = f"{const.Name}_Reversed"
-        #     return new_const
+        floor_ceiling_reversed = constructions.FloorCeilingAssembly.reversed
+        attic_floor_reversed = constructions.AtticFloorAssembly.reversed
+        basement_ceiling_reversed = constructions.BasementCeilingAssembly.reversed
 
-        slab_reversed = constructions.SlabAssembly.reversed
-
-        idf = self.Roof.assign_constructions_to_objs(
-            idf=idf, construction=constructions.RoofAssembly
+        # handle the roof which will always have the "roof" surface type
+        # and "outdoors" for the bc but needs a different construction.
+        outdoor_roof_bc = (
+            constructions.AtticRoofAssembly
+            if with_attic
+            else constructions.FlatRoofAssembly
         )
+        idf = self.RoofOutdoorBC.assign_constructions_to_objs(
+            idf=idf, construction=outdoor_roof_bc
+        )
+
         idf = self.Facade.assign_constructions_to_objs(
             idf=idf, construction=constructions.FacadeAssembly
         )
         idf = self.Partition.assign_constructions_to_objs(
             idf=idf, construction=constructions.PartitionAssembly
         )
-        idf = self.Slab.assign_constructions_to_objs(
-            idf=idf, construction=slab_reversed
+        idf = self.FloorCeilingFloor.assign_constructions_to_objs(
+            idf=idf, construction=floor_ceiling_reversed
         )
-        idf = self.Ceiling.assign_constructions_to_objs(
-            idf=idf, construction=constructions.SlabAssembly
+        idf = self.FloorCeilingCeiling.assign_constructions_to_objs(
+            idf=idf, construction=constructions.FloorCeilingAssembly
         )
+        # NB: We must execute basement and attic floor/ceiling systems
+        # AFTER the regular floor ceiling systems because the regular floor ceilings
+        # will match all of the floor/ceiling surfaces
+        # and we want to overwrite their constructions.
+        if with_basement:
+            idf = self.BasementCeilingCeiling.assign_constructions_to_objs(
+                idf=idf, construction=constructions.BasementCeilingAssembly
+            )
+            idf = self.BasementCeilingFloor.assign_constructions_to_objs(
+                idf=idf, construction=basement_ceiling_reversed
+            )
+        if with_attic:
+            idf = self.AtticFloorFloor.assign_constructions_to_objs(
+                idf=idf, construction=constructions.AtticFloorAssembly
+            )
+            idf = self.AtticFloorCeiling.assign_constructions_to_objs(
+                idf=idf, construction=attic_floor_reversed
+            )
+
         idf = self.GroundSlab.assign_constructions_to_objs(
             idf=idf, construction=constructions.GroundSlabAssembly
         )
         idf = self.GroundWall.assign_constructions_to_objs(
             idf=idf, construction=constructions.GroundWallAssembly
         )
+
         if window:
             idf = self.Window.assign_constructions_to_objs(idf=idf, construction=window)
 
@@ -360,6 +477,20 @@ class AddedZoneLists:
     main_zone_list: ZoneList
 
 
+class AtticAssumptions(BaseModel):
+    """The conditions of the attic."""
+
+    UseFraction: float | None = Field(..., ge=0, le=1)
+    Conditioned: bool
+
+
+class BasementAssumptions(BaseModel):
+    """The conditions of the basement."""
+
+    UseFraction: float | None = Field(..., ge=0, le=1)
+    Conditioned: bool
+
+
 class Model(BaseWeather, validate_assignment=True):
     """A simple model constructor for the IDF model.
 
@@ -367,13 +498,9 @@ class Model(BaseWeather, validate_assignment=True):
     """
 
     geometry: ShoeboxGeometry
-    attic_insulation_surface: AtticInsulationSurfaceOption
+    Attic: AtticAssumptions
+    Basement: BasementAssumptions
     # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
-    conditioned_attic: bool
-    attic_use_fraction: float | None = Field(..., ge=0, le=1)
-    basement_use_fraction: float | None = Field(..., ge=0, le=1)
-    conditioned_basement: bool
-    basement_insulation_surface: BasementInsulationSurfaceOption
     Zone: ZoneComponent
 
     @property
@@ -384,9 +511,9 @@ class Model(BaseWeather, validate_assignment=True):
             area (float): The total conditioned area of the model.
         """
         conditioned_area = self.geometry.total_living_area
-        if self.geometry.basement and self.conditioned_basement:
+        if self.geometry.basement and self.Basement.Conditioned:
             conditioned_area += self.geometry.footprint_area
-        if self.geometry.roof_height and self.conditioned_attic:
+        if self.geometry.roof_height and self.Attic.Conditioned:
             conditioned_area += self.geometry.footprint_area
         return conditioned_area
 
@@ -398,12 +525,15 @@ class Model(BaseWeather, validate_assignment=True):
             ppl (float): The total number of people in the model
 
         """
+        raise NotImplementedError(
+            "Total people is not yet implemented because of attics/basements etc."
+        )
         ppl_per_m2 = (
             self.Zone.Operations.SpaceUse.Occupancy.PeopleDensity
             if self.Zone.Operations.SpaceUse.Occupancy.IsOn
             else 0
         )
-        total_area = self.total_conditioned_area
+        total_area = self.total_conditioned_area  # this is wrong - it should be based off of occupied area which may be different depending on attic/basement use fractions.
         total_ppl = ppl_per_m2 * total_area
         return total_ppl
 
@@ -420,18 +550,11 @@ class Model(BaseWeather, validate_assignment=True):
         Raises:
             ValueError
         """
-        if (
-            self.attic_insulation_surface == "roof"
-            and self.geometry.roof_height is None
-        ):
-            msg = "Cannot have roof-surface insulation if there is no roof height."
-            raise ValueError(msg)
-
-        if self.conditioned_attic and self.geometry.roof_height is None:
+        if self.Attic.Conditioned and self.geometry.roof_height is None:
             msg = "Cannot have a conditioned attic if there is no roof height."
             raise ValueError(msg)
 
-        if self.attic_use_fraction and self.geometry.roof_height is None:
+        if self.Attic.UseFraction and self.geometry.roof_height is None:
             msg = "Cannot have an occupied attic if there is no roof height."
             raise ValueError(msg)
         return self
@@ -447,15 +570,11 @@ class Model(BaseWeather, validate_assignment=True):
         Raises:
             ValueError
         """
-        if self.basement_insulation_surface is not None and not self.geometry.basement:
-            msg = "Cannot have basement walls/ceiling insulated if there is no basement in self.geometry."
-            raise ValueError(msg)
-
-        if self.conditioned_basement and not self.geometry.basement:
+        if self.Basement.Conditioned and not self.geometry.basement:
             msg = "Cannot have a conditioned basement if there is no basement in self.geometry."
             raise ValueError(msg)
 
-        if self.basement_use_fraction and not self.geometry.basement:
+        if self.Basement.UseFraction and not self.geometry.basement:
             msg = "Cannot have an occupied basement if there is no basement in self.geometry."
             raise ValueError(msg)
 
@@ -496,13 +615,13 @@ class Model(BaseWeather, validate_assignment=True):
             )
             is_normal_zone = not is_attic and not is_basement
             should_condition = (
-                (is_attic and self.conditioned_attic)
-                or (is_basement and self.conditioned_basement)
+                (is_attic and self.Attic.Conditioned)
+                or (is_basement and self.Basement.Conditioned)
                 or is_normal_zone
             )
             should_be_occupied = (
-                (is_attic and self.attic_use_fraction is not None)
-                or (is_basement and self.basement_use_fraction is not None)
+                (is_attic and self.Attic.UseFraction is not None)
+                or (is_basement and self.Basement.UseFraction is not None)
                 or is_normal_zone
             )
             if should_condition:
@@ -520,11 +639,11 @@ class Model(BaseWeather, validate_assignment=True):
         # attic never gets partitioned so it only ever contributes 1
         # to the conditioned storey count
         conditioned_storey_count = self.geometry.num_stories + (
-            1 if self.conditioned_basement else 0
+            1 if self.Basement.Conditioned else 0
         )
         zones_per_storey = self.geometry.zones_per_storey
         expected_zone_count = conditioned_storey_count * zones_per_storey + (
-            1 if self.conditioned_attic else 0
+            1 if self.Attic.Conditioned else 0
         )
         if len(conditioned_zone_names) != expected_zone_count:
             msg = f"Expected {expected_zone_count} zones, but found {len(conditioned_zone_names)}."
@@ -599,25 +718,18 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             idf (IDF): The IDF model with the selected surfaces.
         """
-        if self.geometry.roof_height:
-            raise SBEMBuilderNotImplementedError("roof_height")
-        if self.geometry.basement:
-            raise SBEMBuilderNotImplementedError("basement")
-
-        if (
-            constructions.FacadeIsAdiabatic
-            or constructions.RoofIsAdiabatic
-            or constructions.GroundIsAdiabatic
-            or constructions.PartitionIsAdiabatic
-            or constructions.SlabIsAdiabatic
-        ):
-            raise SBEMBuilderNotImplementedError("_IsAdiabatic")
-
-        # if constructions.InternalMassAssembly is not None:
-        #     raise SBEMBuilderNotImplementedError("InternalMassAssembly")
-
-        handlers = SurfaceHandlers.Default()
-        idf = handlers.handle_envelope(idf, constructions, window_def)
+        handlers = SurfaceHandlers.Default(
+            basement_suffix=self.geometry.basement_suffix
+            if self.geometry.basement
+            else "NO-OP"
+        )
+        idf = handlers.handle_envelope(
+            idf,
+            constructions,
+            window_def,
+            with_attic=(self.geometry.roof_height or 0) > 0,
+            with_basement=self.geometry.basement,
+        )
 
         return idf
 
@@ -635,8 +747,6 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             idf (IDF): The built energy model.
         """
-        if self.geometry.roof_height:
-            raise SBEMBuilderNotImplementedError("roof_height")
         config.output_dir.mkdir(parents=True, exist_ok=True)
         base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
         target_base_filepath = config.output_dir / "Minimal.idf"
@@ -682,13 +792,63 @@ class Model(BaseWeather, validate_assignment=True):
         for zone in added_zone_lists.main_zone_list.Names:
             self.Zone.add_to_idf_zone(idf, zone)
 
-        # TODO: Handle Basements:
-        # TODO: Handle Attic:
+        # handle basements
+        if self.Basement.UseFraction or self.Basement.Conditioned:
+            new_zone_def = self.Zone.model_copy(deep=True)
+            frac = self.Basement.UseFraction or 0
+            pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
+            epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
+            lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+
+            new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
+            new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
+            new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
+
+            # handle infiltration for basements, which we are assuming is 0 (or whatever is in assumed constants)
+            new_zone_def.Envelope.Infiltration.AirChangesPerHour = (
+                assumed_constants.Basement_Infiltration_Air_Changes_Per_Hour
+            )
+            new_zone_def.Envelope.Infiltration.FlowPerExteriorSurfaceArea = (
+                assumed_constants.Basement_Infiltration_Flow_Per_Exterior_Surface_Area
+            )
+            new_zone_def.Envelope.Infiltration.CalculationMethod = "AirChanges/Hour"
+
+            if not self.Basement.Conditioned:
+                new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
+                new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+
+            for zone in added_zone_lists.basement_zone_list.Names:
+                new_zone_def.add_to_idf_zone(idf, zone)
+
+        if self.Attic.UseFraction or self.Attic.Conditioned:
+            new_zone_def = self.Zone.model_copy(deep=True)
+            frac = self.Attic.UseFraction or 0
+            pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
+            epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
+            lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+
+            new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
+            new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
+            new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
+
+            # handle infiltration for roofs
+            # because the *regular* infiltration object is the one that gets added, we simply copy
+            # the desired attic infiltration into the relevant section.
+            new_zone_def.Envelope.Infiltration = new_zone_def.Envelope.AtticInfiltration
+
+            if not self.Attic.Conditioned:
+                new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
+                new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+
+            # TODO: handle mutating infiltration object when "ventilated attics" are set
+            for zone in added_zone_lists.attic_zone_list.Names:
+                new_zone_def.add_to_idf_zone(idf, zone)
 
         idf = self.add_constructions(
             idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
         )
-        # self.add_infiltration(idf, infiltration, inf_zone_list)
 
         # > operations
         # ----> space use
@@ -963,18 +1123,21 @@ if __name__ == "__main__":
             create_zone(settings.db)
 
             _, zone = deep_fetcher.Zone.get_deep_object("default_zone", settings.db)
+            deep_fetcher.SpaceUse.get_deep_object("default", settings.db)
 
             model = Model(
                 Weather=(
                     "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
                 ),  # pyright: ignore [reportArgumentType]
                 Zone=zone,
-                basement_insulation_surface=None,
-                conditioned_basement=False,
-                basement_use_fraction=None,
-                attic_insulation_surface=None,
-                conditioned_attic=False,
-                attic_use_fraction=None,
+                Attic=AtticAssumptions(
+                    Conditioned=True,
+                    UseFraction=1,
+                ),
+                Basement=BasementAssumptions(
+                    Conditioned=True,
+                    UseFraction=1,
+                ),
                 geometry=ShoeboxGeometry(
                     x=0,
                     y=0,
@@ -982,13 +1145,14 @@ if __name__ == "__main__":
                     d=10,
                     h=3,
                     wwr=0.2,
-                    num_stories=2,
-                    basement=False,
+                    num_stories=1,
+                    basement=True,
                     zoning="by_storey",
-                    roof_height=None,
+                    roof_height=3,
                 ),
             )
 
             _idf, results, _err_text = model.run()
+            _idf.saveas("test-out.idf")
             print(_err_text)
             print(results)

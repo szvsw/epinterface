@@ -321,35 +321,39 @@ model ConstructionAssembly {
   Layers ConstructionAssemblyLayer[]
 
   // Referenced by
-  RoofAssemblies          EnvelopeAssembly[] @relation("RoofAssembly")
-  FacadeAssemblies        EnvelopeAssembly[] @relation("FacadeAssembly")
-  SlabAssemblies          EnvelopeAssembly[] @relation("SlabAssembly")
-  PartitionAssemblies     EnvelopeAssembly[] @relation("PartitionAssembly")
-  ExternalFloorAssemblies EnvelopeAssembly[] @relation("ExternalFloorAssembly")
-  GroundSlabAssemblies    EnvelopeAssembly[] @relation("GroundSlabAssembly")
-  GroundWallAssemblies    EnvelopeAssembly[] @relation("GroundWallAssembly")
-  InternalMassAssemblies  EnvelopeAssembly[] @relation("InternalMassAssembly")
+  FlatRoofAssemblies        EnvelopeAssembly[] @relation("FlatRoofAssembly")
+  AtticRoofAssemblies       EnvelopeAssembly[] @relation("AtticRoofAssembly")
+  AtticFloorAssemblies      EnvelopeAssembly[] @relation("AtticFloorAssembly")
+  FacadeAssemblies          EnvelopeAssembly[] @relation("FacadeAssembly")
+  FloorCeilingAssemblies    EnvelopeAssembly[] @relation("FloorCeilingAssembly")
+  PartitionAssemblies       EnvelopeAssembly[] @relation("PartitionAssembly")
+  ExternalFloorAssemblies   EnvelopeAssembly[] @relation("ExternalFloorAssembly")
+  GroundSlabAssemblies      EnvelopeAssembly[] @relation("GroundSlabAssembly")
+  GroundWallAssemblies      EnvelopeAssembly[] @relation("GroundWallAssembly")
+  BasementCeilingAssemblies EnvelopeAssembly[] @relation("BasementCeilingAssembly")
+  InternalMassAssemblies    EnvelopeAssembly[] @relation("InternalMassAssembly")
 }
 
 model EnvelopeAssembly {
-  id                             String  @id @default(uuid())
-  Name                           String  @unique
+  id                             String @id @default(uuid())
+  Name                           String @unique
   InternalMassExposedAreaPerArea Float?
-  GroundIsAdiabatic              Boolean
-  RoofIsAdiabatic                Boolean
-  FacadeIsAdiabatic              Boolean
-  SlabIsAdiabatic                Boolean
-  PartitionIsAdiabatic           Boolean
 
   // Relations - special case with multiple relations to the same model type
-  RoofAssemblyId String
-  RoofAssembly   ConstructionAssembly @relation("RoofAssembly", fields: [RoofAssemblyId], references: [id])
+  FlatRoofAssemblyId String
+  FlatRoofAssembly   ConstructionAssembly @relation("FlatRoofAssembly", fields: [FlatRoofAssemblyId], references: [id])
+
+  AtticRoofAssemblyId String
+  AtticRoofAssembly   ConstructionAssembly @relation("AtticRoofAssembly", fields: [AtticRoofAssemblyId], references: [id])
+
+  AtticFloorAssemblyId String
+  AtticFloorAssembly   ConstructionAssembly @relation("AtticFloorAssembly", fields: [AtticFloorAssemblyId], references: [id])
 
   FacadeAssemblyId String
   FacadeAssembly   ConstructionAssembly @relation("FacadeAssembly", fields: [FacadeAssemblyId], references: [id])
 
-  SlabAssemblyId String
-  SlabAssembly   ConstructionAssembly @relation("SlabAssembly", fields: [SlabAssemblyId], references: [id])
+  FloorCeilingAssemblyId String
+  FloorCeilingAssembly   ConstructionAssembly @relation("FloorCeilingAssembly", fields: [FloorCeilingAssemblyId], references: [id])
 
   PartitionAssemblyId String
   PartitionAssembly   ConstructionAssembly @relation("PartitionAssembly", fields: [PartitionAssemblyId], references: [id])
@@ -362,6 +366,9 @@ model EnvelopeAssembly {
 
   GroundWallAssemblyId String
   GroundWallAssembly   ConstructionAssembly @relation("GroundWallAssembly", fields: [GroundWallAssemblyId], references: [id])
+
+  BasementCeilingAssemblyId String
+  BasementCeilingAssembly   ConstructionAssembly @relation("BasementCeilingAssembly", fields: [BasementCeilingAssemblyId], references: [id])
 
   InternalMassAssemblyId String?
   InternalMassAssembly   ConstructionAssembly? @relation("InternalMassAssembly", fields: [InternalMassAssemblyId], references: [id])
@@ -407,7 +414,8 @@ model Infiltration {
   MetadataId String?
   Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
 
-  Envelopes Envelope[]
+  MainInfiltrations  Envelope[] @relation("Infiltration")
+  AtticInfiltrations Envelope[] @relation("AtticInfiltration")
 }
 
 model Envelope {
@@ -419,7 +427,10 @@ model Envelope {
   Assemblies   EnvelopeAssembly @relation(fields: [AssembliesId], references: [id])
 
   InfiltrationId String
-  Infiltration   Infiltration @relation(fields: [InfiltrationId], references: [id])
+  Infiltration   Infiltration @relation("Infiltration", fields: [InfiltrationId], references: [id])
+
+  AtticInfiltrationId String
+  AtticInfiltration   Infiltration @relation("AtticInfiltration", fields: [AtticInfiltrationId], references: [id])
 
   WindowId String?
   Window   GlazingConstructionSimple? @relation(fields: [WindowId], references: [id])

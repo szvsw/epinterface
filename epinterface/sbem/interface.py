@@ -506,23 +506,23 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
             print("Adding envelope assembly", row.to_dict())
             payload: EnvelopeAssemblyCreateInput = {
                 "Name": row["Name"],
-                "GroundIsAdiabatic": False,
-                "RoofIsAdiabatic": False,
-                "FacadeIsAdiabatic": False,
-                "SlabIsAdiabatic": False,
-                "PartitionIsAdiabatic": False,
-                "RoofAssembly": {"connect": {"Name": row["Roof"]}},
+                "FlatRoofAssembly": {"connect": {"Name": row["FlatRoof"]}},
                 "FacadeAssembly": {"connect": {"Name": row["Facade"]}},
-                "SlabAssembly": {
-                    "connect": {"Name": row["Slab"]}
+                "FloorCeilingAssembly": {
+                    "connect": {"Name": row["FloorCeiling"]}
                 },  # FLOOR CEILING SYSTEM!!!!
                 "PartitionAssembly": {"connect": {"Name": row["Partition"]}},
                 "ExternalFloorAssembly": {"connect": {"Name": row["ExternalFloor"]}},
                 "GroundSlabAssembly": {
-                    "connect": {"Name": row["GroundFloor"]}
+                    "connect": {"Name": row["GroundSlab"]}
                 },  # FOUNDATION!!!!
                 "GroundWallAssembly": {
                     "connect": {"Name": row["GroundWall"]}  # Basement wall
+                },
+                "AtticRoofAssembly": {"connect": {"Name": row["AtticRoof"]}},
+                "AtticFloorAssembly": {"connect": {"Name": row["AtticFloor"]}},
+                "BasementCeilingAssembly": {
+                    "connect": {"Name": row["BasementCeiling"]}
                 },
             }
             if (row["InternalMass"] is not None or row["InternalMass"] != "") and (
@@ -543,8 +543,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
 
         # add infiltration
         print("-" * 15, "Adding Infiltration", "-" * 15)
+
         for _, row in component_dfs_dict["Infiltration_components"].iterrows():
-            print("Adding infiltration", row.to_dict())
+            print("Adding zone infiltration", row.to_dict())
             infiltration = tx.infiltration.create(
                 data={
                     "Name": row["Name"],
@@ -575,6 +576,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "Name": row["Name"],
                     "Assemblies": {"connect": {"Name": row["Construction"]}},
                     "Infiltration": {"connect": {"Name": row["Infiltration"]}},
+                    "AtticInfiltration": {
+                        "connect": {"Name": row["AtticInfiltration"]}
+                    },
                     "Window": {"connect": {"Name": row["Windows"]}},
                 },
                 include=ENVELOPE_INCLUDE,

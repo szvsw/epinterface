@@ -1,12 +1,9 @@
 """A simple testing script for the epinterface.sbem library."""
 
-import tempfile
-from pathlib import Path
-
 from pydantic import BaseModel
 
 from epinterface.geometry import ShoeboxGeometry
-from epinterface.sbem.builder import Model, SimulationPathConfig
+from epinterface.sbem.builder import AtticAssumptions, BasementAssumptions, Model
 from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
@@ -717,7 +714,7 @@ class FlatParameters(BaseModel):
                     LayerOrder=2,
                 ),
             ],
-            Type="Roof",
+            Type="FlatRoof",
             Name="residential_roof",
         )
 
@@ -771,8 +768,20 @@ class FlatParameters(BaseModel):
                     LayerOrder=2,
                 ),
             ],
-            Type="Slab",
+            Type="FloorCeiling",
             Name="residential_floorceiling",
+        )
+
+        residential_attic_floor = residential_floorceiling.model_copy(
+            deep=True, update={"Type": "AtticFloor", "Name": "residential_attic_floor"}
+        )
+        residential_attic_roof = residential_roof.model_copy(
+            deep=True, update={"Type": "AtticRoof", "Name": "residential_attic_roof"}
+        )
+
+        residential_basement_ceiling = residential_floorceiling.model_copy(
+            deep=True,
+            update={"Type": "BasementCeiling", "Name": "residential_basement_ceiling"},
         )
 
         residential_groundslab = ConstructionAssemblyComponent(
@@ -788,7 +797,7 @@ class FlatParameters(BaseModel):
                     LayerOrder=1,
                 ),
             ],
-            Type="Slab",
+            Type="GroundSlab",
             Name="residential_groundslab",
         )
         groundslab_r_value_without_xps = (
@@ -805,19 +814,17 @@ class FlatParameters(BaseModel):
         envelope_assemblies = EnvelopeAssemblyComponent(
             Name="envelope_assemblies",
             FacadeAssembly=residential_wall,
-            RoofAssembly=residential_roof,
-            SlabAssembly=residential_floorceiling,
+            FlatRoofAssembly=residential_roof,
+            AtticFloorAssembly=residential_attic_floor,
+            AtticRoofAssembly=residential_attic_roof,
+            FloorCeilingAssembly=residential_floorceiling,
             PartitionAssembly=residential_partition,
             GroundSlabAssembly=residential_groundslab,
+            BasementCeilingAssembly=residential_basement_ceiling,
             ExternalFloorAssembly=residential_groundslab,
             GroundWallAssembly=residential_groundslab,
             InternalMassAssembly=None,
             InternalMassExposedAreaPerArea=None,
-            GroundIsAdiabatic=False,
-            RoofIsAdiabatic=False,
-            FacadeIsAdiabatic=False,
-            SlabIsAdiabatic=False,
-            PartitionIsAdiabatic=False,
         )
 
         window_assembly = GlazingConstructionSimpleComponent(
@@ -833,6 +840,7 @@ class FlatParameters(BaseModel):
             Assemblies=envelope_assemblies,
             Window=window_assembly,
             Infiltration=infiltration,
+            AtticInfiltration=infiltration,
         )
 
         zone = ZoneComponent(
@@ -861,13 +869,15 @@ class FlatParameters(BaseModel):
         )
         return Model(
             Zone=zone,
-            conditioned_attic=False,
-            attic_insulation_surface=None,
-            attic_use_fraction=None,
-            conditioned_basement=False,
-            basement_insulation_surface=None,
-            basement_use_fraction=None,
             geometry=geometry,
+            Attic=AtticAssumptions(
+                Conditioned=False,
+                UseFraction=None,
+            ),
+            Basement=BasementAssumptions(
+                Conditioned=False,
+                UseFraction=None,
+            ),
             Weather=self.weather_url,  # pyright: ignore [reportArgumentType]
         )
 
@@ -899,7 +909,7 @@ if __name__ == "__main__":
         SlabRValue=3,
         WWR=0.25,
         f2f_height=3.5,
-        num_stories=2,
+        num_stories=20,
         width=10,
         depth=15,
         weather_url=weather_url,
@@ -910,16 +920,8 @@ if __name__ == "__main__":
 
     model = params.to_model()
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        output_dir = Path(temp_dir)
-        config = SimulationPathConfig(output_dir=output_dir)
-        idf = model.build(config)
-        # save idf to file
-        # idf.view_model()
-
     idf, results, err_text = model.run()
     idf.saveas("model.idf")
-    # save results
     results.to_csv("results.csv")
     agg_results = results.groupby(["Meter", "Aggregation"]).sum()
     # summarize the results by meter column across all timesteps

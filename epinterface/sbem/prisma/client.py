@@ -305,11 +305,14 @@ CONSTRUCTION_ASSEMBLY_INCLUDE: ConstructionAssemblyInclude = {
     "Layers": {"include": LAYER_INCLUDE, "order_by": {"LayerOrder": "asc"}},
 }
 ENVELOPE_ASSEMBLY_INCLUDE: EnvelopeAssemblyInclude = {
-    "RoofAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "FlatRoofAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "AtticRoofAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "AtticFloorAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
     "FacadeAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
-    "SlabAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "FloorCeilingAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
     "PartitionAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
     "ExternalFloorAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
+    "BasementCeilingAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
     "GroundSlabAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
     "GroundWallAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
     "InternalMassAssembly": {"include": CONSTRUCTION_ASSEMBLY_INCLUDE},
@@ -318,6 +321,7 @@ ENVELOPE_ASSEMBLY_INCLUDE: EnvelopeAssemblyInclude = {
 ENVELOPE_INCLUDE: EnvelopeInclude = {
     "Assemblies": {"include": ENVELOPE_ASSEMBLY_INCLUDE},
     "Infiltration": True,
+    "AtticInfiltration": True,
     "Window": True,
 }
 INFILTRATION_INCLUDE: InfiltrationInclude = {}

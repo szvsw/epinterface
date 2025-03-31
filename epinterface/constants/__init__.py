@@ -60,6 +60,12 @@ class AssumedConstants(BaseModel, frozen=True):
     Minimum_Outdoor_Temperature: float = Field(default=18, ge=0, frozen=True)
 
     Maximum_Outdoor_Temperature: float = Field(default=25, ge=0, frozen=True)
+    Basement_Infiltration_Air_Changes_Per_Hour: float = Field(
+        default=0.0, ge=0, frozen=True
+    )
+    Basement_Infiltration_Flow_Per_Exterior_Surface_Area: float = Field(
+        default=0.0, ge=0, frozen=True
+    )
 
 
 assumed_constants = AssumedConstants()

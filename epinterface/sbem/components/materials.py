@@ -49,15 +49,17 @@ class CommonMaterialPropertiesMixin(BaseModel):
 
 
 ConstructionComponentSurfaceType = Literal[
-    "Roof",
+    "FlatRoof",
+    "AtticRoof",
+    "AtticFloor",
     "Facade",
-    "Slab",
+    "FloorCeiling",
     "Partition",
     "ExternalFloor",
     "ExteriorFloor",
     "GroundSlab",
     "GroundWall",
-    "GroundFloor",
+    "BasementCeiling",
     "InternalMass",
     "InteriorFloor",
 ]

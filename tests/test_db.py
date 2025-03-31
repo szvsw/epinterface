@@ -280,11 +280,12 @@ def test_deep_fetch_envelope_assembly(preseeded_readonly_db: Prisma):
         deep_fetcher.EnvelopeAssembly.get_deep_object("default", db)
     )
     assert (
-        envelope_assembly_comp.RoofAssembly.Name == envelope_assembly.RoofAssembly.Name
+        envelope_assembly_comp.FlatRoofAssembly.Name
+        == envelope_assembly.FlatRoofAssembly.Name
     )
     assert (
-        envelope_assembly_comp.RoofAssembly.Layers[0].ConstructionMaterial.Name
-        == envelope_assembly.RoofAssembly.Layers[0].ConstructionMaterial.Name
+        envelope_assembly_comp.FlatRoofAssembly.Layers[0].ConstructionMaterial.Name
+        == envelope_assembly.FlatRoofAssembly.Layers[0].ConstructionMaterial.Name
     )
 
 
