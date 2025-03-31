@@ -714,6 +714,9 @@ def test_validate_successful_resolution_with_multiple_levels_of_children():
                 "Infiltration": {
                     "selector": ComponentNameConstructor(source_fields=["basic"])
                 },
+                "AtticInfiltration": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
             },
             "Operations": {
                 "SpaceUse": {
