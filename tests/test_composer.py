@@ -463,6 +463,11 @@ def test_envelope_selector(preseeded_readonly_db: Prisma):
                 source_fields=["typology", "weatherization"]
             )
         },
+        "AtticInfiltration": {
+            "selector": ComponentNameConstructor(
+                source_fields=["typology", "weatherization"]
+            )
+        },
         "Window": {"selector": ComponentNameConstructor(source_fields=["window_type"])},
     }
     alt_selector = SelectorModel(
@@ -484,6 +489,9 @@ def test_envelope_selector(preseeded_readonly_db: Prisma):
     assert alt_comp_2.Infiltration != alt_comp.Infiltration
     assert alt_comp_2.Infiltration.Name == "residential_moderately"
     assert pytest.approx(alt_comp_2.Infiltration.AirChangesPerHour) == 1.0 * 0.3
+    assert alt_comp_2.AtticInfiltration != alt_comp.AtticInfiltration
+    assert alt_comp_2.AtticInfiltration.Name == "residential_moderately"
+    assert pytest.approx(alt_comp_2.AtticInfiltration.AirChangesPerHour) == 1.0 * 0.3
     assert alt_comp_2.Window != alt_comp.Window
     assert isinstance(alt_comp_2.Window, GlazingConstructionSimpleComponent)
     assert alt_comp_2.Window.Name == "double"
