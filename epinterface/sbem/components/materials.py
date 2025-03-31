@@ -60,7 +60,6 @@ ConstructionComponentSurfaceType = Literal[
     "GroundSlab",
     "GroundWall",
     "BasementCeiling",
-    "GroundFloor",
     "InternalMass",
     "InteriorFloor",
 ]

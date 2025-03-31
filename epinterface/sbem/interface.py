@@ -514,7 +514,7 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                 "PartitionAssembly": {"connect": {"Name": row["Partition"]}},
                 "ExternalFloorAssembly": {"connect": {"Name": row["ExternalFloor"]}},
                 "GroundSlabAssembly": {
-                    "connect": {"Name": row["GroundFloor"]}
+                    "connect": {"Name": row["GroundSlab"]}
                 },  # FOUNDATION!!!!
                 "GroundWallAssembly": {
                     "connect": {"Name": row["GroundWall"]}  # Basement wall
