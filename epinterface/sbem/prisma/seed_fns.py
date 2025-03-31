@@ -414,8 +414,8 @@ def create_construction_assemblies(db: Prisma):
     )
     db.constructionassembly.create(
         data={  # pyright: ignore [reportArgumentType]
-            "Name": "Slab",
-            "Type": "Slab",
+            "Name": "FloorCeiling",
+            "Type": "FloorCeiling",
             "Layers": {
                 "create": [
                     {
@@ -637,7 +637,7 @@ def create_envelope_assemblies(db: Prisma):
             "Name": "default",
             "FlatRoofAssembly": {"connect": {"Name": "Roof"}},
             "FacadeAssembly": {"connect": {"Name": "Facade"}},
-            "FloorCeilingAssembly": {"connect": {"Name": "Slab"}},
+            "FloorCeilingAssembly": {"connect": {"Name": "FloorCeiling"}},
             "AtticRoofAssembly": {"connect": {"Name": "AtticRoof"}},
             "AtticFloorAssembly": {"connect": {"Name": "AtticFloor"}},
             "PartitionAssembly": {"connect": {"Name": "Partition"}},

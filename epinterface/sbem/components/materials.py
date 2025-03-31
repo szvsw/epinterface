@@ -53,7 +53,7 @@ ConstructionComponentSurfaceType = Literal[
     "AtticRoof",
     "AtticFloor",
     "Facade",
-    "Slab",
+    "FloorCeiling",
     "Partition",
     "ExternalFloor",
     "ExteriorFloor",
