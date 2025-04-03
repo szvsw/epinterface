@@ -66,7 +66,7 @@ class ParameterPath(BaseModel, Generic[T]):
     values from a given library.
     """
 
-    path: list["str | int | ParameterPath[str] | ParameterPath[int]"] = Field(
+    path: list["str | int | ParameterPath"] = Field(
         ..., description="The path to the parameter to select."
     )
 
