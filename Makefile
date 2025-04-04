@@ -4,6 +4,7 @@ install: ## Install the poetry environment and install the pre-commit hooks
 	@poetry install
 	@ poetry run pre-commit install
 	@poetry shell
+	@make prisma-generate
 
 .PHONY: check
 check: ## Run code quality tools.
