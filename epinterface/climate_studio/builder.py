@@ -1,6 +1,7 @@
 """A module for building the energy model using the Climate Studio API."""
 
 import asyncio
+import gc
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -508,6 +509,7 @@ class Model(BaseWeather, validate_assignment=True):
         res_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
+        gc.collect()
         kWh_per_GJ = 277.778
         res_df = (
             res_df[

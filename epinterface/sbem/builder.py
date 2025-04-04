@@ -1,6 +1,7 @@
 """A module for building the energy model using the SBEM template library approach."""
 
 import asyncio
+import gc
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -1090,6 +1091,7 @@ class Model(BaseWeather, validate_assignment=True):
             )
             results = self.standard_results_postprocess(sql)
             err_text = self.get_warnings(idf)
+            gc.collect()
             return idf, results, err_text
 
 
@@ -1153,6 +1155,6 @@ if __name__ == "__main__":
             )
 
             _idf, results, _err_text = model.run()
-            _idf.saveas("test-out.idf")
+            # _idf.saveas("test-out.idf")
             print(_err_text)
             print(results)
