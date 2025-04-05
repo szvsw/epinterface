@@ -27,7 +27,7 @@ Fields:
   - Name: RoofInsulation
     Options:
       - UninsulatedRoof
-      - InsulationRoof
+      - InsulatedRoof
       - HighlyInsulatedRoof
 
   - Name: BasementCeilingInsulation
