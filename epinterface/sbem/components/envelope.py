@@ -158,7 +158,7 @@ class InfiltrationComponent(
 class ConstructionLayerComponent(BaseModel, extra="forbid"):
     """Layer of an opaque construction."""
 
-    Thickness: float = Field(..., title="Thickness of the layer [m]")
+    Thickness: float = Field(..., title="Thickness of the layer [m]", ge=0, le=2)
     LayerOrder: int
     ConstructionMaterial: ConstructionMaterialComponent
 
@@ -201,17 +201,6 @@ class ConstructionLayerComponent(BaseModel, extra="forbid"):
     def u_value(self):
         """Return the U-value of the layer in W/m²K."""
         return 1 / self.r_value
-
-    @model_validator(mode="after")
-    def validate_thickness(self):
-        """Validate the thickness of the layer."""
-        if self.Thickness <= 0:
-            msg = "Layer thickness must be positive"
-            raise ValueError(msg)
-        if self.Thickness > 2:
-            msg = "Layer thickness must be less than 2 meters"
-            raise ValueError(msg)
-        return self
 
 
 class ConstructionAssemblyComponent(
