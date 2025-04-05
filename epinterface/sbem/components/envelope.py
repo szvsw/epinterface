@@ -202,6 +202,17 @@ class ConstructionLayerComponent(BaseModel, extra="forbid"):
         """Return the U-value of the layer in W/m²K."""
         return 1 / self.r_value
 
+    @model_validator(mode="after")
+    def validate_thickness(self):
+        """Validate the thickness of the layer."""
+        if self.Thickness <= 0:
+            msg = "Layer thickness must be positive"
+            raise ValueError(msg)
+        if self.Thickness > 2:
+            msg = "Layer thickness must be less than 2 meters"
+            raise ValueError(msg)
+        return self
+
 
 class ConstructionAssemblyComponent(
     NamedObject,
@@ -231,6 +242,10 @@ class ConstructionAssemblyComponent(
             msg = "Layer orders must be consecutive integers starting from 0"
             raise ValueError(msg)
         v = sorted(v, key=lambda x: x.LayerOrder)
+        total_thickness = sum(layer.Thickness for layer in v)
+        if total_thickness > 3:
+            msg = "Total construction assembly thickness must be less than 3 meters"
+            raise ValueError(msg)
         return v
 
     def add_to_idf(self, idf: IDF) -> IDF:
