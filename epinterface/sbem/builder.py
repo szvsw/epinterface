@@ -1154,7 +1154,10 @@ if __name__ == "__main__":
                 ),
             )
 
-            _idf, results, _err_text = model.run()
+            # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
+            _idf, results, _err_text = model.run(
+                # post_geometry_callback=post_geometry_callback,
+            )
             # _idf.saveas("test-out.idf")
             print(_err_text)
             print(results)

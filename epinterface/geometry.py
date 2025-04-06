@@ -295,7 +295,7 @@ class ShoeboxGeometry(BaseModel):
         else:
             return 1
 
-    def add(self, idf: IDF) -> IDF:
+    def add(self, idf: IDF) -> IDF:  # noqa: C901
         """Constructs a simple shoebox geometry in the IDF model.
 
         Takes advantage of the geomeppy methods to do so.
@@ -350,11 +350,45 @@ class ShoeboxGeometry(BaseModel):
             # create the zone
             idf.newidfobject("ZONE", Name="Attic")
 
-            roof_centerline = self.x + self.w / 2
-            vert_0 = (self.x, self.y + self.d, self.zones_height)
-            vert_1 = (self.x, self.y, self.zones_height)
-            vert_2 = (roof_centerline, self.y, self.total_height_with_gabling)
-            vert_3 = (roof_centerline, self.y + self.d, self.total_height_with_gabling)
+            # we always want the centerline of a gable to be paralle to the longer
+            # edge
+            centerline_parallel_to = "w" if self.w > self.d else "d"
+
+            # the centerline is the midpoint of the shorter edge
+            # since it is parallel to the longer edge
+            roof_centerline = (
+                (self.x + self.w / 2)
+                if centerline_parallel_to == "d"
+                else (self.y + self.d / 2)
+            )
+
+            if centerline_parallel_to == "d":
+                # this gable goes from the left edge of the building to
+                # the midpoint on the x-axis
+                # it starts in the "upper left" corner in plan
+                # and goes counter clockwise to the "lower left" corner
+                # then to the roof centerline (and up in the z-axis)
+                vert_0 = (self.x, self.y + self.d, self.zones_height)
+                vert_1 = (self.x, self.y, self.zones_height)
+                vert_2 = (roof_centerline, self.y, self.total_height_with_gabling)
+                vert_3 = (
+                    roof_centerline,
+                    self.y + self.d,
+                    self.total_height_with_gabling,
+                )
+            else:
+                # this gable goes from the middle of the left edge at the top of the
+                # gable and goes counter clockwise down to the lower left corner
+                # then the lower right corner, and then back up.
+                vert_0 = (self.x, roof_centerline, self.total_height_with_gabling)
+                vert_1 = (self.x, self.y, self.zones_height)
+                vert_2 = (self.x + self.w, self.y, self.zones_height)
+                vert_3 = (
+                    self.x + self.w,
+                    roof_centerline,
+                    self.total_height_with_gabling,
+                )
+
             idf.newidfobject(
                 "BUILDINGSURFACE:DETAILED",
                 Name="Gable1",
@@ -376,10 +410,37 @@ class ShoeboxGeometry(BaseModel):
                 Zone_Name="Attic",
             )
 
-            vert_0 = (self.x + self.w, self.y, self.zones_height)
-            vert_1 = (self.x + self.w, self.y + self.d, self.zones_height)
-            vert_2 = (roof_centerline, self.y + self.d, self.total_height_with_gabling)
-            vert_3 = (roof_centerline, self.y, self.total_height_with_gabling)
+            if centerline_parallel_to == "d":
+                vert_0 = (self.x + self.w, self.y, self.zones_height)
+                vert_1 = (self.x + self.w, self.y + self.d, self.zones_height)
+                vert_2 = (
+                    roof_centerline,
+                    self.y + self.d,
+                    self.total_height_with_gabling,
+                )
+                vert_3 = (
+                    roof_centerline,
+                    self.y,
+                    self.total_height_with_gabling,
+                )
+            else:
+                vert_0 = (self.x, roof_centerline, self.total_height_with_gabling)
+                vert_1 = (
+                    self.x + self.w,
+                    roof_centerline,
+                    self.total_height_with_gabling,
+                )
+                vert_2 = (
+                    self.x + self.w,
+                    self.y + self.d,
+                    self.zones_height,
+                )
+                vert_3 = (
+                    self.x,
+                    self.y + self.d,
+                    self.zones_height,
+                )
+
             idf.newidfobject(
                 "BUILDINGSURFACE:DETAILED",
                 Name="Gable2",
@@ -402,9 +463,14 @@ class ShoeboxGeometry(BaseModel):
             )
 
             # make triangular endcaps
-            vert_0 = (self.x, self.y, self.zones_height)
-            vert_1 = (self.x + self.w, self.y, self.zones_height)
-            vert_2 = (roof_centerline, self.y, self.total_height_with_gabling)
+            if centerline_parallel_to == "d":
+                vert_0 = (self.x, self.y, self.zones_height)
+                vert_1 = (self.x + self.w, self.y, self.zones_height)
+                vert_2 = (roof_centerline, self.y, self.total_height_with_gabling)
+            else:
+                vert_0 = (self.x, self.y, self.zones_height)
+                vert_1 = (self.x, roof_centerline, self.total_height_with_gabling)
+                vert_2 = (self.x, self.y + self.d, self.zones_height)
 
             idf.newidfobject(
                 "BUILDINGSURFACE:DETAILED",
@@ -423,9 +489,23 @@ class ShoeboxGeometry(BaseModel):
                 Zone_Name="Attic",
             )
 
-            vert_0 = (self.x + self.w, self.y + self.d, self.zones_height)
-            vert_1 = (self.x, self.y + self.d, self.zones_height)
-            vert_2 = (roof_centerline, self.y + self.d, self.total_height_with_gabling)
+            if centerline_parallel_to == "d":
+                vert_0 = (self.x + self.w, self.y + self.d, self.zones_height)
+                vert_1 = (self.x, self.y + self.d, self.zones_height)
+                vert_2 = (
+                    roof_centerline,
+                    self.y + self.d,
+                    self.total_height_with_gabling,
+                )
+            else:
+                vert_0 = (self.x + self.w, self.y, self.zones_height)
+                vert_1 = (self.x + self.w, self.y + self.d, self.zones_height)
+                vert_2 = (
+                    self.x + self.w,
+                    roof_centerline,
+                    self.total_height_with_gabling,
+                )
+
             idf.newidfobject(
                 "BUILDINGSURFACE:DETAILED",
                 Name="Endcap2",
