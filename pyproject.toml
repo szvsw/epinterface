@@ -10,6 +10,10 @@ readme = "README.md"
 packages = [
   {include = "epinterface"}
 ]
+requires-poetry = ">=2.0"
+
+[tool.poetry.requires-plugins]
+poetry-plugin-shell = ">1.0"
 
 [tool.poetry.scripts]
 epinterface = "epinterface.cli:cli"
