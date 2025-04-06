@@ -24,7 +24,7 @@ def writeable_db():
 
 def test_add_excel_to_db(writeable_db: Prisma):
     """Test that adding an excel file to the database works."""
-    path_to_excel = Path("tests/data/0318_Template_MAWebApp.xlsx")
+    path_to_excel = Path("tests/data/Template_MAWebApp.xlsx")
     add_excel_to_db(path_to_excel, writeable_db, erase_db=True)
     assert writeable_db.year.count() > 0
     assert writeable_db.week.count() > 0
