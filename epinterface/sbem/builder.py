@@ -766,8 +766,8 @@ class Model(BaseWeather, validate_assignment=True):
         )
         ddy = IDF(
             ddy_path.as_posix(),
-            as_version="9.2.0",
-            file_version="9.2.0",
+            as_version=None,  # pyright: ignore [reportArgumentType]
+            file_version=None,  # pyright: ignore [reportArgumentType]
             prep_outputs=False,
         )
         ddy_spec = DDYSizingSpec(
