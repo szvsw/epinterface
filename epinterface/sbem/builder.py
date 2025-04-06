@@ -759,15 +759,15 @@ class Model(BaseWeather, validate_assignment=True):
         ]
         idf = IDF(
             target_base_filepath.as_posix(),
-            as_version=None,  # pyright: ignore [reportArgumentType]
+            as_version="22.2",  # pyright: ignore [reportArgumentType]
             prep_outputs=output_meters,  # pyright: ignore [reportArgumentType]
             epw=epw_path.as_posix(),
             output_directory=config.output_dir.as_posix(),
         )
         ddy = IDF(
             ddy_path.as_posix(),
-            as_version=None,  # pyright: ignore [reportArgumentType]
-            file_version=None,  # pyright: ignore [reportArgumentType]
+            as_version="22.2",
+            file_version="22.2",
             prep_outputs=False,
         )
         ddy_spec = DDYSizingSpec(
