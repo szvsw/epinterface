@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
@@ -504,6 +504,23 @@ class Model(BaseWeather, validate_assignment=True):
     # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
     Zone: ZoneComponent
 
+    @field_validator("geometry", mode="after")
+    @classmethod
+    def check_geometry(cls, v: ShoeboxGeometry):
+        """Check the geometry of the model.
+
+        Raises:
+            ValueError
+        """
+        # TODO: should this validator happen on the geometry object?
+        if v.w < 3 or v.d < 3:
+            msg = f"Geometry must be at least 3m wide and 3m long (width, depth) = ({v.w}, {v.d})."
+            raise ValueError(msg)
+        if (v.roof_height or 0) > (v.h * 2.5):
+            msg = f"Roof Gable height must be less than two and a half times the f2f height (roof_height, f2f_height) = ({v.roof_height}, {v.h})."
+            raise ValueError(msg)
+        return v
+
     @property
     def total_conditioned_area(self) -> float:
         """The total conditioned area of the model.
@@ -551,11 +568,16 @@ class Model(BaseWeather, validate_assignment=True):
         Raises:
             ValueError
         """
-        if self.Attic.Conditioned and self.geometry.roof_height is None:
+        # TODO: should we add a limiter for min roof height?
+        if self.Attic.Conditioned and (
+            self.geometry.roof_height is None or self.geometry.roof_height == 0
+        ):
             msg = "Cannot have a conditioned attic if there is no roof height."
             raise ValueError(msg)
 
-        if self.Attic.UseFraction and self.geometry.roof_height is None:
+        if self.Attic.UseFraction and (
+            self.geometry.roof_height is None or self.geometry.roof_height == 0
+        ):
             msg = "Cannot have an occupied attic if there is no roof height."
             raise ValueError(msg)
         return self
