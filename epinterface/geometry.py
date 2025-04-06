@@ -333,10 +333,23 @@ class ShoeboxGeometry(BaseModel):
             idf.translate((0, 0, -self.h))
 
         if self.roof_height:
+            # we need to convert the old roof surfaces to ceilings;
+            # additionally, we will track them so that we can create the
+            # corresponding floor surfaces for the attic in a manner
+            # that avoids having to subdivide surfaces with intersect/match
+            old_roof_srfs = []
             for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
                 if srf.Surface_Type.lower() == "roof":
                     srf.Surface_Type = "ceiling"
+                    old_roof_srfs.append(srf)
+            if len(old_roof_srfs) not in [1, 5]:
+                msg = "Too many roof surfaces were found; expected 1 (by_storey) or 5 "
+                f" (core/perim), but found {len(old_roof_srfs)}."
+                raise ValueError(msg)
+
+            # create the zone
             idf.newidfobject("ZONE", Name="Attic")
+
             roof_centerline = self.x + self.w / 2
             vert_0 = (self.x, self.y + self.d, self.zones_height)
             vert_1 = (self.x, self.y, self.zones_height)
@@ -430,25 +443,34 @@ class ShoeboxGeometry(BaseModel):
                 Zone_Name="Attic",
             )
 
-            idf.newidfobject(
-                "BUILDINGSURFACE:DETAILED",
-                Name="attic_bottom_plane",
-                Surface_Type="Floor",
-                Number_of_Vertices=4,
-                Vertex_1_Xcoordinate=self.x + self.w,
-                Vertex_1_Ycoordinate=self.y,
-                Vertex_1_Zcoordinate=self.zones_height,
-                Vertex_2_Xcoordinate=self.x,
-                Vertex_2_Ycoordinate=self.y,
-                Vertex_2_Zcoordinate=self.zones_height,
-                Vertex_3_Xcoordinate=self.x,
-                Vertex_3_Ycoordinate=self.y + self.d,
-                Vertex_3_Zcoordinate=self.zones_height,
-                Vertex_4_Xcoordinate=self.x + self.w,
-                Vertex_4_Ycoordinate=self.y + self.d,
-                Vertex_4_Zcoordinate=self.zones_height,
-                Zone_Name="Attic",
-            )
+            # We will create identical floor surfaces for the attic to match
+            # the zone below.  While we could just add a single plane and let
+            # the `intersect_match` handle it, this is more robust; the geomeppy
+            # method occasionally results in numerical floating point errors where
+            # very small overhang area is created with an outside boundary
+            # condition.
+            # we use a vertex order of 1, 4, 3, 2 to match the orientation of the
+            # roof surfaces below it, i.e. CCW vs CW.
+            for i, srf in enumerate(old_roof_srfs):
+                idf.newidfobject(
+                    "BUILDINGSURFACE:DETAILED",
+                    Name=f"attic_bottom_plane_{i}",
+                    Surface_Type="Floor",
+                    Number_of_Vertices=4,
+                    Vertex_1_Xcoordinate=srf.Vertex_1_Xcoordinate,
+                    Vertex_1_Ycoordinate=srf.Vertex_1_Ycoordinate,
+                    Vertex_1_Zcoordinate=srf.Vertex_1_Zcoordinate,
+                    Vertex_2_Xcoordinate=srf.Vertex_4_Xcoordinate,
+                    Vertex_2_Ycoordinate=srf.Vertex_4_Ycoordinate,
+                    Vertex_2_Zcoordinate=srf.Vertex_4_Zcoordinate,
+                    Vertex_3_Xcoordinate=srf.Vertex_3_Xcoordinate,
+                    Vertex_3_Ycoordinate=srf.Vertex_3_Ycoordinate,
+                    Vertex_3_Zcoordinate=srf.Vertex_3_Zcoordinate,
+                    Vertex_4_Xcoordinate=srf.Vertex_2_Xcoordinate,
+                    Vertex_4_Ycoordinate=srf.Vertex_2_Ycoordinate,
+                    Vertex_4_Zcoordinate=srf.Vertex_2_Zcoordinate,
+                    Zone_Name="Attic",
+                )
 
         idf.intersect_match()
 

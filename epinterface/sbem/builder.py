@@ -1143,13 +1143,13 @@ if __name__ == "__main__":
                 geometry=ShoeboxGeometry(
                     x=0,
                     y=0,
-                    w=10,
-                    d=10,
+                    w=23.3736,
+                    d=19.273673,
                     h=3,
                     wwr=0.2,
-                    num_stories=1,
+                    num_stories=3,
                     basement=True,
-                    zoning="by_storey",
+                    zoning="core/perim",
                     roof_height=3,
                 ),
             )
