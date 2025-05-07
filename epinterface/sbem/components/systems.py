@@ -17,6 +17,8 @@ FuelType = Literal[
     "Coal",
     "Gasoline",
     "Diesel",
+    "DistrictHeating",
+    "DistrictCooling",
     "CustomFuel",
 ]
 HeatingSystemType = Literal[
@@ -212,7 +214,9 @@ class ZoneHVACComponent(
         return idf
 
 
-DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil"]
+DHWFuelType = Literal[
+    "Electricity", "NaturalGas", "Propane", "FuelOil", "DistrictHeating", "Custom"
+]
 
 
 class DHWComponent(
