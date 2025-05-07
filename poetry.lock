@@ -65,55 +65,59 @@ name = "archetypal"
 version = "2.18.5"
 description = "Retrieve, construct, simulate, convert and analyse building archetypes"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = ">=3.9,<4.0"
 groups = ["main"]
-files = [
-    {file = "archetypal-2.18.5-py3-none-any.whl", hash = "sha256:8f6b7ea9d624225d9007f99dbac153a9e370b5084f7007b21276304bf2de10c8"},
-    {file = "archetypal-2.18.5.tar.gz", hash = "sha256:57e6f3e976c69adf22ccc79cbcbb08fd331029fe7956389eec07eb292ccf7c96"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 beautifulsoup4 = "<=4.8"
-click = ">=8.1.7,<9.0.0"
-contourpy = ">=1.2.1,<2.0.0"
-coolprop = ">=6.6.0,<7.0.0"
-cycler = ">=0.12.1,<0.13.0"
-decorator = ">=5.1.1,<6.0.0"
-deprecation = ">=2.1.0,<3.0.0"
-energy_pandas = ">=0.4.1,<0.5.0"
-eppy = ">=0.5.63,<0.6.0"
-esoreader = ">=1.2.3,<2.0.0"
-fonttools = ">=4.53.0,<5.0.0"
-future = ">=1.0.0,<2.0.0"
-kiwisolver = ">=1.4.5,<2.0.0"
-lxml = ">=5.2.2,<6.0.0"
+click = "^8.1.7"
+contourpy = "^1.2.1"
+coolprop = "^6.6.0"
+cycler = "^0.12.1"
+decorator = "^5.1.1"
+deprecation = "^2.1.0"
+energy_pandas = "^0.4.1"
+eppy = "^0.5.63"
+esoreader = "^1.2.3"
+fonttools = "^4.53.0"
+future = "^1.0.0"
+kiwisolver = "^1.4.5"
+lxml = "^5.2.2"
 matplotlib = ">=3.4,<4.0"
-munch = ">=4.0.0,<5.0.0"
+munch = "^4.0.0"
 networkx = "<3"
-numpy = {version = ">=2.1.1,<3.0.0", markers = "python_version == \"3.10\""}
-outdated = ">=0.2.2,<0.3.0"
-packaging = ">=24.1,<25.0"
+numpy = {version = "^2.1.1", markers = "python_version == \"3.10\""}
+outdated = "^0.2.2"
+packaging = "^24.1"
 pandas = ">=2.0.3"
-path = ">=16.14.0,<17.0.0"
-pillow = ">=10.3.0,<11.0.0"
-pyclipper = ">=1.3.0.post5,<2.0.0"
-pycountry = ">=24.6.1,<25.0.0"
-pydantic-settings = ">=2.3.2,<3.0.0"
-pydot3k = ">=1.0.17,<2.0.0"
-pyparsing = ">=3.1.2,<4.0.0"
-pypoly2tri = ">=0.0.3,<0.0.4"
-python-dateutil = ">=2.9.0.post0,<3.0.0"
-requests = ">=2.32.3,<3.0.0"
-scikit-learn = ">=1.5.0,<2.0.0"
-shapely = ">=2.0.6,<3.0.0"
-sigfig = ">=1.3.3,<2.0.0"
-six = ">=1.16.0,<2.0.0"
-soupsieve = ">=2.5,<3.0"
-tomli = ">=2.0.1,<3.0.0"
-tqdm = ">=4.66.4,<5.0.0"
-transforms3d = ">=0.4.1,<0.5.0"
-typing-extensions = ">=4.12.2,<5.0.0"
-validator-collection = ">=1.5.0,<2.0.0"
+path = ">=17.1.0"
+pillow = "^10.3.0"
+pyclipper = "^1.3.0.post5"
+pycountry = "^24.6.1"
+pydantic-settings = "^2.3.2"
+pydot3k = "^1.0.17"
+pyparsing = "^3.1.2"
+pypoly2tri = "^0.0.3"
+python-dateutil = "^2.9.0.post0"
+requests = "^2.32.3"
+scikit-learn = "^1.5.0"
+shapely = "^2.0.6"
+sigfig = "^1.3.3"
+six = "^1.16.0"
+soupsieve = "^2.5"
+tomli = "^2.0.1"
+tqdm = "^4.66.4"
+transforms3d = "^0.4.1"
+typing-extensions = "^4.12.2"
+validator-collection = "^1.5.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/samuelduchesne/archetypal.git"
+reference = "develop"
+resolved_reference = "3dadcdce376e1f52bb4d3862c4142aebc1a34546"
 
 [[package]]
 name = "argon2-cffi"
@@ -3017,19 +3021,23 @@ testing = ["docopt", "pytest"]
 
 [[package]]
 name = "path"
-version = "16.16.0"
+version = "17.1.0"
 description = "A module wrapper for os.path"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "path-16.16.0-py3-none-any.whl", hash = "sha256:d981989cf87598adc9f5b71ec5192d314a384836e81b4b1f34197138dc4ae659"},
-    {file = "path-16.16.0.tar.gz", hash = "sha256:a6a6d916c910dc17e0ddc883358756c5a33d1b6dbdf5d6de86554f399053af58"},
+    {file = "path-17.1.0-py3-none-any.whl", hash = "sha256:688e7ec254f07a1c25f5474662d4480c663a2c8c4eb15c0ba056d8ab81608d22"},
+    {file = "path-17.1.0.tar.gz", hash = "sha256:d41e05ed4fa1d4f6d702df3c1e0a1a255d7b544287432456455dc7c51e5f98e9"},
 ]
 
 [package.extras]
+check = ["pytest-checkdocs (>=2.4)", "pytest-ruff (>=0.2.1) ; sys_platform != \"cygwin\""]
+cover = ["pytest-cov"]
 doc = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
-test = ["appdirs", "more-itertools", "packaging", "pygments", "pytest (>=6,!=8.1.*)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy", "pytest-ruff (>=0.2.1) ; sys_platform != \"cygwin\"", "pywin32 ; platform_system == \"Windows\" and python_version < \"3.12\""]
+enabler = ["pytest-enabler (>=2.2)"]
+test = ["appdirs", "more_itertools", "packaging", "pygments", "pytest (>=6,!=8.1.*)", "pywin32 ; platform_system == \"Windows\" and python_version < \"3.12\""]
+type = ["pytest-mypy"]
 
 [[package]]
 name = "pathspec"
@@ -5296,4 +5304,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "0af68700a7d0a65859b65009d725fbe5d1477765b05efaba4313f461d22022f1"
+content-hash = "09b313d88b9c4430c1d3dba3b59cb3948c729c4e2354f5d223e44109daad41fe"
