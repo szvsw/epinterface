@@ -258,7 +258,14 @@ class ZoneOperationsComponent(
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
                 Name=vent_wind_stack_name,
                 Zone_or_Space_Name=target_zone_name,
-                Minimum_Outdoor_Temperature=assumed_constants.Minimum_Outdoor_Temperature,
+                Minimum_Outdoor_Temperature_Schedule_Name=thermostat.Heating_Setpoint_Schedule_Name,
+                Minimum_Outdoor_Temperature=None
+                if thermostat.Heating_Setpoint_Schedule_Name
+                else (
+                    thermostat.Constant_Heating_Setpoint
+                    if thermostat.Constant_Heating_Setpoint is not None
+                    else assumed_constants.Minimum_Outdoor_Temperature
+                ),
                 Maximum_Outdoor_Temperature=assumed_constants.Maximum_Outdoor_Temperature,
                 Opening_Area=total_window_area,
                 Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name,
