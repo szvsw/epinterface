@@ -892,8 +892,8 @@ class FlatModel(BaseModel):
     HeatingDistributionCOP: float
     CoolingDistributionCOP: float
 
-    EquipmentPowerDensity: float = Field(ge=0, le=50)
-    LightingPowerDensity: float = Field(ge=0, le=50)
+    EquipmentPowerDensity: float = Field(ge=0, le=200)
+    LightingPowerDensity: float = Field(ge=0, le=100)
     OccupantDensity: float = Field(ge=0, le=50)
 
     VentFlowRatePerPerson: float
