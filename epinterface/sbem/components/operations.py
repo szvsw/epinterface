@@ -203,9 +203,6 @@ class ZoneOperationsComponent(
         if self.HVAC.Ventilation.DCV != "NoDCV":
             # check the design spec outdoor air for the DCV
             raise NotImplementedError("DCV not implemented.")
-        if self.HVAC.Ventilation.Economizer != "NoEconomizer":
-            # check the differential dry bulb vs. differential enthalpy for the economizer
-            raise NotImplementedError("Economizer not implemented")
         hvac_template = HVACTemplateZoneIdealLoadsAirSystem(
             Zone_Name=target_zone_name,
             Template_Thermostat_Name=thermostat.Name,
