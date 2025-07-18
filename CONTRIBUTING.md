@@ -45,7 +45,7 @@ If you are proposing a new feature:
 # Get Started!
 
 Ready to contribute? Here's how to set up `epinterface` for local development.
-Please note this documentation assumes you already have `poetry` and `Git` installed and ready to go.
+Please note this documentation assumes you already have `uv` and `Git` installed and ready to go.
 
 1. Fork the `epinterface` repo on GitHub.
 
@@ -60,28 +60,10 @@ git clone git@github.com:YOUR_NAME/epinterface.git
 
 ```bash
 cd epinterface
+make install
 ```
 
-If you are using `pyenv`, select a version to use locally. (See installed versions with `pyenv versions`)
-
-```bash
-pyenv local <x.y.z>
-```
-
-Then, install and activate the environment with:
-
-```bash
-poetry install
-poetry shell
-```
-
-4. Install pre-commit to run linters/formatters at commit time:
-
-```bash
-poetry run pre-commit install
-```
-
-5. Create a branch for local development:
+4. Create a branch for local development:
 
 ```bash
 git checkout -b name-of-your-bugfix-or-feature
@@ -89,9 +71,9 @@ git checkout -b name-of-your-bugfix-or-feature
 
 Now you can make your changes locally.
 
-6. Don't forget to add test cases for your added functionality to the `tests` directory.
+5. Don't forget to add test cases for your added functionality to the `tests` directory.
 
-7. When you're done making changes, check that your changes pass the formatting tests.
+6. When you're done making changes, check that your changes pass the formatting tests.
 
 ```bash
 make check
