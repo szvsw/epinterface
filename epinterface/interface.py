@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from logging import getLogger
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, Self
 
 import numpy as np
 from archetypal.idfclass import IDF
@@ -41,7 +41,7 @@ class BaseObj(BaseModel):
         return idf
 
     @classmethod
-    def extract(cls, idf: IDF):
+    def extract(cls, idf: IDF) -> Sequence[Self]:
         """Extract objects from an IDF object.
 
         Args:
