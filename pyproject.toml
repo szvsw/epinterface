@@ -60,6 +60,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py312"
+exclude = ["notebooks/everett_lib_v2.ipynb"]
 line-length = 88
 fix = true
 select = [
