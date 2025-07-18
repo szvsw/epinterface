@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from logging import getLogger
-from typing import Annotated, ClassVar, Literal, Self
+from typing import Annotated, ClassVar, Literal
 
 import numpy as np
 from archetypal.idfclass import IDF
@@ -15,6 +15,11 @@ from pydantic import (
     computed_field,
     field_validator,
 )
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self  # noqa: UP035
 
 logger = getLogger(__name__)
 
