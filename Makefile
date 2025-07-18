@@ -5,6 +5,11 @@ install: ## Install the virtual environment and install the pre-commit hooks
 	@uv run pre-commit install
 	@make prisma-generate
 
+.PHONY: clean-env
+clean-env: ## Clean the uv environment
+	@echo "🚀 Removing .venv directory created by uv (if exists)"
+	@rm -rf .venv
+
 .PHONY: check
 check: ## Run code quality tools.
 	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
