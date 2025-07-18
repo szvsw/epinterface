@@ -77,14 +77,14 @@ def test_height_of_building_surfaces(
     min_height = min(z_coords)
 
     # Assert that the maximum height matches the expected value
-    assert max_height == pytest.approx(
-        expected_max_height, rel=1e-2
-    ), f"Max height {max_height} does not match expected {expected_max_height}"
+    assert max_height == pytest.approx(expected_max_height, rel=1e-2), (
+        f"Max height {max_height} does not match expected {expected_max_height}"
+    )
 
     # Assert that the minimum height matches the expected value
-    assert min_height == pytest.approx(
-        expected_min_height, rel=1e-2
-    ), f"Min height {min_height} does not match expected {expected_min_height}"
+    assert min_height == pytest.approx(expected_min_height, rel=1e-2), (
+        f"Min height {min_height} does not match expected {expected_min_height}"
+    )
 
 
 f2f_heights = [3.5]
@@ -176,16 +176,16 @@ def test_num_zones(
 
     n_zones = len(idf.idfobjects["ZONE"])
 
-    assert (
-        n_zones == expected_num_zones
-    ), f"Expected {expected_num_zones} zones, found {n_zones}."
+    assert n_zones == expected_num_zones, (
+        f"Expected {expected_num_zones} zones, found {n_zones}."
+    )
 
     zone_names = [zone.Name for zone in idf.idfobjects["ZONE"]]
     zones_with_attic_in_name = [zone for zone in zone_names if "attic" in zone.lower()]
     expected_attic_ct = 1 if roof_height is not None else 0
-    assert (
-        len(zones_with_attic_in_name) == (expected_attic_ct)
-    ), f"Expected {expected_attic_ct} attic zones, found {len(zones_with_attic_in_name)}."
+    assert len(zones_with_attic_in_name) == (expected_attic_ct), (
+        f"Expected {expected_attic_ct} attic zones, found {len(zones_with_attic_in_name)}."
+    )
 
     if basement:
         suffix = geom.basement_suffix
@@ -194,9 +194,9 @@ def test_num_zones(
         ]
 
         expected_basement_suffices = 1 if zoning == "by_storey" else 5
-        assert (
-            len(zones_with_basement_suffix) == expected_basement_suffices
-        ), f"Expected {expected_basement_suffices} zones with basement suffix, found {len(zones_with_basement_suffix)}."
+        assert len(zones_with_basement_suffix) == expected_basement_suffices, (
+            f"Expected {expected_basement_suffices} zones with basement suffix, found {len(zones_with_basement_suffix)}."
+        )
 
 
 f2f_heights = [3.5]
@@ -246,9 +246,9 @@ def test_num_roof_srfs(
         if srf.Surface_Type.lower() == "roof"
     ])
 
-    assert (
-        expected_num_rf_srfs == n_rf_srfs
-    ), f"Expected {expected_num_rf_srfs} roof surfaces, found {n_rf_srfs}."
+    assert expected_num_rf_srfs == n_rf_srfs, (
+        f"Expected {expected_num_rf_srfs} roof surfaces, found {n_rf_srfs}."
+    )
 
 
 f2f_heights = [3.5]
@@ -328,21 +328,21 @@ def test_num_wall_srfs(
         and srf.Surface_Type.lower() == "wall"
     ])
 
-    assert (
-        expected_number_of_wall_srfs == n_wall_srfs
-    ), f"Expected {expected_number_of_wall_srfs} wall surfaces, found {n_wall_srfs}."
+    assert expected_number_of_wall_srfs == n_wall_srfs, (
+        f"Expected {expected_number_of_wall_srfs} wall surfaces, found {n_wall_srfs}."
+    )
 
-    assert (
-        expected_number_of_gnd_walls == n_gnd_wall_srfs
-    ), f"Expected {expected_number_of_gnd_walls} ground wall surfaces, found {n_gnd_wall_srfs}."
+    assert expected_number_of_gnd_walls == n_gnd_wall_srfs, (
+        f"Expected {expected_number_of_gnd_walls} ground wall surfaces, found {n_gnd_wall_srfs}."
+    )
 
-    assert (
-        expected_number_of_exposed_walls == n_exposed_wall_srfs
-    ), f"Expected {expected_number_of_exposed_walls} exposed wall surfaces, found {n_exposed_wall_srfs}."
+    assert expected_number_of_exposed_walls == n_exposed_wall_srfs, (
+        f"Expected {expected_number_of_exposed_walls} exposed wall surfaces, found {n_exposed_wall_srfs}."
+    )
 
-    assert (
-        expected_number_partition_srfs == n_partition_srfs
-    ), f"Expected {expected_number_partition_srfs} partition wall surfaces, found {n_partition_srfs}."
+    assert expected_number_partition_srfs == n_partition_srfs, (
+        f"Expected {expected_number_partition_srfs} partition wall surfaces, found {n_partition_srfs}."
+    )
 
 
 f2f_heights = [3.5]
@@ -409,17 +409,17 @@ def test_num_floor_sfs(
         and srf.Surface_Type.lower() == "floor"
     ])
 
-    assert (
-        expected_number_of_any_floor_srfs == n_floor_srfs
-    ), f"Expected {expected_number_of_any_floor_srfs} floor surfaces, found {n_floor_srfs}."
+    assert expected_number_of_any_floor_srfs == n_floor_srfs, (
+        f"Expected {expected_number_of_any_floor_srfs} floor surfaces, found {n_floor_srfs}."
+    )
 
-    assert (
-        expected_number_of_ground_floor_srfs == n_gnd_floor_srfs
-    ), f"Expected {expected_number_of_ground_floor_srfs} ground floor surfaces, found {n_gnd_floor_srfs}."
+    assert expected_number_of_ground_floor_srfs == n_gnd_floor_srfs, (
+        f"Expected {expected_number_of_ground_floor_srfs} ground floor surfaces, found {n_gnd_floor_srfs}."
+    )
 
-    assert (
-        expected_number_of_floor_srfs == n_non_gnd_floor_srfs
-    ), f"Expected {expected_number_of_floor_srfs} non-ground floor surfaces, found {n_non_gnd_floor_srfs}."
+    assert expected_number_of_floor_srfs == n_non_gnd_floor_srfs, (
+        f"Expected {expected_number_of_floor_srfs} non-ground floor surfaces, found {n_non_gnd_floor_srfs}."
+    )
 
 
 f2f_heights = [3.5]
@@ -468,9 +468,9 @@ def test_num_ceil_sfs(
         if srf.Surface_Type.lower() == "ceiling"
     ])
 
-    assert (
-        expected_number_ceiling_srfs == n_ceiling_srfs
-    ), f"Expected {expected_number_ceiling_srfs} ceiling surfaces, found {n_ceiling_srfs}."
+    assert expected_number_ceiling_srfs == n_ceiling_srfs, (
+        f"Expected {expected_number_ceiling_srfs} ceiling surfaces, found {n_ceiling_srfs}."
+    )
 
 
 widths = [10, 20]
@@ -568,9 +568,9 @@ def test_match_idf_to_geometry_neighbors(
         unique_z_coordinates = set(z_coordinates)
         unique_z = np.array(sorted(unique_z_coordinates))
         expected_z = np.array([0, 3.5 * 2, 3.5 * 4])
-        assert np.allclose(
-            unique_z, expected_z
-        ), f"Expected: {expected_z}, found: {unique_z}"
+        assert np.allclose(unique_z, expected_z), (
+            f"Expected: {expected_z}, found: {unique_z}"
+        )
 
         assert len(unique_z_coordinates) == 3
 
@@ -624,15 +624,15 @@ def test_match_idf_to_geometry_neighbors(
             new_lower_right[1], new_upper_right[1], new_lower_left[1], new_upper_left[1]
         )
 
-        assert (
-            pytest.approx(new_x_max_expected, rel=1e-2) == x_max
-        ), f"Expected x_max to be {new_x_max_expected}, found {x_max}"
-        assert (
-            pytest.approx(new_x_min_expected, rel=1e-2) == x_min
-        ), f"Expected x_min to be {new_x_min_expected}, found {x_min}"
-        assert (
-            pytest.approx(new_y_max_expected, rel=1e-2) == y_max
-        ), f"Expected y_max to be {new_y_max_expected}, found {y_max}"
-        assert (
-            pytest.approx(new_y_min_expected, rel=1e-2) == y_min
-        ), f"Expected y_min to be {new_y_min_expected}, found {y_min}"
+        assert pytest.approx(new_x_max_expected, rel=1e-2) == x_max, (
+            f"Expected x_max to be {new_x_max_expected}, found {x_max}"
+        )
+        assert pytest.approx(new_x_min_expected, rel=1e-2) == x_min, (
+            f"Expected x_min to be {new_x_min_expected}, found {x_min}"
+        )
+        assert pytest.approx(new_y_max_expected, rel=1e-2) == y_max, (
+            f"Expected y_max to be {new_y_max_expected}, found {y_max}"
+        )
+        assert pytest.approx(new_y_min_expected, rel=1e-2) == y_min, (
+            f"Expected y_min to be {new_y_min_expected}, found {y_min}"
+        )
