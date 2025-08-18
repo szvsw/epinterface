@@ -12,6 +12,7 @@ Fields:
       - pre_1975
       - btw_1975_2003
       - post_2003
+
   - Name: AtticVentilation
     Options:
       - UnventilatedAttic
@@ -48,7 +49,6 @@ Fields:
       - LeakyEnvelope
       - SomewhatLeakyEnvelope
       - TightEnvelope
-      - TightEnvelopeHRV
   - Name: Walls
     Options:
       - UninsulatedWalls
