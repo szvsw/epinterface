@@ -16,6 +16,11 @@ from pydantic import (
     field_validator,
 )
 
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self  # noqa: UP035
+
 logger = getLogger(__name__)
 
 
@@ -41,7 +46,7 @@ class BaseObj(BaseModel):
         return idf
 
     @classmethod
-    def extract(cls, idf: IDF):
+    def extract(cls, idf: IDF) -> Sequence[Self]:
         """Extract objects from an IDF object.
 
         Args:
