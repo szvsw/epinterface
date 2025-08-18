@@ -20,7 +20,6 @@ Envelope:
       source_fields:
         - Region
         - Windows
-
   Assemblies:
     selector:
       source_fields:

@@ -18,6 +18,8 @@ FuelType = Literal[
     "Gasoline",
     "Diesel",
     "CustomFuel",
+    "Steam",
+    "ChilledWater",
 ]
 HeatingSystemType = Literal[
     "ElectricResistance", "GasBoiler", "GasFurnace", "ASHP", "GSHP"
@@ -212,7 +214,7 @@ class ZoneHVACComponent(
         return idf
 
 
-DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil"]
+DHWFuelType = Literal["Electricity", "NaturalGas", "Propane", "FuelOil", "Steam"]
 
 
 class DHWComponent(

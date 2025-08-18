@@ -730,10 +730,15 @@ class ZoneInfiltrationDesignFlowRate(BaseObj, extra="ignore"):
     Flow_Rate_per_Floor_Area: float | None = None
     Flow_Rate_per_Exterior_Surface_Area: float | None = None
     Air_Changes_per_Hour: float | None = None
-    Constant_Term_Coefficient: float = 0.606
-    Temperature_Term_Coefficient: float = 3.6359996e-2
-    Velocity_Term_Coefficient: float = 0.117765
-    Velocity_Squared_Term_Coefficient: float = 0
+    # Constant_Term_Coefficient: float = 0.606
+    # Temperature_Term_Coefficient: float = 3.6359996e-2
+    # Velocity_Term_Coefficient: float = 0.117765
+    Constant_Term_Coefficient: float = 1  # updated to assume that we have the actual infiltration values - the more detailed coefficient methodology would likely overestimate the infiltration rate, as there are many days where the tmperature deltas exceeds 10 degrees.
+    Temperature_Term_Coefficient: float = 0
+    Velocity_Term_Coefficient: float = 0
+    Velocity_Squared_Term_Coefficient: float = (
+        0  # updated as we don't make assumptions about the wind velocity
+    )
 
 
 NumberOfPeopleCalculationMethodType = Literal["People", "People/Area", "Area/Person"]

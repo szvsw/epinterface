@@ -778,6 +778,9 @@ class Model(BaseWeather, validate_assignment=True):
         output_meters = [
             {"key": "OUTPUT:METER", "Key_Name": meter, "Reporting_Frequency": "Monthly"}
             for meter in DESIRED_METERS
+        ] + [
+            {"key": "OUTPUT:METER", "Key_Name": meter, "Reporting_Frequency": "Hourly"}
+            for meter in DESIRED_METERS
         ]
         idf = IDF(
             target_base_filepath.as_posix(),
@@ -956,8 +959,8 @@ class Model(BaseWeather, validate_assignment=True):
         Returns:
             series (pd.Series): The postprocessed results.
         """
+        raw_hourly = sql.timeseries_by_name(DESIRED_METERS, "Hourly")
         raw_monthly = sql.timeseries_by_name(DESIRED_METERS, "Monthly")
-        # TODO: get peaks
         raw_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
@@ -1020,6 +1023,24 @@ class Model(BaseWeather, validate_assignment=True):
             msg += f"Raw monthly: {raw_monthly.sum().sum()}"
             raise ValueError(msg)
 
+        raw_hourly = (
+            (raw_hourly.droplevel(["IndexGroup", "KeyValue"], axis=1))
+            * GJ_per_J
+            * kWh_per_GJ
+            / normalizing_floor_area
+        ).rename(
+            columns={
+                "InteriorLights:Electricity": "Lighting",
+                "InteriorEquipment:Electricity": "Equipment",
+                "Heating:DistrictHeating": "Heating",
+                "Cooling:DistrictCooling": "Cooling",
+                "WaterSystems:DistrictHeating": "Domestic Hot Water",
+            }
+        )
+        raw_hourly.columns.name = "Meter"
+        raw_hourly_max: pd.Series = raw_hourly.max(axis=0)
+        raw_monthly_hourly_max = raw_hourly.resample("M").max()
+
         ops = self.Zone.Operations
         cond_sys = ops.HVAC.ConditioningSystems
         heat_cop = (
@@ -1071,14 +1092,95 @@ class Model(BaseWeather, validate_assignment=True):
             msg = "Utilities df and end use df do not sum to the same value!"
             raise ValueError(msg)
 
-        dfs = pd.concat(
-            [raw_monthly, end_use_df, utilities_df],
-            axis=1,
-            keys=["Raw", "End Uses", "Utilities"],
-            names=["Aggregation", "Meter"],
-        ).unstack()
+        energy_dfs = (
+            pd.concat(
+                [raw_monthly, end_use_df, utilities_df],
+                axis=1,
+                keys=["Raw", "End Uses", "Utilities"],
+                names=["Aggregation", "Meter"],
+            )
+            .unstack()
+            .fillna(0)
+        )
+        energy_series = cast(pd.Series, energy_dfs).rename("kWh/m2")
 
-        return cast(pd.Series, dfs.fillna(0)).rename("kWh/m2")
+        heat_use_hourly = (
+            (raw_hourly["Heating"] / heat_cop)
+            if "Heating" in raw_hourly
+            else (raw_hourly["Lighting"] * 0).rename("Heating")
+        )
+        cool_use_hourly = (
+            (raw_hourly["Cooling"] / cool_cop)
+            if "Cooling" in raw_hourly
+            else (raw_hourly["Lighting"] * 0).rename("Cooling")
+        )
+        dhw_use_hourly = (
+            (raw_hourly["Domestic Hot Water"] / dhw_cop)
+            if "Domestic Hot Water" in raw_hourly
+            else (raw_hourly["Lighting"] * 0).rename("Domestic Hot Water")
+        )
+        lighting_use_hourly = raw_hourly["Lighting"]
+        equipment_use_hourly = raw_hourly["Equipment"]
+
+        end_use_df_hourly = pd.concat(
+            [
+                lighting_use_hourly,
+                equipment_use_hourly,
+                heat_use_hourly,
+                cool_use_hourly,
+                dhw_use_hourly,
+            ],
+            axis=1,
+        )
+        utilities_df_hourly = pd.DataFrame(
+            index=raw_hourly.index,
+            columns=sorted(all_fuels),
+            dtype=float,
+            data=np.zeros((len(raw_hourly), len(all_fuels))),
+        )
+        utilities_df_hourly["Electricity"] = lighting_use_hourly + equipment_use_hourly
+        if heat_fuel is not None:
+            utilities_df_hourly[heat_fuel] += heat_use_hourly
+        if cool_fuel is not None:
+            utilities_df_hourly[cool_fuel] += cool_use_hourly
+        utilities_df_hourly[dhw_fuel] += dhw_use_hourly
+
+        if not np.allclose(
+            utilities_df_hourly.sum().sum(), end_use_df_hourly.sum().sum()
+        ):
+            msg = "Utilities df and end use df do not sum to the same value!"
+            raise ValueError(msg)
+
+        utility_max = utilities_df_hourly.max()
+        utility_monthly_hourly_max = utilities_df_hourly.resample("M").max()
+        utility_max.index.name = "Meter"
+        max_data = pd.concat(
+            [utility_max, raw_hourly_max],
+            axis=0,
+            keys=["Utilities", "Raw"],
+            names=["Aggregation", "Meter"],
+        ).fillna(0)
+        max_data = cast(pd.Series, max_data).rename("kW/m2")
+
+        utility_monthly_hourly_max.index = pd.RangeIndex(1, 13, 1, name="Month")
+        raw_monthly_hourly_max.index = pd.RangeIndex(1, 13, 1, name="Month")
+        max_data_monthly = pd.concat(
+            [utility_monthly_hourly_max, raw_monthly_hourly_max],
+            axis=1,
+            keys=["Utilities", "Raw"],
+            names=["Aggregation"],
+        ).fillna(0)
+
+        peaks_series = (
+            cast(pd.Series, max_data_monthly.unstack()).fillna(0).rename("kW/m2")
+        )
+        all_data = pd.concat(
+            [energy_series, peaks_series],
+            keys=["Energy", "Peak"],
+            names=["Measurement"],
+        )
+
+        return all_data
 
     def run(
         self,
@@ -1118,68 +1220,87 @@ class Model(BaseWeather, validate_assignment=True):
 
 
 if __name__ == "__main__":
-    from epinterface.sbem.prisma.client import PrismaSettings, deep_fetcher
-    from epinterface.sbem.prisma.seed_fns import (
-        create_dhw_systems,
-        create_envelope,
-        create_hvac_systems,
-        create_operations,
-        create_schedules,
-        create_space_use_children,
-        create_zone,
+    import yaml
+
+    from epinterface.sbem.components.composer import (
+        construct_composer_model,
+        construct_graph,
     )
+    from epinterface.sbem.prisma.client import PrismaSettings
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        database_path = Path(temp_dir) / "test.db"
-        settings = PrismaSettings.New(
-            database_path=database_path, if_exists="raise", auto_register=False
+        database_path = Path("tests") / "data" / "components-ma.db"
+        component_map_path = Path("tests") / "data" / "component-map-ma.yml"
+        settings = PrismaSettings(
+            database_path=database_path,
+            auto_register=False,
         )
+        g = construct_graph(ZoneComponent)
+        SelectorModel = construct_composer_model(
+            g,
+            ZoneComponent,
+            use_children=False,
+        )
+
+        with open(component_map_path) as f:
+            component_map_yaml = yaml.safe_load(f)
+        selector = SelectorModel.model_validate(component_map_yaml)
+        db = settings.db
+        context = {
+            "Region": "MA",
+            "Typology": "SFH",
+            "Age_bracket": "pre_1975",
+            "AtticVentilation": "UnventilatedAttic",
+            "AtticFloorInsulation": "NoInsulation",
+            "RoofInsulation": "UninsulatedRoof",
+            "BasementCeilingInsulation": "UninsulatedCeiling",
+            "BasementWallsInsulation": "UninsulatedWalls",
+            "GroundSlabInsulation": "UninsulatedGroundSlab",
+            "Walls": "FullInsulationWallsCavity",
+            "Weatherization": "SomewhatLeakyEnvelope",
+            "Windows": "DoublePaneLowE",
+            "Heating": "ASHPHeating",
+            "Cooling": "ASHPCooling",
+            "Distribution": "Steam",
+            "DHW": "NaturalGasDHW",
+            "Lighting": "NoLED",
+            "Equipment": "LowEfficiencyEquipment",
+            "Thermostat": "NoControls",
+        }
         with settings.db:
-            create_schedules(settings.db)
-            last_space_use_name = create_space_use_children(settings.db)
-            last_hvac_name = create_hvac_systems(settings.db)
-            last_dhw_name = create_dhw_systems(settings.db)
-            _last_ops_name = create_operations(
-                settings.db, last_space_use_name, last_hvac_name, last_dhw_name
-            )
+            zone = cast(ZoneComponent, selector.get_component(context=context, db=db))
 
-            create_envelope(settings.db)
-            create_zone(settings.db)
+        model = Model(
+            Weather=(
+                "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
+            ),  # pyright: ignore [reportArgumentType]
+            Zone=zone,
+            Attic=AtticAssumptions(
+                Conditioned=False,
+                UseFraction=None,
+            ),
+            Basement=BasementAssumptions(
+                Conditioned=False,
+                UseFraction=None,
+            ),
+            geometry=ShoeboxGeometry(
+                x=0,
+                y=0,
+                w=14,
+                d=14,
+                h=3,
+                wwr=0.2,
+                num_stories=1,
+                basement=True,
+                zoning="by_storey",
+                roof_height=3,
+            ),
+        )
 
-            _, zone = deep_fetcher.Zone.get_deep_object("default_zone", settings.db)
-            deep_fetcher.SpaceUse.get_deep_object("default", settings.db)
-
-            model = Model(
-                Weather=(
-                    "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
-                ),  # pyright: ignore [reportArgumentType]
-                Zone=zone,
-                Attic=AtticAssumptions(
-                    Conditioned=True,
-                    UseFraction=1,
-                ),
-                Basement=BasementAssumptions(
-                    Conditioned=True,
-                    UseFraction=1,
-                ),
-                geometry=ShoeboxGeometry(
-                    x=0,
-                    y=0,
-                    w=23.3736,
-                    d=19.273673,
-                    h=3,
-                    wwr=0.2,
-                    num_stories=3,
-                    basement=True,
-                    zoning="core/perim",
-                    roof_height=3,
-                ),
-            )
-
-            # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
-            _idf, results, _err_text = model.run(
-                # post_geometry_callback=post_geometry_callback,
-            )
-            # _idf.saveas("test-out.idf")
-            print(_err_text)
-            print(results)
+        # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
+        _idf, results, _err_text = model.run(
+            # post_geometry_callback=post_geometry_callback,
+        )
+        # _idf.saveas("test-out.idf")
+        print(_err_text)
+        print(results)
