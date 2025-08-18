@@ -1819,14 +1819,18 @@ class FlatModel(BaseModel):
             November=all_off_week,
             December=all_off_week,
         )
+
         ventilation_system = VentilationComponent(
             Name="VentilationSystem",
             FreshAirPerFloorArea=self.VentFlowRatePerArea,
             FreshAirPerPerson=self.VentFlowRatePerPerson,
             Provider=self.VentProvider,
+            # TODO: should hrv sensible/latent efficiency be configurable? (e.g. high/medium/low)
             HRV=self.VentHRV,
             Economizer=self.VentEconomizer,
             DCV=self.VentDCV,
+            # TODO: this controls natvnent and should
+            # be configurable for residential models
             Schedule=all_off_year,
         )
 
@@ -1840,6 +1844,7 @@ class FlatModel(BaseModel):
             Name="DHW",
             SystemCOP=self.DHWSystemCOP,
             DistributionCOP=self.DHWDistributionCOP,
+            # TODO: should these be configurable?
             WaterTemperatureInlet=10,
             WaterSupplyTemperature=55,
             IsOn=True,
@@ -1874,6 +1879,8 @@ class FlatModel(BaseModel):
             FlowPerExteriorSurfaceArea=0.0,
         )
 
+        # TODO: verify interior/exterior
+        # TODO: are we okaky with mass assumptions?
         facade = ConstructionAssemblyComponent(
             Name="Facade",
             Type="Facade",
@@ -2077,6 +2084,7 @@ class FlatModel(BaseModel):
     def to_model(self) -> tuple[Model, Callable[[IDF], IDF]]:
         """Returns a tuple of a Model and a post-geometry callback."""
         zone = self.to_zone()
+        # TODO: add in a shading mask
         geometry = ShoeboxGeometry(
             x=0,
             y=0,
@@ -2084,6 +2092,7 @@ class FlatModel(BaseModel):
             d=self.Depth,
             h=self.F2FHeight,
             num_stories=self.NFloors,
+            # TODO: should core/perim be dependent on width, depth > 9m?
             zoning="core/perim",
             roof_height=None,
             wwr=self.WWR,
