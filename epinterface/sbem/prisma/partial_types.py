@@ -176,7 +176,13 @@ EnvelopeAssembly.create_partial(
 
 Envelope.create_partial(
     name="EnvelopeWithChildren",
-    required={"Assemblies", "Infiltration", "AtticInfiltration", "Window"},
+    required={
+        "Assemblies",
+        "Infiltration",
+        "AtticInfiltration",
+        "Window",
+        "BasementInfiltration",
+    },
     relations={"Assemblies": "EnvelopeAssemblyWithChildren"},
 )
 

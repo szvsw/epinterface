@@ -579,6 +579,9 @@ def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C9
                     "AtticInfiltration": {
                         "connect": {"Name": row["AtticInfiltration"]}
                     },
+                    "BasementInfiltration": {
+                        "connect": {"Name": row["BasementInfiltration"]}
+                    },
                     "Window": {"connect": {"Name": row["Windows"]}},
                 },
                 include=ENVELOPE_INCLUDE,

@@ -414,8 +414,9 @@ model Infiltration {
   MetadataId String?
   Metadata   Metadata? @relation(fields: [MetadataId], references: [id])
 
-  MainInfiltrations  Envelope[] @relation("Infiltration")
-  AtticInfiltrations Envelope[] @relation("AtticInfiltration")
+  MainInfiltrations     Envelope[] @relation("Infiltration")
+  AtticInfiltrations    Envelope[] @relation("AtticInfiltration")
+  BasementInfiltrations Envelope[] @relation("BasementInfiltration")
 }
 
 model Envelope {
@@ -431,6 +432,9 @@ model Envelope {
 
   AtticInfiltrationId String
   AtticInfiltration   Infiltration @relation("AtticInfiltration", fields: [AtticInfiltrationId], references: [id])
+
+  BasementInfiltrationId String
+  BasementInfiltration   Infiltration @relation("BasementInfiltration", fields: [BasementInfiltrationId], references: [id])
 
   WindowId String?
   Window   GlazingConstructionSimple? @relation(fields: [WindowId], references: [id])

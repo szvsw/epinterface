@@ -322,6 +322,7 @@ ENVELOPE_INCLUDE: EnvelopeInclude = {
     "Assemblies": {"include": ENVELOPE_ASSEMBLY_INCLUDE},
     "Infiltration": True,
     "AtticInfiltration": True,
+    "BasementInfiltration": True,
     "Window": True,
 }
 INFILTRATION_INCLUDE: InfiltrationInclude = {}

@@ -830,18 +830,20 @@ class Model(BaseWeather, validate_assignment=True):
             new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
             new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
 
-            # handle infiltration for basements, which we are assuming is 0 (or whatever is in assumed constants)
-            new_zone_def.Envelope.Infiltration.AirChangesPerHour = (
-                assumed_constants.Basement_Infiltration_Air_Changes_Per_Hour
+            # # handle infiltration for basements, which we are assuming is 0 (or whatever is in assumed constants)
+            new_zone_def.Envelope.Infiltration = (
+                new_zone_def.Envelope.BasementInfiltration
             )
-            new_zone_def.Envelope.Infiltration.FlowPerExteriorSurfaceArea = (
-                assumed_constants.Basement_Infiltration_Flow_Per_Exterior_Surface_Area
-            )
-            new_zone_def.Envelope.Infiltration.CalculationMethod = "AirChanges/Hour"
 
             if not self.Basement.Conditioned:
                 new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
                 new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+            else:
+                # TODO: make this configurable!!!!
+                print(
+                    "WARNING: Basement conditioned, but Cooling disabled due to MASSACHUSETTS ASSUMPTIONS"
+                )
                 new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
 
             for zone in added_zone_lists.basement_zone_list.Names:
