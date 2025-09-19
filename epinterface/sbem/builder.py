@@ -371,6 +371,7 @@ class SurfaceHandlers(BaseModel):
         window: GlazingConstructionSimpleComponent | None,
         with_attic: bool,
         with_basement: bool,
+        exposed_basement_frac: float = 0,
     ):
         """Assign the envelope to the IDF model.
 
@@ -382,6 +383,7 @@ class SurfaceHandlers(BaseModel):
             window (GlazingConstructionSimpleComponent | None): The window definition.
             with_attic (bool): Whether to add the attic floor and ceiling constructions.
             with_basement (bool): Whether to add the basement floor and ceiling constructions.
+            exposed_basement_frac (float): The fraction of the basement walls that are exposed above ground.
 
         Returns:
             idf (IDF): The updated IDF model.
@@ -438,6 +440,43 @@ class SurfaceHandlers(BaseModel):
         idf = self.GroundWall.assign_constructions_to_objs(
             idf=idf, construction=constructions.GroundWallAssembly
         )
+
+        if with_basement and exposed_basement_frac > 0:
+            basement_wall_surfaces = [
+                srf
+                for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+                if srf.Outside_Boundary_Condition == "ground"
+                and srf.Surface_Type == "wall"
+            ]
+            for srf in basement_wall_surfaces:
+                coords = srf.coords
+                z_coords = [c[2] for c in coords]
+                min_z = min(z_coords)
+                max_z = max(z_coords)
+                h = max_z - min_z
+                unexposed_height = h * (1 - exposed_basement_frac)
+                unexposed_height = min(
+                    max(unexposed_height, 0.15), h - 0.15
+                )  # 15cm, approximately 6in
+                cut_z = min_z + unexposed_height
+                z_coords_lower_section = [z if z == min_z else cut_z for z in z_coords]
+                z_coords_upper_section = [z if z == max_z else cut_z for z in z_coords]
+                coords_lower_section = [
+                    (c[0], c[1], z)
+                    for c, z in zip(coords, z_coords_lower_section, strict=False)
+                ]
+                coords_upper_section = [
+                    (c[0], c[1], z)
+                    for c, z in zip(coords, z_coords_upper_section, strict=False)
+                ]
+                new_bottom_srf = idf.copyidfobject(srf)
+                new_top_srf = idf.copyidfobject(srf)
+                new_bottom_srf.setcoords(coords_lower_section)
+                new_top_srf.setcoords(coords_upper_section)
+                new_bottom_srf.Name = f"{srf.Name}_bottom"
+                new_top_srf.Name = f"{srf.Name}_top"
+                new_top_srf.Outside_Boundary_Condition = "outdoors"
+                idf.removeidfobject(srf)
 
         if window:
             idf = self.Window.assign_constructions_to_objs(idf=idf, construction=window)
@@ -752,6 +791,7 @@ class Model(BaseWeather, validate_assignment=True):
             window_def,
             with_attic=(self.geometry.roof_height or 0) > 0,
             with_basement=self.geometry.basement,
+            exposed_basement_frac=self.geometry.exposed_basement_frac,
         )
 
         return idf
@@ -1256,7 +1296,7 @@ if __name__ == "__main__":
             "AtticFloorInsulation": "NoInsulation",
             "RoofInsulation": "UninsulatedRoof",
             "BasementCeilingInsulation": "InsulatedCeiling",
-            "BasementWallsInsulation": "InsulatedWalls",
+            "BasementWallsInsulation": "UninsulatedWalls",
             "GroundSlabInsulation": "UninsulatedGroundSlab",
             "Walls": "SomeInsulationWalls",
             "Weatherization": "SomewhatLeakyEnvelope",
@@ -1296,6 +1336,7 @@ if __name__ == "__main__":
                 basement=True,
                 zoning="by_storey",
                 roof_height=None,
+                exposed_basement_frac=0.25,
             ),
         )
 

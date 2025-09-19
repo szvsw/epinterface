@@ -232,6 +232,13 @@ class ShoeboxGeometry(BaseModel):
         title="Basement",
         description="Whether or not to use a basement with same f2f height as building.",
     )
+    exposed_basement_frac: float = Field(
+        default=0.0,
+        title="Exposed basement fraction",
+        description="The fraction of the basement that is exposed.",
+        ge=0,
+        lt=1,
+    )
     wwr: float = Field(
         default=0.15,
         title="Window-to-wall ratio",
