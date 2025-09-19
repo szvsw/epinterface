@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from epinterface.sbem.common import MetadataMixin, NamedObject
 
@@ -12,17 +12,27 @@ class EnvironmentalMixin(BaseModel):
     """Environmental data for a SBEM template table object."""
 
     Cost: float | None = Field(
-        default=None, title="Cost", ge=0, description="Cost of the material/unit"
+        default=None,
+        title="Cost of material",
+        ge=0,
+        description="Expected cost of the material per unit",
     )
     RateUnit: Literal["m3", "m2", "m", "kg"] | None = Field(
         default=None,
+        title="Rate unit",
         description="The base unit for cost and embodied carbon, i.e. $/unit",
     )
     Life: float | None = Field(
-        default=None, title="Life [years]", ge=0, description="Life of the material"
+        default=None,
+        title="Life [years]",
+        ge=0,
+        description="Expected lifetime of the material",
     )
     EmbodiedCarbon: float | None = Field(
-        default=None, title="Embodied carbon [kgCO2e/unit]", ge=0
+        default=None,
+        title="Embodied carbon [kgCO2e/unit]",
+        ge=0,
+        description="Expected embodied carbon of the material per unit",
     )
 
 
@@ -39,11 +49,13 @@ class CommonMaterialPropertiesMixin(BaseModel):
     Conductivity: float = Field(
         ...,
         title="Conductivity [W/mK]",
+        description="Conductivity property of the material at standard conditions",
         ge=0,
     )
     Density: float = Field(
         ...,
         title="Density [kg/m3]",
+        description="Density property of the material at standard conditions",
         ge=0,
     )
 
@@ -94,30 +106,38 @@ class ConstructionMaterialProperties(
     CommonMaterialPropertiesMixin,
     extra="forbid",
 ):
-    """Properties of an opaque material."""
+    """Properties of an opaque material in a construction component."""
 
     # add in the commonMaterialsPropertis
-    Roughness: MaterialRoughness = Field(..., title="Roughness of the opaque material")
+    Roughness: MaterialRoughness = Field(
+        ...,
+        title="Roughness of the opaque material",
+        description="Roughness property of the material as defined by EnergyPlus",
+    )
     SpecificHeat: float = Field(
         ...,
         title="Specific heat [J/kgK]",
+        description="Specific heat property of the material",
         ge=0,
     )
     ThermalAbsorptance: float = Field(
         ...,
-        title="Thermal absorptance [0-1]",
+        title="Thermal absorptance",
+        description="Thermal absorptance property of the material, between 0 and 1",
         ge=0,
         le=1,
     )
     SolarAbsorptance: float = Field(
         ...,
-        title="Solar absorptance [0-1]",
+        title="Solar absorptance",
+        description="Solar absorptance property of the material, between 0 and 1",
         ge=0,
         le=1,
     )
     VisibleAbsorptance: float = Field(
         ...,
-        title="Visible absorptance [0-1]",
+        title="Visible absorptance",
+        description="Visible absorptance property of the material, between 0 and 1",
         ge=0,
         le=1,
     )
@@ -125,10 +145,32 @@ class ConstructionMaterialProperties(
     TemperatureCoefficientThermalConductivity: float = Field(
         ...,
         # a superscript 2 looks like this:
-        title="Temperature coefficient of thermal conductivity [W/m.K2²]",
+        title="Temperature coefficient [W/m.K2²]",
+        description="Temperature coefficient of thermal conductivity property of the material",
         ge=0,
     )
-    # TODO: material type should be dynamic user entry or enum
+
+    # model validator to check if material properties are larger than 0
+    @model_validator(mode="after")
+    def check_material_properties(self):
+        """Check that material properties are larger than 0."""
+        if self.Conductivity <= 0:
+            msg = "Conductivity must be larger than 0"
+            raise ValueError(msg)
+        if self.Density <= 0:
+            msg = "Density must be larger than 0"
+            raise ValueError(msg)
+        if self.ThermalAbsorptance <= 0:
+            msg = "Thermal absorptance must be larger than 0"
+            raise ValueError(msg)
+        if self.SolarAbsorptance <= 0:
+            msg = "Solar absorptance must be larger than 0"
+            raise ValueError(msg)
+        if self.VisibleAbsorptance <= 0:
+            msg = "Visible absorptance must be larger than 0"
+            raise ValueError(msg)
+        return self
+
     Type: ConstructionMaterialType = Field(..., title="Type of the opaque material")
 
 

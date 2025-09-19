@@ -141,6 +141,81 @@ class SizingParameters(BaseObj, extra="ignore"):
     Cooling_Sizing_Factor: float
 
 
+class KIVAFoundation(BaseObj, extra="ignore"):
+    """KIVA Foundation object."""
+
+    key: ClassVar[str] = "FOUNDATION:KIVA"
+    Name: str
+    Interior_Horizontal_Insulation_Material_Name: str = "No_Insulation"
+    Interior_Horizontal_Insulation_Depth: float = 0.0
+    Interior_Horizontal_Insulation_Width: float = 0.0
+    Interior_Vertical_Insulation_Material_Name: str = "No_Insulation"
+    Interior_Vertical_Insulation_Depth: float = 0.0
+    Exterior_Horizontal_Insulation_Material_Name: str = "No_Insulation"
+    Exterior_Horizontal_Insulation_Depth: float = 0.0
+    Exterior_Horizontal_Insulation_Width: float = 0.0
+    Exterior_Vertical_Insulation_Material_Name: str = "No_Insulation"
+    Exterior_Vertical_Insulation_Depth: float = 0.0
+    Wall_Height_Above_Grade: float = 0.2
+    Wall_Depth_Below_Slab: float = 0.3
+    Footing_Wall_Construction_Name: str = "Foundation_Wall"
+
+
+class KIVAFoundationSettings(BaseObj, extra="ignore"):
+    """KIVA Foundation Settings object."""
+
+    key: ClassVar[str] = "FOUNDATION:KIVA:SETTINGS"
+    Name: str = "KivaSettings"
+    Soil_Thermal_Conductivity: float = Field(
+        default=1.73, ge=0, validation_alias="SoilThermalConductivity [W/m.K]"
+    )
+    Soil_Density: float = Field(
+        default=1842, ge=0, validation_alias="SoilDensity [kg/m3]"
+    )
+    Soil_Specific_Heat: float = Field(
+        default=419, ge=0, validation_alias="SoilSpecificHeat [J/kg.K]"
+    )
+    Ground_Solar_Absorptance: float = Field(
+        default=0.9, ge=0, le=1, validation_alias="GroundSolarAbsorptance [0-1]"
+    )
+    Ground_Thermal_Absorptance: float = Field(
+        default=0.9, ge=0, le=1, validation_alias="GroundThermalAbsorptance [0-1]"
+    )
+    Ground_Surface_Roughness: float = Field(
+        default=0.03, ge=0, validation_alias="GroundSurfaceRoughness [m]"
+    )
+    Far_Field_Width: float = Field(
+        default=40, ge=0, validation_alias="FarFieldWidth [m]"
+    )
+    Deep_Ground_Boundary_Condition: Literal["ZeroFlux", "GroundWater", "Autoselect"] = (
+        Field(default="Autoselect", validation_alias="DeepGroundBoundaryCondition")
+    )
+    Deep_Ground_Depth: float = Field(
+        default=40, ge=0, validation_alias="DeepGroundDepth [m]"
+    )
+    Minimum_Cell_Dimension: float = Field(
+        default=0.02, ge=0, validation_alias="MinimumCellDimension [m]"
+    )
+    Maximum_Cell_Growth_Coefficient: float = Field(
+        default=1.5, ge=0, validation_alias="MaximumCellGrowthCoefficient"
+    )
+    Simulation_Time_Step: Literal["Hourly", "Timestep"] = Field(
+        default="Hourly", validation_alias="SimulationTimeStep"
+    )
+
+
+class SurfacePropertyExposedFoundationPerimeter(BaseObj, extra="ignore"):
+    """SurfaceProperty:ExposedFoundationPerimeter object.
+
+    This object is used to define the exposed perimeter of the foundation for KIVA calculations.
+    """
+
+    key: ClassVar[str] = "SURFACEPROPERTY:EXPOSEDFOUNDATIONPERIMETER"
+    Surface_Name: str
+    Total_Exposed_Perimeter: float
+    Exposed_Perimeter_Fraction: float = 1.0
+
+
 class SiteGroundTemperature(BaseObj, extra="ignore"):
     """GroundTemperature object."""
 

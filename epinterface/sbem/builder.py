@@ -2,6 +2,7 @@
 
 import asyncio
 import gc
+import math
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -221,6 +222,109 @@ class SurfaceHandler(BaseModel):
         )
 
 
+# Note: This is a temporary placeholder class to handle the KIVA foundation model implementation
+# This will be replaced with proper integration in the future
+class KIVAHandler(BaseModel):
+    """Handler for setting up KIVA foundation modeling for ground contact surfaces."""
+
+    def calculate_foundation_perimeter(self, idf: IDF) -> float:
+        """Calculate the perimeter of the building foundation.
+
+        Args:
+            idf (IDF): The IDF model to calculate the perimeter for.
+
+        Returns:
+            float: The calculated perimeter in meters.
+        """
+        # Find all ground contact surfaces (floor and walls)
+        ground_surfaces = [
+            srf
+            for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+            if srf.Outside_Boundary_Condition.lower() == "ground"
+        ]
+
+        # If no ground surfaces, return 0
+        if not ground_surfaces:
+            return 0.0
+
+        # Ground floor slab - find the vertices to calculate perimeter
+        ground_floor_slabs = [
+            srf for srf in ground_surfaces if srf.Surface_Type.lower() == "floor"
+        ]
+
+        if not ground_floor_slabs:
+            return 0.0
+
+        # Get the first ground floor slab and calculate its perimeter
+        # This is simplified - assumes a rectangular floor plan
+        floor_slab = ground_floor_slabs[0]
+
+        # Extract vertices (simplified calculation assuming rectangular shape)
+        vertices = []
+        n_vertices = int(floor_slab.Number_of_Vertices)
+
+        for i in range(1, n_vertices + 1):
+            x = getattr(floor_slab, f"Vertex_{i}_Xcoordinate")
+            y = getattr(floor_slab, f"Vertex_{i}_Ycoordinate")
+            vertices.append((float(x), float(y)))
+
+        # Calculate perimeter by summing the distance between consecutive vertices
+        perimeter = 0.0
+        for i in range(n_vertices):
+            j = (i + 1) % n_vertices
+            dx = vertices[j][0] - vertices[i][0]
+            dy = vertices[j][1] - vertices[i][1]
+            perimeter += math.sqrt(dx * dx + dy * dy)
+
+        return perimeter
+
+    def apply_kiva_to_surfaces(
+        self,
+        idf: IDF,
+        construction: ConstructionAssemblyComponent,
+        foundation_settings_name: str = "KivaSettings",
+        use_insulation: bool = True,
+    ) -> IDF:
+        """Apply KIVA foundation model to ground contact surfaces.
+
+        This is a placeholder implementation that will be replaced with proper integration.
+        Currently, it assigns constructions to ground surfaces normally.
+
+        Args:
+            idf (IDF): The IDF model to modify.
+            construction: The construction to use for the foundation wall.
+            foundation_settings_name: Name for the KIVA foundation settings object.
+            use_insulation: Whether to include insulation from the construction.
+
+        Returns:
+            idf: The modified IDF model.
+        """
+        # For now, we'll just assign the constructions normally
+        ground_slabs = [
+            srf
+            for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+            if srf.Outside_Boundary_Condition.lower() == "ground"
+            and srf.Surface_Type.lower() == "floor"
+        ]
+
+        ground_walls = [
+            srf
+            for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+            if srf.Outside_Boundary_Condition.lower() == "ground"
+            and srf.Surface_Type.lower() == "wall"
+        ]
+
+        # Apply construction to ground slabs
+        for slab in ground_slabs:
+            slab.Construction_Name = construction.Name
+
+        # Apply construction to ground walls
+        for wall in ground_walls:
+            wall.Construction_Name = construction.Name
+
+        return idf
+
+
 class SurfaceHandlers(BaseModel):
     """A collection of surface handlers for different surface types."""
 
@@ -237,9 +341,11 @@ class SurfaceHandlers(BaseModel):
     BasementCeilingCeiling: SurfaceHandler
     BasementCeilingFloor: SurfaceHandler
     Window: SurfaceHandler
+    KivaHandler: KIVAHandler
+    use_kiva: bool = False
 
     @classmethod
-    def Default(cls, basement_suffix: str):
+    def Default(cls, basement_suffix: str, use_kiva: bool = False):
         """Get the default surface handlers."""
         roof_outdoor_bc_handler = SurfaceHandler(
             boundary_condition="outdoors",
@@ -348,6 +454,9 @@ class SurfaceHandlers(BaseModel):
             zone_name_contains=None,
             outside_boundary_condition_object_contains="attic",
         )
+
+        kiva_handler = KIVAHandler()
+
         return cls(
             RoofOutdoorBC=roof_outdoor_bc_handler,
             AtticFloorFloor=attic_floor_floor_handler,
@@ -362,6 +471,8 @@ class SurfaceHandlers(BaseModel):
             BasementCeilingCeiling=basement_ceiling_ceiling_handler,
             BasementCeilingFloor=basement_ceiling_floor_handler,
             Window=window_handler,
+            KivaHandler=kiva_handler,
+            use_kiva=use_kiva,
         )
 
     def handle_envelope(
@@ -432,12 +543,25 @@ class SurfaceHandlers(BaseModel):
                 idf=idf, construction=attic_floor_reversed
             )
 
-        idf = self.GroundSlab.assign_constructions_to_objs(
-            idf=idf, construction=constructions.GroundSlabAssembly
-        )
-        idf = self.GroundWall.assign_constructions_to_objs(
-            idf=idf, construction=constructions.GroundWallAssembly
-        )
+        # Handle ground contact surfaces (slabs and walls)
+        if self.use_kiva:
+            # Use KIVA modeling for ground contact surfaces
+            # NOTE: This is currently a placeholder implementation.
+            # The KIVAHandler currently just assigns constructions normally.
+            # A full implementation will be added in the future.
+            idf = self.KivaHandler.apply_kiva_to_surfaces(
+                idf=idf,
+                construction=constructions.GroundWallAssembly,
+                use_insulation=True,
+            )
+        else:
+            # Use standard ground modeling
+            idf = self.GroundSlab.assign_constructions_to_objs(
+                idf=idf, construction=constructions.GroundSlabAssembly
+            )
+            idf = self.GroundWall.assign_constructions_to_objs(
+                idf=idf, construction=constructions.GroundWallAssembly
+            )
 
         if window:
             idf = self.Window.assign_constructions_to_objs(idf=idf, construction=window)
@@ -503,6 +627,7 @@ class Model(BaseWeather, validate_assignment=True):
     Basement: BasementAssumptions
     # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
     Zone: ZoneComponent
+    use_kiva: bool = False
 
     @field_validator("geometry", mode="after")
     @classmethod
@@ -744,7 +869,8 @@ class Model(BaseWeather, validate_assignment=True):
         handlers = SurfaceHandlers.Default(
             basement_suffix=self.geometry.basement_suffix
             if self.geometry.basement
-            else "NO-OP"
+            else "NO-OP",
+            use_kiva=self.use_kiva,
         )
         idf = handlers.handle_envelope(
             idf,
