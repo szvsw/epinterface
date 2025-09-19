@@ -801,7 +801,7 @@ class Model(BaseWeather, validate_assignment=True):
         ddy_spec.inject_ddy(idf, ddy)
 
         idf = add_default_sim_controls(idf)
-        idf, scheds = add_default_schedules(idf)
+        idf, _scheds = add_default_schedules(idf)
 
         idf = SiteGroundTemperature.FromValues(
             assumed_constants.SiteGroundTemperature_degC
@@ -1255,10 +1255,10 @@ if __name__ == "__main__":
             "AtticVentilation": "UnventilatedAttic",
             "AtticFloorInsulation": "NoInsulation",
             "RoofInsulation": "UninsulatedRoof",
-            "BasementCeilingInsulation": "UninsulatedCeiling",
-            "BasementWallsInsulation": "UninsulatedWalls",
+            "BasementCeilingInsulation": "InsulatedCeiling",
+            "BasementWallsInsulation": "InsulatedWalls",
             "GroundSlabInsulation": "UninsulatedGroundSlab",
-            "Walls": "FullInsulationWallsCavity",
+            "Walls": "SomeInsulationWalls",
             "Weatherization": "SomewhatLeakyEnvelope",
             "Windows": "DoublePaneLowE",
             "Heating": "ASHPHeating",
@@ -1282,8 +1282,8 @@ if __name__ == "__main__":
                 UseFraction=None,
             ),
             Basement=BasementAssumptions(
-                Conditioned=False,
-                UseFraction=None,
+                Conditioned=True,
+                UseFraction=0.4,
             ),
             geometry=ShoeboxGeometry(
                 x=0,
@@ -1292,10 +1292,10 @@ if __name__ == "__main__":
                 d=14,
                 h=3,
                 wwr=0.2,
-                num_stories=1,
+                num_stories=2,
                 basement=True,
                 zoning="by_storey",
-                roof_height=3,
+                roof_height=None,
             ),
         )
 
@@ -1306,3 +1306,4 @@ if __name__ == "__main__":
         # _idf.saveas("test-out.idf")
         print(_err_text)
         print(results)
+        print(results.Energy.Raw.groupby("Meter").sum())
