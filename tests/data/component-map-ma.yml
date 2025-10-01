@@ -15,6 +15,15 @@ Envelope:
         - Weatherization
       suffix: Attic
 
+  BasementInfiltration:
+    selector:
+      source_fields:
+        - Region
+        - Typology
+        - BasementWallsInsulation
+        - Weatherization
+      suffix: Basement
+
   Window:
     selector:
       source_fields:

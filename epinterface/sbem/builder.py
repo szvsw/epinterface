@@ -371,6 +371,7 @@ class SurfaceHandlers(BaseModel):
         window: GlazingConstructionSimpleComponent | None,
         with_attic: bool,
         with_basement: bool,
+        exposed_basement_frac: float = 0,
     ):
         """Assign the envelope to the IDF model.
 
@@ -382,6 +383,7 @@ class SurfaceHandlers(BaseModel):
             window (GlazingConstructionSimpleComponent | None): The window definition.
             with_attic (bool): Whether to add the attic floor and ceiling constructions.
             with_basement (bool): Whether to add the basement floor and ceiling constructions.
+            exposed_basement_frac (float): The fraction of the basement walls that are exposed above ground.
 
         Returns:
             idf (IDF): The updated IDF model.
@@ -438,6 +440,43 @@ class SurfaceHandlers(BaseModel):
         idf = self.GroundWall.assign_constructions_to_objs(
             idf=idf, construction=constructions.GroundWallAssembly
         )
+
+        if with_basement and exposed_basement_frac > 0:
+            basement_wall_surfaces = [
+                srf
+                for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+                if srf.Outside_Boundary_Condition == "ground"
+                and srf.Surface_Type == "wall"
+            ]
+            for srf in basement_wall_surfaces:
+                coords = srf.coords
+                z_coords = [c[2] for c in coords]
+                min_z = min(z_coords)
+                max_z = max(z_coords)
+                h = max_z - min_z
+                unexposed_height = h * (1 - exposed_basement_frac)
+                unexposed_height = min(
+                    max(unexposed_height, 0.15), h - 0.15
+                )  # 15cm, approximately 6in
+                cut_z = min_z + unexposed_height
+                z_coords_lower_section = [z if z == min_z else cut_z for z in z_coords]
+                z_coords_upper_section = [z if z == max_z else cut_z for z in z_coords]
+                coords_lower_section = [
+                    (c[0], c[1], z)
+                    for c, z in zip(coords, z_coords_lower_section, strict=False)
+                ]
+                coords_upper_section = [
+                    (c[0], c[1], z)
+                    for c, z in zip(coords, z_coords_upper_section, strict=False)
+                ]
+                new_bottom_srf = idf.copyidfobject(srf)
+                new_top_srf = idf.copyidfobject(srf)
+                new_bottom_srf.setcoords(coords_lower_section)
+                new_top_srf.setcoords(coords_upper_section)
+                new_bottom_srf.Name = f"{srf.Name}_bottom"
+                new_top_srf.Name = f"{srf.Name}_top"
+                new_top_srf.Outside_Boundary_Condition = "outdoors"
+                idf.removeidfobject(srf)
 
         if window:
             idf = self.Window.assign_constructions_to_objs(idf=idf, construction=window)
@@ -752,6 +791,7 @@ class Model(BaseWeather, validate_assignment=True):
             window_def,
             with_attic=(self.geometry.roof_height or 0) > 0,
             with_basement=self.geometry.basement,
+            exposed_basement_frac=self.geometry.exposed_basement_frac,
         )
 
         return idf
@@ -801,7 +841,7 @@ class Model(BaseWeather, validate_assignment=True):
         ddy_spec.inject_ddy(idf, ddy)
 
         idf = add_default_sim_controls(idf)
-        idf, scheds = add_default_schedules(idf)
+        idf, _scheds = add_default_schedules(idf)
 
         idf = SiteGroundTemperature.FromValues(
             assumed_constants.SiteGroundTemperature_degC
@@ -830,18 +870,20 @@ class Model(BaseWeather, validate_assignment=True):
             new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
             new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
 
-            # handle infiltration for basements, which we are assuming is 0 (or whatever is in assumed constants)
-            new_zone_def.Envelope.Infiltration.AirChangesPerHour = (
-                assumed_constants.Basement_Infiltration_Air_Changes_Per_Hour
+            # # handle infiltration for basements, which we are assuming is 0 (or whatever is in assumed constants)
+            new_zone_def.Envelope.Infiltration = (
+                new_zone_def.Envelope.BasementInfiltration
             )
-            new_zone_def.Envelope.Infiltration.FlowPerExteriorSurfaceArea = (
-                assumed_constants.Basement_Infiltration_Flow_Per_Exterior_Surface_Area
-            )
-            new_zone_def.Envelope.Infiltration.CalculationMethod = "AirChanges/Hour"
 
             if not self.Basement.Conditioned:
                 new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
                 new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+            else:
+                # TODO: make this configurable!!!!
+                print(
+                    "WARNING: Basement conditioned, but Cooling disabled due to MASSACHUSETTS ASSUMPTIONS"
+                )
                 new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
 
             for zone in added_zone_lists.basement_zone_list.Names:
@@ -1253,10 +1295,10 @@ if __name__ == "__main__":
             "AtticVentilation": "UnventilatedAttic",
             "AtticFloorInsulation": "NoInsulation",
             "RoofInsulation": "UninsulatedRoof",
-            "BasementCeilingInsulation": "UninsulatedCeiling",
+            "BasementCeilingInsulation": "InsulatedCeiling",
             "BasementWallsInsulation": "UninsulatedWalls",
             "GroundSlabInsulation": "UninsulatedGroundSlab",
-            "Walls": "FullInsulationWallsCavity",
+            "Walls": "SomeInsulationWalls",
             "Weatherization": "SomewhatLeakyEnvelope",
             "Windows": "DoublePaneLowE",
             "Heating": "ASHPHeating",
@@ -1280,8 +1322,8 @@ if __name__ == "__main__":
                 UseFraction=None,
             ),
             Basement=BasementAssumptions(
-                Conditioned=False,
-                UseFraction=None,
+                Conditioned=True,
+                UseFraction=0.4,
             ),
             geometry=ShoeboxGeometry(
                 x=0,
@@ -1290,10 +1332,11 @@ if __name__ == "__main__":
                 d=14,
                 h=3,
                 wwr=0.2,
-                num_stories=1,
+                num_stories=2,
                 basement=True,
                 zoning="by_storey",
-                roof_height=3,
+                roof_height=None,
+                exposed_basement_frac=0.25,
             ),
         )
 
@@ -1304,3 +1347,4 @@ if __name__ == "__main__":
         # _idf.saveas("test-out.idf")
         print(_err_text)
         print(results)
+        print(results.Energy.Raw.groupby("Meter").sum())

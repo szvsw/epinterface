@@ -841,6 +841,7 @@ class FlatParameters(BaseModel):
             Window=window_assembly,
             Infiltration=infiltration,
             AtticInfiltration=infiltration,
+            BasementInfiltration=infiltration,
         )
 
         zone = ZoneComponent(

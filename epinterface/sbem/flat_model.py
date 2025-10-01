@@ -2065,9 +2065,11 @@ class FlatModel(BaseModel):
             ExternalFloorAssembly=ground_slab_assembly,
         )
 
+        basement_infiltration = infiltration.model_copy(deep=True)
         envelope = ZoneEnvelopeComponent(
             Name="Envelope",
             AtticInfiltration=infiltration,
+            BasementInfiltration=basement_infiltration,
             Window=window_assembly,
             Infiltration=infiltration,
             Assemblies=assemblies,

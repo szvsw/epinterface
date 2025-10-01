@@ -715,6 +715,7 @@ def create_envelope(db: Prisma):
             "Assemblies": {"connect": {"Name": "default"}},
             "Infiltration": {"connect": {"Name": "office_unweatherized"}},
             "AtticInfiltration": {"connect": {"Name": "office_unweatherized"}},
+            "BasementInfiltration": {"connect": {"Name": "office_unweatherized"}},
             "Window": {"connect": {"Name": "single"}},
         }
     )

@@ -356,6 +356,7 @@ class ZoneEnvelopeComponent(NamedObject, MetadataMixin, extra="forbid"):
     Assemblies: EnvelopeAssemblyComponent
     Infiltration: InfiltrationComponent
     AtticInfiltration: InfiltrationComponent
+    BasementInfiltration: InfiltrationComponent
     Window: GlazingConstructionSimpleComponent | None
 
     # Foundation: Foundation | None
