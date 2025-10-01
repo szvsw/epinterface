@@ -468,6 +468,11 @@ def test_envelope_selector(preseeded_readonly_db: Prisma):
                 source_fields=["typology", "weatherization"]
             )
         },
+        "BasementInfiltration": {
+            "selector": ComponentNameConstructor(
+                source_fields=["typology", "weatherization"]
+            )
+        },
         "Window": {"selector": ComponentNameConstructor(source_fields=["window_type"])},
     }
     alt_selector = SelectorModel(
@@ -715,6 +720,9 @@ def test_validate_successful_resolution_with_multiple_levels_of_children():
                     "selector": ComponentNameConstructor(source_fields=["basic"])
                 },
                 "AtticInfiltration": {
+                    "selector": ComponentNameConstructor(source_fields=["basic"])
+                },
+                "BasementInfiltration": {
                     "selector": ComponentNameConstructor(source_fields=["basic"])
                 },
             },
