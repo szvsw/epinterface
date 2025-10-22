@@ -14,6 +14,7 @@ from pydantic import (
     ValidationError,
     computed_field,
     field_validator,
+    model_validator,
 )
 
 try:
@@ -821,6 +822,17 @@ class ScheduleWeekDaily(BaseObj, extra="ignore"):
     Friday_ScheduleDay_Name: str
     Saturday_ScheduleDay_Name: str
     Sunday_ScheduleDay_Name: str
+    SummerDesignDay_ScheduleDay_Name: str | None = None
+    WinterDesignDay_ScheduleDay_Name: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_design_day_schedules(cls, data):
+        if data.get("SummerDesignDay_ScheduleDay_Name") is None:
+            data["SummerDesignDay_ScheduleDay_Name"] = data["Monday_ScheduleDay_Name"]
+        if data.get("WinterDesignDay_ScheduleDay_Name") is None:
+            data["WinterDesignDay_ScheduleDay_Name"] = data["Monday_ScheduleDay_Name"]
+        return data
 
     @computed_field
     @property
@@ -839,18 +851,6 @@ class ScheduleWeekDaily(BaseObj, extra="ignore"):
     def Holiday_ScheduleDay_Name(self) -> str:
         """Automatically set additional day schedules."""
         return self.Sunday_ScheduleDay_Name
-
-    @computed_field
-    @property
-    def SummerDesignDay_ScheduleDay_Name(self) -> str:
-        """Automatically set additional day schedules."""
-        return self.Monday_ScheduleDay_Name
-
-    @computed_field
-    @property
-    def WinterDesignDay_ScheduleDay_Name(self) -> str:
-        """Automatically set additional day schedules."""
-        return self.Monday_ScheduleDay_Name
 
 
 class ScheduleYear(BaseObj, extra="ignore"):

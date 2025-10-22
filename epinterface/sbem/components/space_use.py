@@ -74,7 +74,12 @@ class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
         activity_sch_year.to_epbunch(idf)
 
         name_prefix = f"{target_zone_or_zone_list_name}_{self.safe_name}_PEOPLE"
-        idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=None)
+        idf, year_name = self.Schedule.add_year_to_idf(
+            idf,
+            name_prefix=None,
+            summer_design_day_sch_name="d_AllOn_00",
+            winter_design_day_sch_name="d_AllOn_00",
+        )
         people = People(
             Name=name_prefix,
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
@@ -132,7 +137,12 @@ class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
             raise NotImplementedParameter("DimmingType:On", self.Name, "Lights")
 
         name_prefix = f"{target_zone_or_zone_list_name}_{self.safe_name}_LIGHTS"
-        idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=None)
+        idf, year_name = self.Schedule.add_year_to_idf(
+            idf,
+            name_prefix=None,
+            summer_design_day_sch_name="d_AllOn_00",
+            winter_design_day_sch_name="d_AllOn_00",
+        )
         lights = Lights(
             Name=name_prefix,
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,
@@ -176,7 +186,12 @@ class EquipmentComponent(NamedObject, MetadataMixin, extra="forbid"):
             return idf
 
         name_prefix = f"{target_zone_or_zone_list_name}_{self.safe_name}_EQUIPMENT"
-        idf, year_name = self.Schedule.add_year_to_idf(idf, name_prefix=None)
+        idf, year_name = self.Schedule.add_year_to_idf(
+            idf,
+            name_prefix=None,
+            summer_design_day_sch_name="d_AllOn_00",
+            winter_design_day_sch_name="d_AllOn_00",
+        )
         equipment = ElectricEquipment(
             Name=name_prefix,
             Zone_or_ZoneList_Name=target_zone_or_zone_list_name,

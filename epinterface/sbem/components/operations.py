@@ -10,6 +10,7 @@ from epinterface.geometry import get_zone_floor_area, get_zone_glazed_area
 from epinterface.interface import (
     HVACTemplateThermostat,
     HVACTemplateZoneIdealLoadsAirSystem,
+    ScheduleDayHourly,
     WaterUseEquipment,
     ZoneVentilationWindAndStackOpenArea,
 )
@@ -170,15 +171,83 @@ class ZoneOperationsComponent(
         )
         heating_schedule = self.SpaceUse.Thermostat.HeatingSchedule
         cooling_schedule = self.SpaceUse.Thermostat.CoolingSchedule
+
         heating_schedule_name = None
         cooling_schedule_name = None
         if heating_schedule is not None:
+            _, heat_high = self.SpaceUse.Thermostat.HeatingSchedule.bounds
+            heating_design_day = ScheduleDayHourly(
+                Name=f"{thermostat_name}_HeatingDesignDay",
+                Schedule_Type_Limits_Name="Temperature",
+                Hour_1=heat_high,
+                Hour_2=heat_high,
+                Hour_3=heat_high,
+                Hour_4=heat_high,
+                Hour_5=heat_high,
+                Hour_6=heat_high,
+                Hour_7=heat_high,
+                Hour_8=heat_high,
+                Hour_9=heat_high,
+                Hour_10=heat_high,
+                Hour_11=heat_high,
+                Hour_12=heat_high,
+                Hour_13=heat_high,
+                Hour_14=heat_high,
+                Hour_15=heat_high,
+                Hour_16=heat_high,
+                Hour_17=heat_high,
+                Hour_18=heat_high,
+                Hour_19=heat_high,
+                Hour_20=heat_high,
+                Hour_21=heat_high,
+                Hour_22=heat_high,
+                Hour_23=heat_high,
+                Hour_24=heat_high,
+            )
+            idf = heating_design_day.add(idf)
             idf, heating_schedule_name = heating_schedule.add_year_to_idf(
-                idf, name_prefix=None
+                idf,
+                name_prefix=None,
+                winter_design_day_sch_name=heating_design_day.Name,
+                summer_design_day_sch_name=heating_design_day.Name,
             )
         if cooling_schedule is not None:
+            cool_low, _ = self.SpaceUse.Thermostat.CoolingSchedule.bounds
+            cooling_design_day = ScheduleDayHourly(
+                Name=f"{thermostat_name}_CoolingDesignDay",
+                Schedule_Type_Limits_Name="Temperature",
+                Hour_1=cool_low,
+                Hour_2=cool_low,
+                Hour_3=cool_low,
+                Hour_4=cool_low,
+                Hour_5=cool_low,
+                Hour_6=cool_low,
+                Hour_7=cool_low,
+                Hour_8=cool_low,
+                Hour_9=cool_low,
+                Hour_10=cool_low,
+                Hour_11=cool_low,
+                Hour_12=cool_low,
+                Hour_13=cool_low,
+                Hour_14=cool_low,
+                Hour_15=cool_low,
+                Hour_16=cool_low,
+                Hour_17=cool_low,
+                Hour_18=cool_low,
+                Hour_19=cool_low,
+                Hour_20=cool_low,
+                Hour_21=cool_low,
+                Hour_22=cool_low,
+                Hour_23=cool_low,
+                Hour_24=cool_low,
+            )
+
+            idf = cooling_design_day.add(idf)
             idf, cooling_schedule_name = cooling_schedule.add_year_to_idf(
-                idf, name_prefix=None
+                idf,
+                name_prefix=None,
+                winter_design_day_sch_name=cooling_design_day.Name,
+                summer_design_day_sch_name=cooling_design_day.Name,
             )
 
         thermostat = HVACTemplateThermostat(
@@ -212,13 +281,13 @@ class ZoneOperationsComponent(
             Cooling_Availability_Schedule_Name=None
             if self.HVAC.ConditioningSystems.Cooling
             else "AlwaysOff",
+            Heating_Limit="LimitFlowRateAndCapacity",
             Maximum_Heating_Air_Flow_Rate="autosize",
-            Heating_Limit="NoLimit",
             Maximum_Sensible_Heating_Capacity="autosize",
-            Minimum_Cooling_Supply_Air_Temperature=13,
+            Cooling_Limit="LimitFlowRateAndCapacity",
             Maximum_Cooling_Air_Flow_Rate="autosize",
             Maximum_Total_Cooling_Capacity="autosize",
-            Cooling_Limit="NoLimit",
+            Minimum_Cooling_Supply_Air_Temperature=13,
             Humidification_Control_Type="None",
             Outdoor_Air_Flow_Rate_per_Person=self.HVAC.Ventilation.FreshAirPerPerson,
             Outdoor_Air_Flow_Rate_per_Zone_Floor_Area=self.HVAC.Ventilation.FreshAirPerFloorArea,
@@ -249,8 +318,14 @@ class ZoneOperationsComponent(
                 )
                 return idf
             vent_wind_stack_name = f"{target_zone_name}_{self.SpaceUse.Thermostat.safe_name}_{self.HVAC.Ventilation.safe_name}_VENTILATION_WIND_AND_STACK_OPEN_AREA"
-            idf, vent_wind_stack_name = self.HVAC.Ventilation.Schedule.add_year_to_idf(
-                idf, name_prefix=None
+
+            idf, vent_wind_stack_name_sch = (
+                self.HVAC.Ventilation.Schedule.add_year_to_idf(
+                    idf,
+                    name_prefix=None,
+                    summer_design_day_sch_name="d_AllOff_00",
+                    winter_design_day_sch_name="d_AllOff_00",
+                )
             )
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
                 Name=vent_wind_stack_name,
@@ -265,7 +340,7 @@ class ZoneOperationsComponent(
                 ),
                 Maximum_Outdoor_Temperature=assumed_constants.Maximum_Outdoor_Temperature,
                 Opening_Area=total_window_area,
-                Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name,
+                Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name_sch,
                 Height_Difference=0,
             )
             idf = ventilation_wind_and_stack_open_area.add(idf)
