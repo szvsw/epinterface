@@ -330,6 +330,7 @@ class ZoneOperationsComponent(
             ventilation_wind_and_stack_open_area = ZoneVentilationWindAndStackOpenArea(
                 Name=vent_wind_stack_name,
                 Zone_or_Space_Name=target_zone_name,
+                Minimum_Outdoor_Temperature=12,
                 Height_Difference=0,
                 Delta_Temperature=2,
                 Maximum_Outdoor_Temperature=25,
