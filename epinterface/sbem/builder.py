@@ -1322,8 +1322,8 @@ if __name__ == "__main__":
                 UseFraction=None,
             ),
             Basement=BasementAssumptions(
-                Conditioned=True,
-                UseFraction=0.4,
+                Conditioned=False,
+                UseFraction=None,
             ),
             geometry=ShoeboxGeometry(
                 x=0,
@@ -1332,8 +1332,8 @@ if __name__ == "__main__":
                 d=14,
                 h=3,
                 wwr=0.2,
-                num_stories=2,
-                basement=True,
+                num_stories=3,
+                basement=False,
                 zoning="by_storey",
                 roof_height=None,
                 exposed_basement_frac=0.25,

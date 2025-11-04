@@ -71,6 +71,11 @@ class DayComponent(NamedObject, extra="forbid"):
     Hour_23: float
 
     @property
+    def bounds(self) -> tuple[float, float]:
+        """Get the bounds of the day."""
+        return min(self.Values), max(self.Values)
+
+    @property
     def Values(self) -> list[float]:
         """Get the values of the day as a list."""
         return [
@@ -189,6 +194,13 @@ class WeekComponent(NamedObject, extra="forbid"):
         return self
 
     @property
+    def bounds(self) -> tuple[float, float]:
+        """Get the bounds of the week."""
+        lows = [day.bounds[0] for day in self.Days]
+        highs = [day.bounds[1] for day in self.Days]
+        return min(lows), max(highs)
+
+    @property
     def Days(self) -> list[DayComponent]:
         """Get the days of the week as a list."""
         return [
@@ -201,7 +213,13 @@ class WeekComponent(NamedObject, extra="forbid"):
             self.Sunday,
         ]
 
-    def add_week_to_idf(self, idf: IDF, name_prefix: str | None) -> tuple[IDF, str]:
+    def add_week_to_idf(
+        self,
+        idf: IDF,
+        name_prefix: str | None,
+        summer_design_day_sch_name: str | None = None,
+        winter_design_day_sch_name: str | None = None,
+    ) -> tuple[IDF, str]:
         """Add the week to the IDF.
 
         The name prefix can be used to scope the schedule creation to ensure a unique schedule per object.
@@ -209,6 +227,8 @@ class WeekComponent(NamedObject, extra="forbid"):
         Args:
             idf (IDF): The IDF object to add the week to.
             name_prefix (str | None): The prefix to use for the schedule name.
+            summer_design_day_sch_name (str | None): The name of the summer design day schedule.
+            winter_design_day_sch_name (str | None): The name of the winter design day schedule.
 
         Returns:
             idf (IDF): The IDF object with the week added.
@@ -237,6 +257,8 @@ class WeekComponent(NamedObject, extra="forbid"):
             Friday_ScheduleDay_Name=friday_name,
             Saturday_ScheduleDay_Name=saturday_name,
             Sunday_ScheduleDay_Name=sunday_name,
+            SummerDesignDay_ScheduleDay_Name=summer_design_day_sch_name,
+            WinterDesignDay_ScheduleDay_Name=winter_design_day_sch_name,
         )
         idf = week_sched.add(idf)
         return idf, week_sched.Name
@@ -317,6 +339,13 @@ class YearComponent(NamedObject, extra="forbid"):
     December: WeekComponent
 
     @property
+    def bounds(self) -> tuple[float, float]:
+        """Get the bounds of the year."""
+        lows = [week.bounds[0] for week in self.Weeks]
+        highs = [week.bounds[1] for week in self.Weeks]
+        return min(lows), max(highs)
+
+    @property
     def Weeks(self) -> list[WeekComponent]:
         """Get the weeks of the year as a list."""
         return [
@@ -350,7 +379,13 @@ class YearComponent(NamedObject, extra="forbid"):
         """Get the schedule type limits for the year."""
         return self.January.Type
 
-    def add_year_to_idf(self, idf: IDF, name_prefix: str | None = None):
+    def add_year_to_idf(
+        self,
+        idf: IDF,
+        name_prefix: str | None = None,
+        summer_design_day_sch_name: str | None = None,
+        winter_design_day_sch_name: str | None = None,
+    ):
         """Add the year to the IDF.
 
         The name prefix can be used to scope the schedule creation to ensure a unique schedule per object.
@@ -358,6 +393,8 @@ class YearComponent(NamedObject, extra="forbid"):
         Args:
             idf (IDF): The IDF object to add the year to.
             name_prefix (str | None): The prefix to use for the schedule name.
+            summer_design_day_sch_name (str | None): The name of the summer design day schedule.
+            winter_design_day_sch_name (str | None): The name of the winter design day schedule.
 
         Returns:
             idf (IDF): The IDF object with the year added.
@@ -370,18 +407,78 @@ class YearComponent(NamedObject, extra="forbid"):
         if idf.getobject("SCHEDULE:YEAR", desired_name):
             return idf, desired_name
 
-        idf, jan_name = self.January.add_week_to_idf(idf, name_prefix)
-        idf, feb_name = self.February.add_week_to_idf(idf, name_prefix)
-        idf, mar_name = self.March.add_week_to_idf(idf, name_prefix)
-        idf, apr_name = self.April.add_week_to_idf(idf, name_prefix)
-        idf, may_name = self.May.add_week_to_idf(idf, name_prefix)
-        idf, jun_name = self.June.add_week_to_idf(idf, name_prefix)
-        idf, jul_name = self.July.add_week_to_idf(idf, name_prefix)
-        idf, aug_name = self.August.add_week_to_idf(idf, name_prefix)
-        idf, sep_name = self.September.add_week_to_idf(idf, name_prefix)
-        idf, oct_name = self.October.add_week_to_idf(idf, name_prefix)
-        idf, nov_name = self.November.add_week_to_idf(idf, name_prefix)
-        idf, dec_name = self.December.add_week_to_idf(idf, name_prefix)
+        idf, jan_name = self.January.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, feb_name = self.February.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, mar_name = self.March.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, apr_name = self.April.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, may_name = self.May.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, jun_name = self.June.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, jul_name = self.July.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, aug_name = self.August.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, sep_name = self.September.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, oct_name = self.October.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, nov_name = self.November.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
+        idf, dec_name = self.December.add_week_to_idf(
+            idf,
+            name_prefix,
+            summer_design_day_sch_name=summer_design_day_sch_name,
+            winter_design_day_sch_name=winter_design_day_sch_name,
+        )
         year_sched = ScheduleYear(
             Name=self.Name,
             Schedule_Type_Limits_Name=self.schedule_type_limits,
