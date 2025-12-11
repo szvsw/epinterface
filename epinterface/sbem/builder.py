@@ -53,6 +53,27 @@ DESIRED_VARIABLES = (
 )
 
 
+class TemperatureOutputConfig(BaseModel):
+    """Configuration for temperature output processing."""
+
+    mode: Literal["mean", "hours_above_threshold"] = Field(
+        default="mean",
+        description="Output mode: 'mean' for monthly mean temperatures, 'hours_above_threshold' for hours above threshold per month",
+    )
+    threshold: float | None = Field(
+        default=None,
+        description="Temperature threshold in °C for 'hours_above_threshold' mode. Required when mode is 'hours_above_threshold'.",
+    )
+
+    @model_validator(mode="after")
+    def check_threshold_when_needed(self):
+        """Ensure threshold is provided when using hours_above_threshold mode."""
+        if self.mode == "hours_above_threshold" and self.threshold is None:
+            msg = "threshold must be provided when mode is 'hours_above_threshold'"
+            raise ValueError(msg)
+        return self
+
+
 class SimulationPathConfig(BaseModel):
     """The configuration for the simulation's pathing."""
 
@@ -1015,8 +1036,38 @@ class Model(BaseWeather, validate_assignment=True):
         err_text = "\n".join([f.read_text() for f in err_files])
         return err_text
 
-    def _process_zone_temperatures(self, sql: Sql) -> pd.Series:
-        """Process zone temperature data from SQL results."""
+    def _process_zone_temperatures(
+        self, sql: Sql, temp_config: TemperatureOutputConfig | None = None
+    ) -> pd.Series:
+        """Process zone temperature data from SQL results.
+
+        Args:
+            sql (Sql): The SQL results file.
+            temp_config (TemperatureOutputConfig | None): Configuration for temperature output processing.
+                If None, defaults to monthly mean temperatures.
+
+        Returns:
+            pd.Series: Processed temperature data with MultiIndex (Aggregation, Zone, Month).
+        """
+        if temp_config is None:
+            temp_config = TemperatureOutputConfig()
+
+        _MSG_THRESHOLD_REQUIRED = "threshold required for hours_above_threshold mode"
+        _MSG_UNKNOWN_MODE = "Unknown temperature output mode"
+
+        def _raise_threshold_error() -> None:
+            """Raise error for missing threshold."""
+            raise ValueError(_MSG_THRESHOLD_REQUIRED)
+
+        def _raise_unknown_mode_error(mode: str) -> None:
+            """Raise error for unknown temperature mode."""
+            msg = f"{_MSG_UNKNOWN_MODE}: {mode}"
+            raise ValueError(msg)
+
+        def _raise_unreachable() -> None:
+            """Raise error for unreachable code."""
+            raise AssertionError("Unreachable")
+
         try:
             zone_temp_data = sql.timeseries_by_name(DESIRED_VARIABLES, "Hourly")
             if not zone_temp_data.empty:
@@ -1025,28 +1076,48 @@ class Model(BaseWeather, validate_assignment=True):
                     f"{col[0]} - {col[1]}" if isinstance(col, tuple) else str(col)
                     for col in zone_temp_df.columns
                 ]
-                zone_temp_monthly = zone_temp_df.resample("M").mean()
+
+                if temp_config.mode == "mean":
+                    zone_temp_monthly = zone_temp_df.resample("ME").mean()
+                    unit = "°C"
+                    aggregation_key = "Mean"
+                elif temp_config.mode == "hours_above_threshold":
+                    # Count hours above threshold for each month
+                    threshold = temp_config.threshold
+                    if threshold is None:
+                        _raise_threshold_error()
+                    # Create boolean mask for values above threshold
+                    above_threshold = zone_temp_df > threshold
+                    # Sum hours per month (True = 1, False = 0)
+                    zone_temp_monthly = above_threshold.resample("ME").sum()
+                    unit = "hours"
+                    aggregation_key = f"HoursAbove{threshold}°C"
+                else:
+                    _raise_unknown_mode_error(temp_config.mode)
+                    return pd.Series()  # pyright: ignore[reportUnreachable]
+
                 zone_temp_monthly.index = pd.RangeIndex(1, 13, 1, name="Month")
                 zone_temp_monthly.columns.name = "Zone"
                 zone_temp_series = cast(pd.Series, zone_temp_monthly.unstack()).rename(
-                    "°C"
+                    unit
                 )
                 return pd.concat(
                     [zone_temp_series],
-                    keys=["Hourly"],
-                    names=["Aggregation", "Zone"],
+                    keys=[aggregation_key],
+                    names=["Aggregation"],
                 )
             return pd.Series(
                 dtype=float,
-                name="°C",
+                name=temp_config.mode,
                 index=pd.MultiIndex.from_tuples(
                     [], names=["Aggregation", "Zone", "Month"]
                 ),
             )
-        except Exception:
+        except Exception as e:
+            print(f"Warning: Failed to process zone temperatures: {e}")
             return pd.Series(
                 dtype=float,
-                name="°C",
+                name=temp_config.mode,
                 index=pd.MultiIndex.from_tuples(
                     [], names=["Aggregation", "Zone", "Month"]
                 ),
@@ -1187,9 +1258,9 @@ class Model(BaseWeather, validate_assignment=True):
             raise ValueError(msg)
 
         utility_max = utilities_df_hourly.max()
-        utility_monthly_hourly_max = utilities_df_hourly.resample("M").max()
+        utility_monthly_hourly_max = utilities_df_hourly.resample("ME").max()
         utility_max.index.name = "Meter"
-        raw_monthly_hourly_max = raw_hourly.resample("M").max()
+        raw_monthly_hourly_max = raw_hourly.resample("ME").max()
 
         max_data = pd.concat(
             [utility_max, raw_hourly_max],
@@ -1210,23 +1281,27 @@ class Model(BaseWeather, validate_assignment=True):
 
         return cast(pd.Series, max_data_monthly.unstack()).fillna(0).rename("kW/m2")
 
-    def standard_results_postprocess(self, sql: Sql) -> pd.Series:
+    def standard_results_postprocess(
+        self, sql: Sql, temp_config: TemperatureOutputConfig | None = None
+    ) -> pd.Series:
         """Postprocess the sql file to get the standard results.
 
         This will return a series with three levels:
         - Measurement: "Energy", "Peak", "Temperature"
-        - Aggregation: "Raw", "End Uses", "Utilities" (for Energy/Peak), "Hourly" (for Temperature)
+        - Aggregation: "Raw", "End Uses", "Utilities" (for Energy/Peak), "Mean" or "HoursAboveX°C" (for Temperature)
         - Meter/Zone: ["Electricity", "Cooling", "Heating", "Domestic Hot Water"], ["Electricity", "Propane", ...], or zone names (for Temperature)
 
         Args:
             sql (Sql): The sql file to postprocess.
+            temp_config (TemperatureOutputConfig | None): Configuration for temperature output processing.
+                If None, defaults to monthly mean temperatures.
 
         Returns:
             series (pd.Series): The postprocessed results.
         """
         raw_hourly = sql.timeseries_by_name(DESIRED_METERS, "Hourly")
         raw_monthly = sql.timeseries_by_name(DESIRED_METERS, "Monthly")
-        zone_temp_series = self._process_zone_temperatures(sql)
+        zone_temp_series = self._process_zone_temperatures(sql, temp_config)
 
         raw_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
@@ -1378,12 +1453,15 @@ class Model(BaseWeather, validate_assignment=True):
         self,
         weather_dir: Path | None = None,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
+        temp_config: TemperatureOutputConfig | None = None,
     ) -> tuple[IDF, pd.Series, str, Sql]:
         """Build and simualte the idf model.
 
         Args:
             weather_dir (Path): The directory to store the weather files.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
+            temp_config (TemperatureOutputConfig | None): Configuration for temperature output processing.
+                If None, defaults to monthly mean temperatures.
 
         Returns:
             idf (IDF): The built energy model.
@@ -1406,7 +1484,7 @@ class Model(BaseWeather, validate_assignment=True):
                 config,
                 post_geometry_callback=post_geometry_callback,
             )
-            results = self.standard_results_postprocess(sql)
+            results = self.standard_results_postprocess(sql, temp_config)
             err_text = self.get_warnings(idf)
 
             # Extract CSV while SQL file is still accessible (before temp dir cleanup)
@@ -1428,9 +1506,7 @@ if __name__ == "__main__":
     from epinterface.sbem.prisma.client import PrismaSettings
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        database_path = Path(
-            "/Users/daryaguettler/globi/data/component_dbs/Brazil/tester-db.db"
-        )
+        database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
         component_map_path = Path(
             "/Users/daryaguettler/globi/data/Brazil/component-map.yaml"
         )
@@ -1450,9 +1526,10 @@ if __name__ == "__main__":
         selector = SelectorModel.model_validate(component_map_yaml)
         db = settings.db
         context = {
-            "Region": "SP",
-            "IncomeClass": "Low",
-            "Typology": "Residential",
+            "region": "SP",
+            "income": "Low",
+            "typology": "Residential",
+            "scenario": "withAC",
         }
         with settings.db:
             zone = cast(ZoneComponent, selector.get_component(context=context, db=db))
@@ -1486,13 +1563,33 @@ if __name__ == "__main__":
         )
 
         # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
+
+        # Example 1: Default behavior - monthly mean temperatures
         _idf, results, _err_text, _sql = model.run(
             # post_geometry_callback=post_geometry_callback,
         )
+
+        # Example 2: Hours above threshold (e.g., 26°C for comfort analysis)
+        # temp_config = TemperatureOutputConfig(mode="hours_above_threshold", threshold=26.0)
+        # _idf, results, _err_text, _sql = model.run(temp_config=temp_config)
         # Note: CSV extraction is now done inside run() method
         # _idf.saveas("test-out.idf")
         print(_err_text)
         print(results)
+
+        # print zone temperature results
+        # Access MultiIndex Series using .loc[] instead of attribute notation
+        if "Temperature" in results.index.get_level_values("Measurement"):
+            zone_temp_results = results.loc["Temperature"]
+            print("Zone Temperature Results:")
+            print(zone_temp_results)
+        else:
+            print("No temperature data found in results")
+            print(
+                f"Available measurements: {results.index.get_level_values('Measurement').unique().tolist()}"
+            )
+
         # Group by Meter (first level of the Energy.Raw MultiIndex)
-        energy_raw = results.Energy.Raw
+        energy_raw = results.loc["Energy"].loc["Raw"]
+        print("Energy Raw Results:")
         print(energy_raw.groupby(level=0).sum())

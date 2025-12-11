@@ -34,21 +34,26 @@ class AssumedConstants(BaseModel, frozen=True):
     FractionLostEquipment: float = Field(default=0, ge=0, le=1)
 
     MetabolicRate_met: float = Field(default=1.2, ge=0, frozen=True)
+    # SiteGroundTemperature_degC: list[float] = Field(
+    #     default=[
+    #         18.3,
+    #         18.2,
+    #         18.3,
+    #         18.4,
+    #         20.1,
+    #         22.0,
+    #         22.3,
+    #         22.5,
+    #         22.5,
+    #         20.7,
+    #         18.9,
+    #         18.5,
+    #     ],
+    #     frozen=True,
+    # )
+
     SiteGroundTemperature_degC: list[float] = Field(
-        default=[
-            18.3,
-            18.2,
-            18.3,
-            18.4,
-            20.1,
-            22.0,
-            22.3,
-            22.5,
-            22.5,
-            20.7,
-            18.9,
-            18.5,
-        ],
+        default=[23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23],
         frozen=True,
     )
     Sensible_Heat_Recovery_Effectiveness: float = Field(
