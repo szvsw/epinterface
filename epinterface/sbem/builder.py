@@ -1082,13 +1082,10 @@ class Model(BaseWeather, validate_assignment=True):
                     unit = "°C"
                     aggregation_key = "Mean"
                 elif temp_config.mode == "hours_above_threshold":
-                    # Count hours above threshold for each month
                     threshold = temp_config.threshold
                     if threshold is None:
                         _raise_threshold_error()
-                    # Create boolean mask for values above threshold
                     above_threshold = zone_temp_df > threshold
-                    # Sum hours per month (True = 1, False = 0)
                     zone_temp_monthly = above_threshold.resample("ME").sum()
                     unit = "hours"
                     aggregation_key = f"HoursAbove{threshold}°C"
@@ -1407,24 +1404,21 @@ class Model(BaseWeather, validate_assignment=True):
         """
         csv_path = output_dir / "zone_temperatures.csv"
         try:
-            # Extract zone temperature data from SQL
             zone_temp_data = sql.timeseries_by_name(DESIRED_VARIABLES, "Hourly")
 
-            # Check if we got any data
             if zone_temp_data.empty:
                 print(
                     f"Warning: No zone temperature data found for variables: {DESIRED_VARIABLES}"
                 )
                 return None
 
-            # Debug: print what zones we found
-            if zone_temp_data.columns.nlevels > 1:
-                zone_names = zone_temp_data.columns.get_level_values(
-                    "KeyValue"
-                ).unique()
-                print(f"Found {len(zone_names)} zones in SQL results:")
-                for zone in sorted(zone_names):
-                    print(f"  - {zone}")
+            # if zone_temp_data.columns.nlevels > 1:
+            #     zone_names = zone_temp_data.columns.get_level_values(
+            #         "KeyValue"
+            #     ).unique()
+            #     print(f"Found {len(zone_names)} zones in SQL results:")
+            #     for zone in sorted(zone_names):
+            #         print(f"  - {zone}")
 
             zone_temp_df = zone_temp_data.droplevel("IndexGroup", axis=1)
             zone_temp_df.columns = [
@@ -1432,7 +1426,6 @@ class Model(BaseWeather, validate_assignment=True):
                 for col in zone_temp_df.columns
             ]
             zone_temp_df = zone_temp_df.reset_index()
-            # Ensure we overwrite any existing file
             if csv_path.exists():
                 csv_path.unlink()
             zone_temp_df.to_csv(csv_path, index=False)
@@ -1564,21 +1557,16 @@ if __name__ == "__main__":
 
         # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
 
-        # Example 1: Default behavior - monthly mean temperatures
         _idf, results, _err_text, _sql = model.run(
             # post_geometry_callback=post_geometry_callback,
         )
 
-        # Example 2: Hours above threshold (e.g., 26°C for comfort analysis)
         # temp_config = TemperatureOutputConfig(mode="hours_above_threshold", threshold=26.0)
         # _idf, results, _err_text, _sql = model.run(temp_config=temp_config)
-        # Note: CSV extraction is now done inside run() method
         # _idf.saveas("test-out.idf")
         print(_err_text)
         print(results)
 
-        # print zone temperature results
-        # Access MultiIndex Series using .loc[] instead of attribute notation
         if "Temperature" in results.index.get_level_values("Measurement"):
             zone_temp_results = results.loc["Temperature"]
             print("Zone Temperature Results:")
@@ -1589,7 +1577,6 @@ if __name__ == "__main__":
                 f"Available measurements: {results.index.get_level_values('Measurement').unique().tolist()}"
             )
 
-        # Group by Meter (first level of the Energy.Raw MultiIndex)
         energy_raw = results.loc["Energy"].loc["Raw"]
         print("Energy Raw Results:")
         print(energy_raw.groupby(level=0).sum())
