@@ -53,27 +53,6 @@ DESIRED_VARIABLES = (
 )
 
 
-class TemperatureOutputConfig(BaseModel):
-    """Configuration for temperature output processing."""
-
-    mode: Literal["mean", "hours_above_threshold"] = Field(
-        default="mean",
-        description="Output mode: 'mean' for monthly mean temperatures, 'hours_above_threshold' for hours above threshold per month",
-    )
-    threshold: float | None = Field(
-        default=None,
-        description="Temperature threshold in °C for 'hours_above_threshold' mode. Required when mode is 'hours_above_threshold'.",
-    )
-
-    @model_validator(mode="after")
-    def check_threshold_when_needed(self):
-        """Ensure threshold is provided when using hours_above_threshold mode."""
-        if self.mode == "hours_above_threshold" and self.threshold is None:
-            msg = "threshold must be provided when mode is 'hours_above_threshold'"
-            raise ValueError(msg)
-        return self
-
-
 class SimulationPathConfig(BaseModel):
     """The configuration for the simulation's pathing."""
 
@@ -1036,90 +1015,6 @@ class Model(BaseWeather, validate_assignment=True):
         err_text = "\n".join([f.read_text() for f in err_files])
         return err_text
 
-    def _process_zone_temperatures(
-        self, sql: Sql, temp_config: TemperatureOutputConfig | None = None
-    ) -> pd.Series:
-        """Process zone temperature data from SQL results.
-
-        Args:
-            sql (Sql): The SQL results file.
-            temp_config (TemperatureOutputConfig | None): Configuration for temperature output processing.
-                If None, defaults to monthly mean temperatures.
-
-        Returns:
-            pd.Series: Processed temperature data with MultiIndex (Aggregation, Zone, Month).
-        """
-        if temp_config is None:
-            temp_config = TemperatureOutputConfig()
-
-        _MSG_THRESHOLD_REQUIRED = "threshold required for hours_above_threshold mode"
-        _MSG_UNKNOWN_MODE = "Unknown temperature output mode"
-
-        def _raise_threshold_error() -> None:
-            """Raise error for missing threshold."""
-            raise ValueError(_MSG_THRESHOLD_REQUIRED)
-
-        def _raise_unknown_mode_error(mode: str) -> None:
-            """Raise error for unknown temperature mode."""
-            msg = f"{_MSG_UNKNOWN_MODE}: {mode}"
-            raise ValueError(msg)
-
-        def _raise_unreachable() -> None:
-            """Raise error for unreachable code."""
-            raise AssertionError("Unreachable")
-
-        try:
-            zone_temp_data = sql.timeseries_by_name(DESIRED_VARIABLES, "Hourly")
-            if not zone_temp_data.empty:
-                zone_temp_df = zone_temp_data.droplevel("IndexGroup", axis=1)
-                zone_temp_df.columns = [
-                    f"{col[0]} - {col[1]}" if isinstance(col, tuple) else str(col)
-                    for col in zone_temp_df.columns
-                ]
-
-                if temp_config.mode == "mean":
-                    zone_temp_monthly = zone_temp_df.resample("ME").mean()
-                    unit = "°C"
-                    aggregation_key = "Mean"
-                elif temp_config.mode == "hours_above_threshold":
-                    threshold = temp_config.threshold
-                    if threshold is None:
-                        _raise_threshold_error()
-                    above_threshold = zone_temp_df > threshold
-                    zone_temp_monthly = above_threshold.resample("ME").sum()
-                    unit = "hours"
-                    aggregation_key = f"HoursAbove{threshold}°C"
-                else:
-                    _raise_unknown_mode_error(temp_config.mode)
-                    return pd.Series()  # pyright: ignore[reportUnreachable]
-
-                zone_temp_monthly.index = pd.RangeIndex(1, 13, 1, name="Month")
-                zone_temp_monthly.columns.name = "Zone"
-                zone_temp_series = cast(pd.Series, zone_temp_monthly.unstack()).rename(
-                    unit
-                )
-                return pd.concat(
-                    [zone_temp_series],
-                    keys=[aggregation_key],
-                    names=["Aggregation"],
-                )
-            return pd.Series(
-                dtype=float,
-                name=temp_config.mode,
-                index=pd.MultiIndex.from_tuples(
-                    [], names=["Aggregation", "Zone", "Month"]
-                ),
-            )
-        except Exception as e:
-            print(f"Warning: Failed to process zone temperatures: {e}")
-            return pd.Series(
-                dtype=float,
-                name=temp_config.mode,
-                index=pd.MultiIndex.from_tuples(
-                    [], names=["Aggregation", "Zone", "Month"]
-                ),
-            )
-
     def _process_energy_data(
         self, raw_monthly: pd.DataFrame, raw_hourly: pd.DataFrame
     ) -> pd.Series:
@@ -1278,9 +1173,7 @@ class Model(BaseWeather, validate_assignment=True):
 
         return cast(pd.Series, max_data_monthly.unstack()).fillna(0).rename("kW/m2")
 
-    def standard_results_postprocess(
-        self, sql: Sql, temp_config: TemperatureOutputConfig | None = None
-    ) -> pd.Series:
+    def standard_results_postprocess(self, sql: Sql) -> pd.Series:
         """Postprocess the sql file to get the standard results.
 
         This will return a series with three levels:
@@ -1290,15 +1183,12 @@ class Model(BaseWeather, validate_assignment=True):
 
         Args:
             sql (Sql): The sql file to postprocess.
-            temp_config (TemperatureOutputConfig | None): Configuration for temperature output processing.
-                If None, defaults to monthly mean temperatures.
 
         Returns:
             series (pd.Series): The postprocessed results.
         """
         raw_hourly = sql.timeseries_by_name(DESIRED_METERS, "Hourly")
         raw_monthly = sql.timeseries_by_name(DESIRED_METERS, "Monthly")
-        zone_temp_series = self._process_zone_temperatures(sql, temp_config)
 
         raw_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
@@ -1383,8 +1273,11 @@ class Model(BaseWeather, validate_assignment=True):
         peaks_series = self._process_peak_data(raw_hourly, raw_hourly_max)
 
         all_data = pd.concat(
-            [energy_series, peaks_series, zone_temp_series],
-            keys=["Energy", "Peak", "Temperature"],
+            [energy_series, peaks_series],
+            keys=[
+                "Energy",
+                "Peak",
+            ],
             names=["Measurement"],
         )
 
@@ -1446,24 +1339,29 @@ class Model(BaseWeather, validate_assignment=True):
         self,
         weather_dir: Path | None = None,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
-        temp_config: TemperatureOutputConfig | None = None,
-    ) -> tuple[IDF, pd.Series, str, Sql]:
+        eplus_parent_dir: Path | None = None,
+    ) -> tuple[IDF, pd.Series, str, Sql, Path | None]:
         """Build and simualte the idf model.
 
         Args:
             weather_dir (Path): The directory to store the weather files.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
-            temp_config (TemperatureOutputConfig | None): Configuration for temperature output processing.
-                If None, defaults to monthly mean temperatures.
+            eplus_parent_dir (Path | None): The parent directory to store the eplus working directory.  If None, a temporary directory will be used.
 
         Returns:
             idf (IDF): The built energy model.
             results (pd.Series): The postprocessed results including energy, peak, and temperature data.
             err_text (str): The warning text.
             sql (Sql): The SQL results file with simulation data.
+            eplus_dir (Path | None): The path to the eplus artifact directory (None if a temporary directory was used).
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_dir = Path(temp_dir)
+        with tempfile.TemporaryDirectory() as output_dir_name:
+            output_dir = (
+                Path(output_dir_name)
+                if eplus_parent_dir is None
+                else eplus_parent_dir / "eplus_simulation"
+            )
+            output_dir.mkdir(parents=True, exist_ok=True)
             config = (
                 SimulationPathConfig(
                     output_dir=output_dir,
@@ -1477,16 +1375,13 @@ class Model(BaseWeather, validate_assignment=True):
                 config,
                 post_geometry_callback=post_geometry_callback,
             )
-            results = self.standard_results_postprocess(sql, temp_config)
+            results = self.standard_results_postprocess(sql)
             err_text = self.get_warnings(idf)
 
-            # Extract CSV while SQL file is still accessible (before temp dir cleanup)
-            # Use a persistent location for CSV output
-            csv_output_dir = Path.cwd()
-            self.extract_zone_temperatures_to_csv(sql, csv_output_dir)
-
             gc.collect()
-            return idf, results, err_text, sql
+            # if eplus_parent_dir is not None, we return the path to the output directory
+            output_dir_result = output_dir if eplus_parent_dir is not None else None
+            return idf, results, err_text, sql, output_dir_result
 
 
 if __name__ == "__main__":
@@ -1557,7 +1452,7 @@ if __name__ == "__main__":
 
         # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
 
-        _idf, results, _err_text, _sql = model.run(
+        _idf, results, _err_text, _sql, _ = model.run(
             # post_geometry_callback=post_geometry_callback,
         )
 
