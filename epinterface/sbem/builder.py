@@ -1010,7 +1010,7 @@ class Model(BaseWeather, validate_assignment=True):
         """
         err_files = filter(
             lambda x: x.suffix == ".err",
-            [idf.output_directory / Path(f) for f in idf.simulation_files],
+            [Path(f) for f in idf.simulation_files],
         )
         err_text = "\n".join([f.read_text() for f in err_files])
         return err_text
