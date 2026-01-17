@@ -1015,171 +1015,12 @@ class Model(BaseWeather, validate_assignment=True):
         err_text = "\n".join([f.read_text() for f in err_files])
         return err_text
 
-    def _process_energy_data(
-        self, raw_monthly: pd.DataFrame, raw_hourly: pd.DataFrame
-    ) -> pd.Series:
-        """Process energy data including end uses and utilities."""
-        ops = self.Zone.Operations
-        cond_sys = ops.HVAC.ConditioningSystems
-        heat_cop = (
-            cond_sys.Heating.effective_system_cop if cond_sys.Heating is not None else 1
-        )
-        cool_cop = (
-            cond_sys.Cooling.effective_system_cop if cond_sys.Cooling is not None else 1
-        )
-        dhw_cop = ops.DHW.effective_system_cop
-
-        heat_use = (
-            raw_monthly["Heating"] / heat_cop
-            if "Heating" in raw_monthly
-            else (raw_monthly["Lighting"] * 0).rename("Heating")
-        )
-        cool_use = (
-            raw_monthly["Cooling"] / cool_cop
-            if "Cooling" in raw_monthly
-            else (raw_monthly["Lighting"] * 0).rename("Cooling")
-        )
-        dhw_use = (
-            raw_monthly["Domestic Hot Water"] / dhw_cop
-            if "Domestic Hot Water" in raw_monthly
-            else (raw_monthly["Lighting"] * 0).rename("Domestic Hot Water")
-        )
-        lighting_use = raw_monthly["Lighting"]
-        equipment_use = raw_monthly["Equipment"]
-        end_use_df = pd.concat(
-            [lighting_use, equipment_use, heat_use, cool_use, dhw_use], axis=1
-        )
-
-        heat_fuel = cond_sys.Heating.Fuel if cond_sys.Heating is not None else None
-        cool_fuel = cond_sys.Cooling.Fuel if cond_sys.Cooling is not None else None
-        dhw_fuel = ops.DHW.FuelType
-        all_fuels = {*FuelType.__args__, *DHWFuelType.__args__}
-        utilities_df = pd.DataFrame(
-            index=pd.RangeIndex(1, 13, 1, name="Month"),
-            columns=sorted(all_fuels),
-            dtype=float,
-            data=np.zeros((12, len(all_fuels))),
-        )
-        utilities_df["Electricity"] = lighting_use + equipment_use
-        if heat_fuel is not None:
-            utilities_df[heat_fuel] += heat_use
-        if cool_fuel is not None:
-            utilities_df[cool_fuel] += cool_use
-        utilities_df[dhw_fuel] += dhw_use
-
-        if not np.allclose(utilities_df.sum().sum(), end_use_df.sum().sum()):
-            msg = "Utilities df and end use df do not sum to the same value!"
-            raise ValueError(msg)
-
-        energy_dfs = (
-            pd.concat(
-                [raw_monthly, end_use_df, utilities_df],
-                axis=1,
-                keys=["Raw", "End Uses", "Utilities"],
-                names=["Aggregation", "Meter"],
-            )
-            .unstack()
-            .fillna(0)
-        )
-        return cast(pd.Series, energy_dfs).rename("kWh/m2")
-
-    def _process_peak_data(
-        self, raw_hourly: pd.DataFrame, raw_hourly_max: pd.Series
-    ) -> pd.Series:
-        """Process peak demand data."""
-        ops = self.Zone.Operations
-        cond_sys = ops.HVAC.ConditioningSystems
-        heat_cop = (
-            cond_sys.Heating.effective_system_cop if cond_sys.Heating is not None else 1
-        )
-        cool_cop = (
-            cond_sys.Cooling.effective_system_cop if cond_sys.Cooling is not None else 1
-        )
-        dhw_cop = ops.DHW.effective_system_cop
-
-        heat_use_hourly = (
-            (raw_hourly["Heating"] / heat_cop)
-            if "Heating" in raw_hourly
-            else (raw_hourly["Lighting"] * 0).rename("Heating")
-        )
-        cool_use_hourly = (
-            (raw_hourly["Cooling"] / cool_cop)
-            if "Cooling" in raw_hourly
-            else (raw_hourly["Lighting"] * 0).rename("Cooling")
-        )
-        dhw_use_hourly = (
-            (raw_hourly["Domestic Hot Water"] / dhw_cop)
-            if "Domestic Hot Water" in raw_hourly
-            else (raw_hourly["Lighting"] * 0).rename("Domestic Hot Water")
-        )
-        lighting_use_hourly = raw_hourly["Lighting"]
-        equipment_use_hourly = raw_hourly["Equipment"]
-
-        end_use_df_hourly = pd.concat(
-            [
-                lighting_use_hourly,
-                equipment_use_hourly,
-                heat_use_hourly,
-                cool_use_hourly,
-                dhw_use_hourly,
-            ],
-            axis=1,
-        )
-
-        heat_fuel = cond_sys.Heating.Fuel if cond_sys.Heating is not None else None
-        cool_fuel = cond_sys.Cooling.Fuel if cond_sys.Cooling is not None else None
-        dhw_fuel = ops.DHW.FuelType
-        all_fuels = {*FuelType.__args__, *DHWFuelType.__args__}
-        utilities_df_hourly = pd.DataFrame(
-            index=raw_hourly.index,
-            columns=sorted(all_fuels),
-            dtype=float,
-            data=np.zeros((len(raw_hourly), len(all_fuels))),
-        )
-        utilities_df_hourly["Electricity"] = lighting_use_hourly + equipment_use_hourly
-        if heat_fuel is not None:
-            utilities_df_hourly[heat_fuel] += heat_use_hourly
-        if cool_fuel is not None:
-            utilities_df_hourly[cool_fuel] += cool_use_hourly
-        utilities_df_hourly[dhw_fuel] += dhw_use_hourly
-
-        if not np.allclose(
-            utilities_df_hourly.sum().sum(), end_use_df_hourly.sum().sum()
-        ):
-            msg = "Utilities df and end use df do not sum to the same value!"
-            raise ValueError(msg)
-
-        utility_max = utilities_df_hourly.max()
-        utility_monthly_hourly_max = utilities_df_hourly.resample("ME").max()
-        utility_max.index.name = "Meter"
-        raw_monthly_hourly_max = raw_hourly.resample("ME").max()
-
-        max_data = pd.concat(
-            [utility_max, raw_hourly_max],
-            axis=0,
-            keys=["Utilities", "Raw"],
-            names=["Aggregation", "Meter"],
-        ).fillna(0)
-        max_data = cast(pd.Series, max_data).rename("kW/m2")
-
-        utility_monthly_hourly_max.index = pd.RangeIndex(1, 13, 1, name="Month")
-        raw_monthly_hourly_max.index = pd.RangeIndex(1, 13, 1, name="Month")
-        max_data_monthly = pd.concat(
-            [utility_monthly_hourly_max, raw_monthly_hourly_max],
-            axis=1,
-            keys=["Utilities", "Raw"],
-            names=["Aggregation"],
-        ).fillna(0)
-
-        return cast(pd.Series, max_data_monthly.unstack()).fillna(0).rename("kW/m2")
-
     def standard_results_postprocess(self, sql: Sql) -> pd.Series:
         """Postprocess the sql file to get the standard results.
 
-        This will return a series with three levels:
-        - Measurement: "Energy", "Peak", "Temperature"
-        - Aggregation: "Raw", "End Uses", "Utilities" (for Energy/Peak), "Mean" or "HoursAboveX°C" (for Temperature)
-        - Meter/Zone: ["Electricity", "Cooling", "Heating", "Domestic Hot Water"], ["Electricity", "Propane", ...], or zone names (for Temperature)
+        This will return a series with two levels:
+        - Aggregation: "Raw", "End Uses", "Utilities"
+        - Meter: ["Electricity", "Cooling", "Heating", "Domestic Hot Water"], ["Electricity", "Propane", ...]
 
         Args:
             sql (Sql): The sql file to postprocess.
@@ -1189,7 +1030,6 @@ class Model(BaseWeather, validate_assignment=True):
         """
         raw_hourly = sql.timeseries_by_name(DESIRED_METERS, "Hourly")
         raw_monthly = sql.timeseries_by_name(DESIRED_METERS, "Monthly")
-
         raw_df = sql.tabular_data_by_name(
             "AnnualBuildingUtilityPerformanceSummary", "End Uses"
         )
@@ -1268,72 +1108,148 @@ class Model(BaseWeather, validate_assignment=True):
         )
         raw_hourly.columns.name = "Meter"
         raw_hourly_max: pd.Series = raw_hourly.max(axis=0)
+        raw_monthly_hourly_max = raw_hourly.resample("M").max()
 
-        energy_series = self._process_energy_data(raw_monthly, raw_hourly)
-        peaks_series = self._process_peak_data(raw_hourly, raw_hourly_max)
+        ops = self.Zone.Operations
+        cond_sys = ops.HVAC.ConditioningSystems
+        heat_cop = (
+            cond_sys.Heating.effective_system_cop if cond_sys.Heating is not None else 1
+        )
+        cool_cop = (
+            cond_sys.Cooling.effective_system_cop if cond_sys.Cooling is not None else 1
+        )
+        dhw_cop = ops.DHW.effective_system_cop
+        heat_use = (
+            raw_monthly["Heating"] / heat_cop
+            if "Heating" in raw_monthly
+            else (raw_monthly["Lighting"] * 0).rename("Heating")
+        )
+        cool_use = (
+            raw_monthly["Cooling"] / cool_cop
+            if "Cooling" in raw_monthly
+            else (raw_monthly["Lighting"] * 0).rename("Cooling")
+        )
+        dhw_use = (
+            raw_monthly["Domestic Hot Water"] / dhw_cop
+            if "Domestic Hot Water" in raw_monthly
+            else (raw_monthly["Lighting"] * 0).rename("Domestic Hot Water")
+        )
+        lighting_use = raw_monthly["Lighting"]
+        equipment_use = raw_monthly["Equipment"]
+        end_use_df = pd.concat(
+            [lighting_use, equipment_use, heat_use, cool_use, dhw_use], axis=1
+        )
 
+        heat_fuel = cond_sys.Heating.Fuel if cond_sys.Heating is not None else None
+        cool_fuel = cond_sys.Cooling.Fuel if cond_sys.Cooling is not None else None
+        dhw_fuel = ops.DHW.FuelType
+        all_fuels = {*FuelType.__args__, *DHWFuelType.__args__}
+        utilities_df = pd.DataFrame(
+            index=pd.RangeIndex(1, 13, 1, name="Month"),
+            columns=sorted(all_fuels),
+            dtype=float,
+            data=np.zeros((12, len(all_fuels))),
+        )
+        utilities_df["Electricity"] = lighting_use + equipment_use
+        if heat_fuel is not None:
+            utilities_df[heat_fuel] += heat_use
+        if cool_fuel is not None:
+            utilities_df[cool_fuel] += cool_use
+        utilities_df[dhw_fuel] += dhw_use
+
+        if not np.allclose(utilities_df.sum().sum(), end_use_df.sum().sum()):
+            msg = "Utilities df and end use df do not sum to the same value!"
+            raise ValueError(msg)
+
+        energy_dfs = (
+            pd.concat(
+                [raw_monthly, end_use_df, utilities_df],
+                axis=1,
+                keys=["Raw", "End Uses", "Utilities"],
+                names=["Aggregation", "Meter"],
+            )
+            .unstack()
+            .fillna(0)
+        )
+        energy_series = cast(pd.Series, energy_dfs).rename("kWh/m2")
+
+        heat_use_hourly = (
+            (raw_hourly["Heating"] / heat_cop)
+            if "Heating" in raw_hourly
+            else (raw_hourly["Lighting"] * 0).rename("Heating")
+        )
+        cool_use_hourly = (
+            (raw_hourly["Cooling"] / cool_cop)
+            if "Cooling" in raw_hourly
+            else (raw_hourly["Lighting"] * 0).rename("Cooling")
+        )
+        dhw_use_hourly = (
+            (raw_hourly["Domestic Hot Water"] / dhw_cop)
+            if "Domestic Hot Water" in raw_hourly
+            else (raw_hourly["Lighting"] * 0).rename("Domestic Hot Water")
+        )
+        lighting_use_hourly = raw_hourly["Lighting"]
+        equipment_use_hourly = raw_hourly["Equipment"]
+
+        end_use_df_hourly = pd.concat(
+            [
+                lighting_use_hourly,
+                equipment_use_hourly,
+                heat_use_hourly,
+                cool_use_hourly,
+                dhw_use_hourly,
+            ],
+            axis=1,
+        )
+        utilities_df_hourly = pd.DataFrame(
+            index=raw_hourly.index,
+            columns=sorted(all_fuels),
+            dtype=float,
+            data=np.zeros((len(raw_hourly), len(all_fuels))),
+        )
+        utilities_df_hourly["Electricity"] = lighting_use_hourly + equipment_use_hourly
+        if heat_fuel is not None:
+            utilities_df_hourly[heat_fuel] += heat_use_hourly
+        if cool_fuel is not None:
+            utilities_df_hourly[cool_fuel] += cool_use_hourly
+        utilities_df_hourly[dhw_fuel] += dhw_use_hourly
+
+        if not np.allclose(
+            utilities_df_hourly.sum().sum(), end_use_df_hourly.sum().sum()
+        ):
+            msg = "Utilities df and end use df do not sum to the same value!"
+            raise ValueError(msg)
+
+        utility_max = utilities_df_hourly.max()
+        utility_monthly_hourly_max = utilities_df_hourly.resample("M").max()
+        utility_max.index.name = "Meter"
+        max_data = pd.concat(
+            [utility_max, raw_hourly_max],
+            axis=0,
+            keys=["Utilities", "Raw"],
+            names=["Aggregation", "Meter"],
+        ).fillna(0)
+        max_data = cast(pd.Series, max_data).rename("kW/m2")
+
+        utility_monthly_hourly_max.index = pd.RangeIndex(1, 13, 1, name="Month")
+        raw_monthly_hourly_max.index = pd.RangeIndex(1, 13, 1, name="Month")
+        max_data_monthly = pd.concat(
+            [utility_monthly_hourly_max, raw_monthly_hourly_max],
+            axis=1,
+            keys=["Utilities", "Raw"],
+            names=["Aggregation"],
+        ).fillna(0)
+
+        peaks_series = (
+            cast(pd.Series, max_data_monthly.unstack()).fillna(0).rename("kW/m2")
+        )
         all_data = pd.concat(
             [energy_series, peaks_series],
-            keys=[
-                "Energy",
-                "Peak",
-            ],
+            keys=["Energy", "Peak"],
             names=["Measurement"],
         )
 
         return all_data
-
-    def extract_zone_temperatures_to_csv(
-        self, sql: Sql, output_dir: Path
-    ) -> Path | None:
-        """Extract zone mean air temperatures and outdoor air temperature, and save to CSV.
-
-        Args:
-            sql (Sql): The SQL results file with simulation data.
-            output_dir (Path): The directory to save the CSV file.
-
-        Returns:
-            csv_path (Path | None): The path to the saved CSV file, or None if extraction failed.
-        """
-        csv_path = output_dir / "zone_temperatures.csv"
-        try:
-            zone_temp_data = sql.timeseries_by_name(DESIRED_VARIABLES, "Hourly")
-
-            if zone_temp_data.empty:
-                print(
-                    f"Warning: No zone temperature data found for variables: {DESIRED_VARIABLES}"
-                )
-                return None
-
-            # if zone_temp_data.columns.nlevels > 1:
-            #     zone_names = zone_temp_data.columns.get_level_values(
-            #         "KeyValue"
-            #     ).unique()
-            #     print(f"Found {len(zone_names)} zones in SQL results:")
-            #     for zone in sorted(zone_names):
-            #         print(f"  - {zone}")
-
-            zone_temp_df = zone_temp_data.droplevel("IndexGroup", axis=1)
-            zone_temp_df.columns = [
-                f"{col[0]} - {col[1]}" if isinstance(col, tuple) else str(col)
-                for col in zone_temp_df.columns
-            ]
-            zone_temp_df = zone_temp_df.reset_index()
-            if csv_path.exists():
-                csv_path.unlink()
-            zone_temp_df.to_csv(csv_path, index=False)
-            print(f"Zone temperatures and outdoor air temperature saved to: {csv_path}")
-            print(
-                f"  Found {len(zone_temp_df.columns) - 1} zone variables (excluding index)"
-            )
-            print(
-                f"  Zones: {[col for col in zone_temp_df.columns if 'Zone Mean Air Temperature' in col]}"
-            )
-        except Exception as e:
-            print(f"Warning: Failed to extract zone temperatures to CSV: {e}")
-            return None
-        else:
-            return csv_path
 
     def run(
         self,
