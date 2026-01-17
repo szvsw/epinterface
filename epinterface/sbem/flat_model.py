@@ -2126,7 +2126,7 @@ class FlatModel(BaseModel):
         """Simulate the model and return the IDF, result, and error."""
         model, cb = self.to_model()
 
-        idf, result, err = model.run(post_geometry_callback=cb)
+        idf, result, err, _sql, _ = model.run(post_geometry_callback=cb)
 
         return idf, result, err
 

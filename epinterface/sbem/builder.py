@@ -45,6 +45,13 @@ DESIRED_METERS = (
     "WaterSystems:DistrictHeating",
 )
 
+# TODO: add the meters for HVAC systems
+DESIRED_VARIABLES = (
+    "Zone Mean Air Temperature",
+    "Zone Air Relative Humidity",
+    "Site Outdoor Air Drybulb Temperature",
+)
+
 
 class SimulationPathConfig(BaseModel):
     """The configuration for the simulation's pathing."""
@@ -815,13 +822,33 @@ class Model(BaseWeather, validate_assignment=True):
         target_base_filepath = config.output_dir / "Minimal.idf"
         shutil.copy(base_filepath, target_base_filepath)
         epw_path, ddy_path = asyncio.run(self.fetch_weather(config.weather_dir))
-        output_meters = [
-            {"key": "OUTPUT:METER", "Key_Name": meter, "Reporting_Frequency": "Monthly"}
-            for meter in DESIRED_METERS
-        ] + [
-            {"key": "OUTPUT:METER", "Key_Name": meter, "Reporting_Frequency": "Hourly"}
-            for meter in DESIRED_METERS
-        ]
+        output_meters = (
+            [
+                {
+                    "key": "OUTPUT:METER",
+                    "Key_Name": meter,
+                    "Reporting_Frequency": "Monthly",
+                }
+                for meter in DESIRED_METERS
+            ]
+            + [
+                {
+                    "key": "OUTPUT:METER",
+                    "Key_Name": meter,
+                    "Reporting_Frequency": "Hourly",
+                }
+                for meter in DESIRED_METERS
+            ]
+            + [
+                {
+                    "key": "OUTPUT:VARIABLE",
+                    "Key_Value": "*",
+                    "Variable_Name": variable,
+                    "Reporting_Frequency": "Hourly",
+                }
+                for variable in DESIRED_VARIABLES
+            ]
+        )
         idf = IDF(
             target_base_filepath.as_posix(),
             as_version="22.2",  # pyright: ignore [reportArgumentType]
@@ -983,7 +1010,7 @@ class Model(BaseWeather, validate_assignment=True):
         """
         err_files = filter(
             lambda x: x.suffix == ".err",
-            [idf.output_directory / Path(f) for f in idf.simulation_files],
+            [Path(f) for f in idf.simulation_files],
         )
         err_text = "\n".join([f.read_text() for f in err_files])
         return err_text
@@ -1228,20 +1255,29 @@ class Model(BaseWeather, validate_assignment=True):
         self,
         weather_dir: Path | None = None,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
-    ) -> tuple[IDF, pd.Series, str]:
+        eplus_parent_dir: Path | None = None,
+    ) -> tuple[IDF, pd.Series, str, Sql, Path | None]:
         """Build and simualte the idf model.
 
         Args:
             weather_dir (Path): The directory to store the weather files.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
+            eplus_parent_dir (Path | None): The parent directory to store the eplus working directory.  If None, a temporary directory will be used.
 
         Returns:
             idf (IDF): The built energy model.
-            results (dict[str, pd.Series]): The postprocessed results.
+            results (pd.Series): The postprocessed results including energy, peak, and temperature data.
             err_text (str): The warning text.
+            sql (Sql): The SQL results file with simulation data.
+            eplus_dir (Path | None): The path to the eplus artifact directory (None if a temporary directory was used).
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_dir = Path(temp_dir)
+        with tempfile.TemporaryDirectory() as output_dir_name:
+            output_dir = (
+                Path(output_dir_name)
+                if eplus_parent_dir is None
+                else eplus_parent_dir / "eplus_simulation"
+            )
+            output_dir.mkdir(parents=True, exist_ok=True)
             config = (
                 SimulationPathConfig(
                     output_dir=output_dir,
@@ -1257,8 +1293,11 @@ class Model(BaseWeather, validate_assignment=True):
             )
             results = self.standard_results_postprocess(sql)
             err_text = self.get_warnings(idf)
+
             gc.collect()
-            return idf, results, err_text
+            # if eplus_parent_dir is not None, we return the path to the output directory
+            output_dir_result = output_dir if eplus_parent_dir is not None else None
+            return idf, results, err_text, sql, output_dir_result
 
 
 if __name__ == "__main__":
@@ -1271,8 +1310,10 @@ if __name__ == "__main__":
     from epinterface.sbem.prisma.client import PrismaSettings
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        database_path = Path("tests") / "data" / "components-ma.db"
-        component_map_path = Path("tests") / "data" / "component-map-ma.yml"
+        database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
+        component_map_path = Path(
+            "/Users/daryaguettler/globi/data/Brazil/component-map.yaml"
+        )
         settings = PrismaSettings(
             database_path=database_path,
             auto_register=False,
@@ -1289,32 +1330,17 @@ if __name__ == "__main__":
         selector = SelectorModel.model_validate(component_map_yaml)
         db = settings.db
         context = {
-            "Region": "MA",
-            "Typology": "SFH",
-            "Age_bracket": "pre_1975",
-            "AtticVentilation": "UnventilatedAttic",
-            "AtticFloorInsulation": "NoInsulation",
-            "RoofInsulation": "UninsulatedRoof",
-            "BasementCeilingInsulation": "InsulatedCeiling",
-            "BasementWallsInsulation": "UninsulatedWalls",
-            "GroundSlabInsulation": "UninsulatedGroundSlab",
-            "Walls": "SomeInsulationWalls",
-            "Weatherization": "SomewhatLeakyEnvelope",
-            "Windows": "DoublePaneLowE",
-            "Heating": "ASHPHeating",
-            "Cooling": "ASHPCooling",
-            "Distribution": "Steam",
-            "DHW": "NaturalGasDHW",
-            "Lighting": "NoLED",
-            "Equipment": "LowEfficiencyEquipment",
-            "Thermostat": "NoControls",
+            "region": "SP",
+            "income": "Low",
+            "typology": "Residential",
+            "scenario": "withAC",
         }
         with settings.db:
             zone = cast(ZoneComponent, selector.get_component(context=context, db=db))
 
         model = Model(
             Weather=(
-                "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.zip"
+                "https://climate.onebuilding.org/WMO_Region_3_South_America/BRA_Brazil/SP_Sao_Paulo/BRA_SP_Guaratingueta.AP.837080_TMYx.2009-2023.zip"
             ),  # pyright: ignore [reportArgumentType]
             Zone=zone,
             Attic=AtticAssumptions(
@@ -1328,10 +1354,10 @@ if __name__ == "__main__":
             geometry=ShoeboxGeometry(
                 x=0,
                 y=0,
-                w=14,
-                d=14,
+                w=20,
+                d=20,
                 h=3,
-                wwr=0.2,
+                wwr=0.3,
                 num_stories=3,
                 basement=False,
                 zoning="by_storey",
@@ -1341,10 +1367,27 @@ if __name__ == "__main__":
         )
 
         # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
-        _idf, results, _err_text = model.run(
+
+        _idf, results, _err_text, _sql, _ = model.run(
             # post_geometry_callback=post_geometry_callback,
         )
+
+        # temp_config = TemperatureOutputConfig(mode="hours_above_threshold", threshold=26.0)
+        # _idf, results, _err_text, _sql = model.run(temp_config=temp_config)
         # _idf.saveas("test-out.idf")
         print(_err_text)
         print(results)
-        print(results.Energy.Raw.groupby("Meter").sum())
+
+        if "Temperature" in results.index.get_level_values("Measurement"):
+            zone_temp_results = results.loc["Temperature"]
+            print("Zone Temperature Results:")
+            print(zone_temp_results)
+        else:
+            print("No temperature data found in results")
+            print(
+                f"Available measurements: {results.index.get_level_values('Measurement').unique().tolist()}"
+            )
+
+        energy_raw = results.loc["Energy"].loc["Raw"]
+        print("Energy Raw Results:")
+        print(energy_raw.groupby(level=0).sum())
