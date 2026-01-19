@@ -51,6 +51,9 @@ class SemanticModelFields(BaseModel):
     GFA_col: str | None = Field(
         default=None, description="The gross floor area column name [m2]."
     )
+    Building_ID_col: str | None = Field(
+        default=None, description="The building ID column name."
+    )
 
     @model_validator(mode="after")
     def check_at_least_one_height_or_num_floors(self):
