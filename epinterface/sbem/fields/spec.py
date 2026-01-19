@@ -55,6 +55,21 @@ class SemanticModelFields(BaseModel):
         default=None, description="The building ID column name."
     )
 
+    @property
+    def semantic_field_names(self) -> list[str]:
+        """The names of the semantic fields."""
+        return [f.Name for f in self.Fields]
+
+    @property
+    def rich_field_names(self) -> list[str | None]:
+        """The names of the rich fields."""
+        return [v for k, v in self.model_dump().items() if k.endswith("_col")]
+
+    @property
+    def field_names(self) -> list[str | None]:
+        """The names of the fields."""
+        return [*self.semantic_field_names, *self.rich_field_names]
+
     @model_validator(mode="after")
     def check_at_least_one_height_or_num_floors(self):
         """Check that at least one of height or number of floors is provided."""
