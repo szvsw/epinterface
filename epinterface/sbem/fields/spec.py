@@ -61,6 +61,9 @@ class SemanticModelFields(BaseModel):
     Exposed_Basement_Frac_col: str | None = Field(
         default=None, description="The exposed basement fraction column name."
     )
+    Weather_File_col: str | None = Field(
+        default=None, description="The weather file column name."
+    )
 
     @property
     def semantic_field_names(self) -> list[str]:
