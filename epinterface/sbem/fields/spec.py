@@ -54,6 +54,13 @@ class SemanticModelFields(BaseModel):
     Building_ID_col: str | None = Field(
         default=None, description="The building ID column name."
     )
+    Basement_col: str | None = Field(
+        default=None, description="The basement column name."
+    )
+    Attic_col: str | None = Field(default=None, description="The attic column name.")
+    Exposed_Basement_Frac_col: str | None = Field(
+        default=None, description="The exposed basement fraction column name."
+    )
 
     @property
     def semantic_field_names(self) -> list[str]:
