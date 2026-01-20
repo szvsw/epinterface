@@ -51,6 +51,34 @@ class SemanticModelFields(BaseModel):
     GFA_col: str | None = Field(
         default=None, description="The gross floor area column name [m2]."
     )
+    Building_ID_col: str | None = Field(
+        default=None, description="The building ID column name."
+    )
+    Basement_col: str | None = Field(
+        default=None, description="The basement column name."
+    )
+    Attic_col: str | None = Field(default=None, description="The attic column name.")
+    Exposed_Basement_Frac_col: str | None = Field(
+        default=None, description="The exposed basement fraction column name."
+    )
+    Weather_File_col: str | None = Field(
+        default=None, description="The weather file column name."
+    )
+
+    @property
+    def semantic_field_names(self) -> list[str]:
+        """The names of the semantic fields."""
+        return [f.Name for f in self.Fields]
+
+    @property
+    def rich_field_names(self) -> list[str | None]:
+        """The names of the rich fields."""
+        return [v for k, v in self.model_dump().items() if k.endswith("_col")]
+
+    @property
+    def field_names(self) -> list[str | None]:
+        """The names of the fields."""
+        return [*self.semantic_field_names, *self.rich_field_names]
 
     @model_validator(mode="after")
     def check_at_least_one_height_or_num_floors(self):

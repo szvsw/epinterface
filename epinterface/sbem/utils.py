@@ -1,7 +1,7 @@
 """Utility functions for working with SBEMs."""
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import yaml
 from tqdm.autonotebook import tqdm
@@ -15,11 +15,25 @@ from epinterface.sbem.fields.spec import SemanticModelFields
 from epinterface.sbem.prisma.client import PrismaSettings
 
 
+class ModelsNotConstructableError(Exception):
+    """An error raised when the models are not constructable."""
+
+    def __init__(self, failing_contexts: list[dict[str, Any]]):
+        """Initialize the error."""
+        self.failing_contexts = failing_contexts
+        printable_contexts = failing_contexts[: min(10, len(failing_contexts))]
+        msg = "The following contexts failed to resolve to a valid zone component:\n"
+        msg += "\n\n"
+        msg += yaml.dump(printable_contexts, indent=2, sort_keys=False)
+        super().__init__(msg)
+
+
 def check_model_existence(
     component_map_path: Path,
     semantic_fields_path: Path,
     db_path: Path,
     max_tests: int = 100,
+    raise_on_error: bool = False,
 ) -> None:
     """Check if all semantic field combinations resolve to a valid zone component (up to some sampling limit).
 
@@ -34,6 +48,7 @@ def check_model_existence(
         semantic_fields_path: Path to the semantic fields file.
         db_path: Path to the database file.
         max_tests: Maximum number of tests to run.
+        raise_on_error: Whether to raise an error if any tests fail.
     """
     with open(semantic_fields_path) as f:
         semantic_fields_yaml = yaml.safe_load(f)
@@ -61,8 +76,13 @@ def check_model_existence(
     grid = grid.sample(min(max_tests, len(grid)))
 
     # Checks that things that should be in the db are in the db
+    failing_contexts = []
     with db:
-        for _ix, row in tqdm(grid.iterrows(), total=len(grid)):
+        for _ix, row in tqdm(
+            grid.iterrows(),
+            total=len(grid),
+            desc="Checking semantic field/component lib compatibility.",
+        ):
             context = row.to_dict()
             for field_name, field_val in field_vals.items():
                 context[field_name] = field_val[context[field_name]]
@@ -72,3 +92,6 @@ def check_model_existence(
                 )
             except Exception as e:
                 print(f"\nError: {e}, context: {context}\n")
+                failing_contexts.append(context)
+    if raise_on_error and failing_contexts:
+        raise ModelsNotConstructableError(failing_contexts)
