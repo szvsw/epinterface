@@ -895,9 +895,11 @@ class Model(BaseWeather, validate_assignment=True):
         csp = self.Zone.Operations.SpaceUse.Thermostat.CoolingSchedule
         epw = EPW(epw_path.as_posix())
         epw_ground_vals = epw.monthly_ground_temperature
-        low_ground_val = min(epw_ground_vals)
-        high_ground_val = max(epw_ground_vals)
-        phase = (np.array(epw_ground_vals) - low_ground_val) / (
+        # we assume that 0.5m depth will be the most relevant for the ground temperature. The other options are 2m and 4m.
+        epw_ground_vals_05 = epw_ground_vals[0.5].values
+        low_ground_val = min(epw_ground_vals_05)
+        high_ground_val = max(epw_ground_vals_05)
+        phase = (np.array(epw_ground_vals_05) - low_ground_val) / (
             high_ground_val - low_ground_val
         )
         if has_heating and has_cooling:
@@ -914,7 +916,7 @@ class Model(BaseWeather, validate_assignment=True):
             winter_line = np.array(assumed_constants.SiteGroundTemperature_degC)
             summer_line = np.array(assumed_constants.SiteGroundTemperature_degC)
         interp_temp = phase * np.abs(summer_line - winter_line) + winter_line
-        ground_vals = [max(epw_ground_vals[i], interp_temp[i]) for i in range(12)]
+        ground_vals = [max(epw_ground_vals_05[i], interp_temp[i]) for i in range(12)]
         idf = SiteGroundTemperature.FromValues(ground_vals).add(idf)
 
         # handle basements
@@ -1342,9 +1344,15 @@ if __name__ == "__main__":
     from epinterface.sbem.prisma.client import PrismaSettings
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
+        # database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
+        # component_map_path = Path(
+        #     "/Users/daryaguettler/globi/data/Brazil/component-map.yaml"
+        # )
+        database_path = Path(
+            "/Users/daryaguettler/globi/data/Portugal/components-lib.db"
+        )
         component_map_path = Path(
-            "/Users/daryaguettler/globi/data/Brazil/component-map.yaml"
+            "/Users/daryaguettler/globi/data/Portugal/component-map.yaml"
         )
         settings = PrismaSettings(
             database_path=database_path,
@@ -1361,18 +1369,26 @@ if __name__ == "__main__":
             component_map_yaml = yaml.safe_load(f)
         selector = SelectorModel.model_validate(component_map_yaml)
         db = settings.db
+        # context = {
+        #     "region": "SP",
+        #     "income": "Low",
+        #     "typology": "Residential",
+        #     "scenario": "withAC",
+        # }
         context = {
-            "region": "SP",
-            "income": "Low",
-            "typology": "Residential",
-            "scenario": "withAC",
+            "Region": "I1_V2",
+            "City": "LS",
+            "Typology": "Single_Family_Residential",
+            "Age_buckets": "1971_1980",
+            "scenario": "Baseline",
         }
         with settings.db:
             zone = cast(ZoneComponent, selector.get_component(context=context, db=db))
 
         model = Model(
             Weather=(
-                "https://climate.onebuilding.org/WMO_Region_3_South_America/BRA_Brazil/SP_Sao_Paulo/BRA_SP_Guaratingueta.AP.837080_TMYx.2009-2023.zip"
+                # "https://climate.onebuilding.org/WMO_Region_3_South_America/BRA_Brazil/SP_Sao_Paulo/BRA_SP_Guaratingueta.AP.837080_TMYx.2009-2023.zip"
+                "https://climate.onebuilding.org/WMO_Region_6_Europe/PRT_Portugal/LB_Lisboa/PRT_LB_Lisboa.Portela.AP.085360_TMYx.2009-2023.zip"
             ),  # pyright: ignore [reportArgumentType]
             Zone=zone,
             Attic=AtticAssumptions(
@@ -1390,7 +1406,7 @@ if __name__ == "__main__":
                 d=20,
                 h=3,
                 wwr=0.3,
-                num_stories=3,
+                num_stories=1,
                 basement=False,
                 zoning="by_storey",
                 roof_height=None,
