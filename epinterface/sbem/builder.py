@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
+from ladybug.epw import EPW
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from epinterface.constants import assumed_constants, physical_constants
@@ -890,28 +891,30 @@ class Model(BaseWeather, validate_assignment=True):
         )
         has_heating = self.Zone.Operations.HVAC.ConditioningSystems.Heating is not None
         has_cooling = self.Zone.Operations.HVAC.ConditioningSystems.Cooling is not None
-        heating_avg = (
-            self.Zone.Operations.SpaceUse.Thermostat.HeatingSchedule.AverageValue
-        )
-        cooling_avg = (
-            self.Zone.Operations.SpaceUse.Thermostat.CoolingSchedule.AverageValue
+        hsp = self.Zone.Operations.SpaceUse.Thermostat.HeatingSchedule
+        csp = self.Zone.Operations.SpaceUse.Thermostat.CoolingSchedule
+        epw = EPW(epw_path.as_posix())
+        epw_ground_vals = epw.monthly_ground_temperature
+        low_ground_val = min(epw_ground_vals)
+        high_ground_val = max(epw_ground_vals)
+        phase = (np.array(epw_ground_vals) - low_ground_val) / (
+            high_ground_val - low_ground_val
         )
         if has_heating and has_cooling:
-            average = (heating_avg + cooling_avg) / 2 - subtractor
-            if abs(heating_avg - cooling_avg) > 1:
-                logger.warning(
-                    "WARNING: Heating and cooling average temperatures are different by more than 1 degree; this may have an impact on the ground temperature accuracy."
-                )
-            ground_vals = [average] * 12
+            winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
+            summer_line = np.array(csp.MonthlyAverageValues) - subtractor
         elif has_heating:
-            average = heating_avg - subtractor
-            ground_vals = [average] * 12
+            winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
+            summer_line = np.array(hsp.MonthlyAverageValues)
         elif has_cooling:
-            average = cooling_avg - subtractor
-            ground_vals = [average] * 12
+            winter_line = np.array(csp.MonthlyAverageValues) - subtractor
+            summer_line = np.array(csp.MonthlyAverageValues) - subtractor
         else:
             # No heating or cooling, so we use the default ground temperature, should not matter much.
-            ground_vals = assumed_constants.SiteGroundTemperature_degC
+            winter_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+            summer_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+        interp_temp = phase * np.abs(summer_line - winter_line) + winter_line
+        ground_vals = [max(epw_ground_vals[i], interp_temp[i]) for i in range(12)]
         idf = SiteGroundTemperature.FromValues(ground_vals).add(idf)
 
         # handle basements

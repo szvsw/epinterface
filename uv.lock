@@ -605,6 +605,7 @@ dependencies = [
     { name = "click" },
     { name = "geopandas" },
     { name = "httpx" },
+    { name = "ladybug-core" },
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "prisma" },
@@ -636,6 +637,7 @@ requires-dist = [
     { name = "click", specifier = "==8.1.7" },
     { name = "geopandas", specifier = "~=1.0.1" },
     { name = "httpx", specifier = "~=0.27.2" },
+    { name = "ladybug-core", specifier = ">=0.44.30" },
     { name = "openpyxl", specifier = "~=3.1.5" },
     { name = "pandas", specifier = ">=2.2,<2.3" },
     { name = "prisma", specifier = "~=0.15.0" },
@@ -1426,6 +1428,28 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/eb/78d50346c51db22c7203c1611f9b513075f35c4e0e4877c5dde378d66043/kiwisolver-1.4.8-pp310-pypy310_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7cd2785b9391f2873ad46088ed7599a6a71e762e1ea33e87514b1a441ed1da1c", size = 81186, upload_time = "2024-12-24T18:30:45.654Z" },
     { url = "https://files.pythonhosted.org/packages/43/f8/7259f18c77adca88d5f64f9a522792e178b2691f3748817a8750c2d216ef/kiwisolver-1.4.8-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c07b29089b7ba090b6f1a669f1411f27221c3662b3a1b7010e67b59bb5a6f10b", size = 80279, upload_time = "2024-12-24T18:30:47.951Z" },
     { url = "https://files.pythonhosted.org/packages/3a/1d/50ad811d1c5dae091e4cf046beba925bcae0a610e79ae4c538f996f63ed5/kiwisolver-1.4.8-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:65ea09a5a3faadd59c2ce96dc7bf0f364986a315949dc6374f04396b0d60e09b", size = 71762, upload_time = "2024-12-24T18:30:48.903Z" },
+]
+
+[[package]]
+name = "ladybug-core"
+version = "0.44.30"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "ladybug-geometry" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bf/d5/c97c70cfbe345d3076a7a4c1c39285bd8617d47a170a9d931882d93019d3/ladybug_core-0.44.30.tar.gz", hash = "sha256:c01e1953b598a4d379d3996403ec6d1686870a3bd8474501be7281068c260aff", size = 242468, upload_time = "2026-01-06T17:26:42.834Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/f9/90a46ce7e20d404c310ea1a68479a0ab0be4f995dc5c741bc17fda1702a3/ladybug_core-0.44.30-py3-none-any.whl", hash = "sha256:e5b65802adfd00d65cc1122a52b7ec561fa166c9bc78b240e05940c5f15be96f", size = 272523, upload_time = "2026-01-06T17:26:40.842Z" },
+]
+
+[[package]]
+name = "ladybug-geometry"
+version = "1.34.14"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/0c/1803f43741957787399c802ce07b833f0b69e8bf93630f5b275f88d65881/ladybug_geometry-1.34.14.tar.gz", hash = "sha256:7531f4d6a9f35e1c15f8307282af6ef43056e1652910bd0188114fcecae9a01d", size = 617102, upload_time = "2025-11-07T04:16:48.676Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/52/7b8421a8ace22a17ae77dd9a8367e916364ed8be72502cb744805f06d6ac/ladybug_geometry-1.34.14-py3-none-any.whl", hash = "sha256:af91ee9285333ca1ddfaf439530306dff7f0a891cae40d4dc5491f139fcf7d36", size = 198221, upload_time = "2025-11-07T04:16:46.986Z" },
 ]
 
 [[package]]
