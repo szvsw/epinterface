@@ -71,6 +71,11 @@ class DayComponent(NamedObject, extra="forbid"):
     Hour_23: float
 
     @property
+    def AverageValue(self) -> float:
+        """Get the average value of the day."""
+        return sum(self.Values) / len(self.Values)
+
+    @property
     def bounds(self) -> tuple[float, float]:
         """Get the bounds of the day."""
         return min(self.Values), max(self.Values)
@@ -199,6 +204,11 @@ class WeekComponent(NamedObject, extra="forbid"):
         lows = [day.bounds[0] for day in self.Days]
         highs = [day.bounds[1] for day in self.Days]
         return min(lows), max(highs)
+
+    @property
+    def AverageValue(self) -> float:
+        """Get the average value of the week."""
+        return sum(day.AverageValue for day in self.Days) / len(self.Days)
 
     @property
     def Days(self) -> list[DayComponent]:
@@ -337,6 +347,16 @@ class YearComponent(NamedObject, extra="forbid"):
     October: WeekComponent
     November: WeekComponent
     December: WeekComponent
+
+    @property
+    def AverageValue(self) -> float:
+        """Get the average value of the year."""
+        return sum(week.AverageValue for week in self.Weeks) / len(self.Weeks)
+
+    @property
+    def MonthlyAverageValues(self) -> list[float]:
+        """Get the average values of the year."""
+        return [week.AverageValue for week in self.Weeks]
 
     @property
     def bounds(self) -> tuple[float, float]:

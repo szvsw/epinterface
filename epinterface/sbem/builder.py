@@ -2,6 +2,7 @@
 
 import asyncio
 import gc
+import logging
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -14,6 +15,7 @@ import numpy as np
 import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
+from ladybug.epw import EPW
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from epinterface.constants import assumed_constants, physical_constants
@@ -36,6 +38,8 @@ from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
 from epinterface.weather import BaseWeather
+
+logger = logging.getLogger(__name__)
 
 DESIRED_METERS = (
     "InteriorEquipment:Electricity",
@@ -803,7 +807,7 @@ class Model(BaseWeather, validate_assignment=True):
 
         return idf
 
-    def build(
+    def build(  # noqa: C901
         self,
         config: SimulationPathConfig,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
@@ -870,10 +874,6 @@ class Model(BaseWeather, validate_assignment=True):
         idf = add_default_sim_controls(idf)
         idf, _scheds = add_default_schedules(idf)
 
-        idf = SiteGroundTemperature.FromValues(
-            assumed_constants.SiteGroundTemperature_degC
-        ).add(idf)
-
         idf = self.geometry.add(idf)
         if post_geometry_callback is not None:
             idf = post_geometry_callback(idf)
@@ -884,6 +884,44 @@ class Model(BaseWeather, validate_assignment=True):
         # Handle main zones
         for zone in added_zone_lists.main_zone_list.Names:
             self.Zone.add_to_idf_zone(idf, zone)
+
+        # Handle setting ground temperature
+        subtractor = (
+            4 if (self.geometry.basement and not self.Basement.Conditioned) else 2
+        )
+        has_heating = self.Zone.Operations.HVAC.ConditioningSystems.Heating is not None
+        has_cooling = self.Zone.Operations.HVAC.ConditioningSystems.Cooling is not None
+        hsp = self.Zone.Operations.SpaceUse.Thermostat.HeatingSchedule
+        csp = self.Zone.Operations.SpaceUse.Thermostat.CoolingSchedule
+        epw = EPW(epw_path.as_posix())
+        epw_ground_vals_all = epw.monthly_ground_temperature
+        if self.geometry.basement:
+            # if there is a basement, we use the 2m depth to account for the basement depth.
+            epw_ground_vals = epw_ground_vals_all[4].values
+        else:
+            # if there is no basement, we use the 0.5m depth to account for the ground temperature.
+            epw_ground_vals = epw_ground_vals_all[0.5].values
+        low_ground_val = min(epw_ground_vals)
+        high_ground_val = max(epw_ground_vals)
+        phase = (np.array(epw_ground_vals) - low_ground_val) / (
+            high_ground_val - low_ground_val
+        )
+        if has_heating and has_cooling:
+            winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
+            summer_line = np.array(csp.MonthlyAverageValues) - subtractor
+        elif has_heating:
+            winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
+            summer_line = np.array(hsp.MonthlyAverageValues)
+        elif has_cooling:
+            winter_line = np.array(csp.MonthlyAverageValues) - subtractor
+            summer_line = np.array(csp.MonthlyAverageValues) - subtractor
+        else:
+            # No heating or cooling, so we use the default ground temperature, should not matter much.
+            winter_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+            summer_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+        interp_temp = phase * np.abs(summer_line - winter_line) + winter_line
+        ground_vals = [max(epw_ground_vals[i], interp_temp[i]) for i in range(12)]
+        idf = SiteGroundTemperature.FromValues(ground_vals).add(idf)
 
         # handle basements
         if self.Basement.UseFraction or self.Basement.Conditioned:
@@ -1310,9 +1348,15 @@ if __name__ == "__main__":
     from epinterface.sbem.prisma.client import PrismaSettings
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
+        # database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
+        # component_map_path = Path(
+        #     "/Users/daryaguettler/globi/data/Brazil/component-map.yaml"
+        # )
+        database_path = Path(
+            "/Users/daryaguettler/globi/data/Portugal/components-lib.db"
+        )
         component_map_path = Path(
-            "/Users/daryaguettler/globi/data/Brazil/component-map.yaml"
+            "/Users/daryaguettler/globi/data/Portugal/component-map.yaml"
         )
         settings = PrismaSettings(
             database_path=database_path,
@@ -1329,18 +1373,26 @@ if __name__ == "__main__":
             component_map_yaml = yaml.safe_load(f)
         selector = SelectorModel.model_validate(component_map_yaml)
         db = settings.db
+        # context = {
+        #     "region": "SP",
+        #     "income": "Low",
+        #     "typology": "Residential",
+        #     "scenario": "withAC",
+        # }
         context = {
-            "region": "SP",
-            "income": "Low",
-            "typology": "Residential",
-            "scenario": "withAC",
+            "Region": "I1_V2",
+            "City": "LS",
+            "Typology": "Single_Family_Residential",
+            "Age_buckets": "1971_1980",
+            "scenario": "Baseline",
         }
         with settings.db:
             zone = cast(ZoneComponent, selector.get_component(context=context, db=db))
 
         model = Model(
             Weather=(
-                "https://climate.onebuilding.org/WMO_Region_3_South_America/BRA_Brazil/SP_Sao_Paulo/BRA_SP_Guaratingueta.AP.837080_TMYx.2009-2023.zip"
+                # "https://climate.onebuilding.org/WMO_Region_3_South_America/BRA_Brazil/SP_Sao_Paulo/BRA_SP_Guaratingueta.AP.837080_TMYx.2009-2023.zip"
+                "https://climate.onebuilding.org/WMO_Region_6_Europe/PRT_Portugal/LB_Lisboa/PRT_LB_Lisboa.Portela.AP.085360_TMYx.2009-2023.zip"
             ),  # pyright: ignore [reportArgumentType]
             Zone=zone,
             Attic=AtticAssumptions(
@@ -1358,7 +1410,7 @@ if __name__ == "__main__":
                 d=20,
                 h=3,
                 wwr=0.3,
-                num_stories=3,
+                num_stories=1,
                 basement=False,
                 zoning="by_storey",
                 roof_height=None,
