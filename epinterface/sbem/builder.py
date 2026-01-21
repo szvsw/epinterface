@@ -2,6 +2,7 @@
 
 import asyncio
 import gc
+import logging
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -36,6 +37,8 @@ from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
 from epinterface.weather import BaseWeather
+
+logger = logging.getLogger(__name__)
 
 DESIRED_METERS = (
     "InteriorEquipment:Electricity",
@@ -803,7 +806,7 @@ class Model(BaseWeather, validate_assignment=True):
 
         return idf
 
-    def build(
+    def build(  # noqa: C901
         self,
         config: SimulationPathConfig,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
@@ -870,10 +873,6 @@ class Model(BaseWeather, validate_assignment=True):
         idf = add_default_sim_controls(idf)
         idf, _scheds = add_default_schedules(idf)
 
-        idf = SiteGroundTemperature.FromValues(
-            assumed_constants.SiteGroundTemperature_degC
-        ).add(idf)
-
         idf = self.geometry.add(idf)
         if post_geometry_callback is not None:
             idf = post_geometry_callback(idf)
@@ -884,6 +883,36 @@ class Model(BaseWeather, validate_assignment=True):
         # Handle main zones
         for zone in added_zone_lists.main_zone_list.Names:
             self.Zone.add_to_idf_zone(idf, zone)
+
+        # Handle setting ground temperature
+        subtractor = (
+            4 if (self.geometry.basement and not self.Basement.Conditioned) else 2
+        )
+        has_heating = self.Zone.Operations.HVAC.ConditioningSystems.Heating is not None
+        has_cooling = self.Zone.Operations.HVAC.ConditioningSystems.Cooling is not None
+        heating_avg = (
+            self.Zone.Operations.SpaceUse.Thermostat.HeatingSchedule.AverageValue
+        )
+        cooling_avg = (
+            self.Zone.Operations.SpaceUse.Thermostat.CoolingSchedule.AverageValue
+        )
+        if has_heating and has_cooling:
+            average = (heating_avg + cooling_avg) / 2 - subtractor
+            if abs(heating_avg - cooling_avg) > 1:
+                logger.warning(
+                    "WARNING: Heating and cooling average temperatures are different by more than 1 degree; this may have an impact on the ground temperature accuracy."
+                )
+            ground_vals = [average] * 12
+        elif has_heating:
+            average = heating_avg - subtractor
+            ground_vals = [average] * 12
+        elif has_cooling:
+            average = cooling_avg - subtractor
+            ground_vals = [average] * 12
+        else:
+            # No heating or cooling, so we use the default ground temperature, should not matter much.
+            ground_vals = assumed_constants.SiteGroundTemperature_degC
+        idf = SiteGroundTemperature.FromValues(ground_vals).add(idf)
 
         # handle basements
         if self.Basement.UseFraction or self.Basement.Conditioned:
