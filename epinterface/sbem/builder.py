@@ -8,7 +8,7 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, cast, get_args
 from uuid import uuid4
 
 import numpy as np
@@ -50,11 +50,13 @@ DESIRED_METERS = (
 )
 
 # TODO: add the meters for HVAC systems
-DESIRED_VARIABLES = (
+AvailableHourlyVariables = Literal[
     "Zone Mean Air Temperature",
     "Zone Air Relative Humidity",
     "Site Outdoor Air Drybulb Temperature",
-)
+]
+
+AVAILABLE_HOURLY_VARIABLES = get_args(AvailableHourlyVariables)
 
 
 class SimulationPathConfig(BaseModel):
@@ -850,7 +852,7 @@ class Model(BaseWeather, validate_assignment=True):
                     "Variable_Name": variable,
                     "Reporting_Frequency": "Hourly",
                 }
-                for variable in DESIRED_VARIABLES
+                for variable in AVAILABLE_HOURLY_VARIABLES
             ]
         )
         idf = IDF(
