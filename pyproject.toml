@@ -1,6 +1,6 @@
 [project]
 name = "epinterface"
-version = "1.0.4"
+version = "1.0.5"
 description = "This is a repository for dynamically generating energy models within Python, relying on Archetypal and Eppy for most of its functionality."
 readme = "README.md"
 authors = [
