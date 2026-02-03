@@ -589,7 +589,7 @@ def _consecutive_run_lengths_looped(M: NDArray[np.bool_]) -> NDArray[np.float64]
     M has shape (..., n_timesteps). For each (..., :) slice, returns run lengths in a padded
     2D array of shape (n_slices, max_runs), with NaN padding.
     """
-    # TODO: validate this method.
+    # TODO: use this method in a test to validate the vectorized version.
     orig_shape = M.shape
     n_timesteps = orig_shape[-1]
     n_slices = int(np.prod(orig_shape[:-1]))
@@ -628,8 +628,7 @@ def _consecutive_run_lengths_looped(M: NDArray[np.bool_]) -> NDArray[np.float64]
         *orig_shape[:-1],
         most_streaks,
     ))
-    print(reshaped_streaks)
-    return padded_streaks
+    return reshaped_streaks
 
 
 if __name__ == "__main__":
