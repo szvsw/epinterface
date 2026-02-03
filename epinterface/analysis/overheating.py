@@ -441,20 +441,25 @@ def calculate_basic_overheating_stats(
     # print(ouh_counts_by_zone_and_threshold)
 
 
-def _consecutive_run_lengths_vectorized(M: NDArray[np.bool_]) -> NDArray[np.float64]:
-    """Compute lengths of consecutive True runs along the last axis, for all leading dimensions.
+def _consecutive_run_lengths_vectorized(
+    M_diff: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Compute lengths and integrals of consecutive runs where M_diff > 0, along the last axis.
 
-    M has shape (..., n_timesteps). For each (..., :) slice, returns run lengths in a padded
-    2D array of shape (n_slices, max_runs), with NaN padding.
+    M_diff has shape (..., n_timesteps). For each (..., :) slice, identifies runs where
+    M_diff > 0 and returns:
+      - lengths: (n_slices, max_runs) count of timesteps per run, NaN-padded.
+      - integrals: (n_slices, max_runs) sum of M_diff over each run (degree-hours), NaN-padded.
 
-    Internally flattens to (n_slices, n_timesteps), computes run_id, then uses bincount
-    to get run lengths per row without Python loops over rows.
+    Uses run_id + bincount (and bincount with weights for integrals) so no Python loops
+    over rows or timesteps.
     """
-    # TODO: validate this method.
+    M = M_diff > 0
     orig_shape = M.shape
     n_timesteps = orig_shape[-1]
     n_slices = int(np.prod(orig_shape[:-1]))
     M_2d = M.reshape(n_slices, n_timesteps)
+    M_diff_2d = M_diff.reshape(n_slices, n_timesteps)
 
     # Run starts: True where a new run of True begins
     run_start = np.empty_like(M_2d)
@@ -466,7 +471,8 @@ def _consecutive_run_lengths_vectorized(M: NDArray[np.bool_]) -> NDArray[np.floa
 
     max_run_id = int(run_id.max())
     if max_run_id == 0:
-        return np.full((n_slices, 1), np.nan, dtype=np.float64)
+        nan_out = np.full((n_slices, 1), np.nan, dtype=np.float64)
+        return nan_out, nan_out.copy()
 
     # Linear index for (row, run_id); run_id is 1..max_run_id
     flat_row = np.repeat(np.arange(n_slices, dtype=np.intp), n_timesteps)
@@ -474,12 +480,19 @@ def _consecutive_run_lengths_vectorized(M: NDArray[np.bool_]) -> NDArray[np.floa
     mask = flat_run > 0
     flat_row = flat_row[mask]
     flat_run = flat_run[mask]
+    flat_diff = M_diff_2d.ravel()[mask]
 
     idx = flat_row * max_run_id + (flat_run - 1)
     counts_flat = np.bincount(idx, minlength=n_slices * max_run_id)
     counts = counts_flat.reshape(n_slices, max_run_id).astype(np.float64)
     counts[counts == 0] = np.nan
-    return counts
+
+    integrals_flat = np.bincount(
+        idx, weights=flat_diff, minlength=n_slices * max_run_id
+    )
+    integrals = integrals_flat.reshape(n_slices, max_run_id).astype(np.float64)
+    integrals[np.isnan(counts)] = np.nan
+    return counts, integrals
 
 
 def calculate_consecutive_hours_above_threshold(
@@ -503,9 +516,8 @@ def calculate_consecutive_hours_above_threshold(
         zone_names (list[str] | None): The names of the zones. If None, zones are named "Zone 001", "Zone 002", etc.
 
     Returns:
-        pd.DataFrame: MultiIndex (Metric, Threshold [degC], Zone), columns "Streak 1", "Streak 2", ... with run lengths (NaN-padded).
+        pd.DataFrame: MultiIndex (Metric, Threshold [degC], Zone). Columns "Streak 001", ... (run lengths, NaN-padded) and "Integral 001", ... (sum of excess/deficit per run, degree-hours, NaN-padded).
     """
-    # TODO: add an integrating version which tracks the contiguous integrals of degree hours above threshold.
     n_zones, _ = dry_bulb_temperature_mat.shape
     zone_names_ = (
         [f"Zone {i + 1:03d}" for i in range(n_zones)]
@@ -520,54 +532,60 @@ def calculate_consecutive_hours_above_threshold(
         dry_bulb_temperature_mat, expected_zones=n_zones, expected_timesteps=8760
     )
 
-    # Boolean masks: (n_thresholds, n_zones, n_timesteps)
-    # Overheating: temp > threshold -> consecutive hours above
-    over_mask = dry_bulb_temperature_mat > over_arr.reshape(-1, 1, 1)
-    # Underheating: temp < threshold -> consecutive hours below
-    under_mask = dry_bulb_temperature_mat < under_arr.reshape(-1, 1, 1)
+    # Excess/deficit for integrals: (n_thresholds, n_zones, n_timesteps)
+    over_diff = dry_bulb_temperature_mat - over_arr.reshape(-1, 1, 1)
+    under_diff = under_arr.reshape(-1, 1, 1) - dry_bulb_temperature_mat
 
-    # Compute run lengths for all (threshold, zone) slices in one go per metric
-    over_lengths = (
-        _consecutive_run_lengths_vectorized(over_mask)
-        if over_arr.size > 0
-        else np.empty((0, 0), dtype=np.float64)
-    )
-    under_lengths = (
-        _consecutive_run_lengths_vectorized(under_mask)
-        if under_arr.size > 0
-        else np.empty((0, 0), dtype=np.float64)
-    )
-
-    # over_lengths_ = _consecutive_run_lengths_looped(over_mask)
-    # under_lengths_ = _consecutive_run_lengths_looped(under_mask)
+    # Compute run lengths and integrals for all (threshold, zone) slices in one go per metric
+    if over_arr.size > 0:
+        over_lengths, over_integrals = _consecutive_run_lengths_vectorized(over_diff)
+    else:
+        over_lengths = over_integrals = np.empty((0, 0), dtype=np.float64)
+    if under_arr.size > 0:
+        under_lengths, under_integrals = _consecutive_run_lengths_vectorized(under_diff)
+    else:
+        under_lengths = under_integrals = np.empty((0, 0), dtype=np.float64)
 
     def build_df(
         lengths: NDArray[np.float64],
+        integrals: NDArray[np.float64],
         thresholds: NDArray[np.float64],
         metric: str,
     ) -> pd.DataFrame:
         if lengths.size == 0:
             return pd.DataFrame()
         n_runs = lengths.shape[1]
-        # lengths has shape (n_thresholds * n_zones, n_runs); rows are (thresh_0_zone_0, thresh_0_zone_1, ..., thresh_1_zone_0, ...)
         index = pd.MultiIndex.from_product(
             [
                 [metric],
                 list(thresholds),
                 zone_names_,
             ],
-            names=["Metric", "Threshold [degC]", "Zone"],
+            names=["Polarity", "Threshold [degC]", "Zone"],
         )
-        columns = [f"Streak {i:03d}" for i in range(n_runs)]
-        return pd.DataFrame(
+        streak_cols = [f"{i:05d}" for i in range(n_runs)]
+        integral_cols = [f"{i:05d}" for i in range(n_runs)]
+        length_df = pd.DataFrame(
             lengths,
             index=index,
-            columns=columns,
+            columns=streak_cols,
             dtype=np.float64,
         )
+        integral_df = pd.DataFrame(
+            integrals,
+            index=index,
+            columns=integral_cols,
+            dtype=np.float64,
+        )
+        return pd.concat(
+            [length_df, integral_df],
+            axis=1,
+            keys=["Streak [hr]", "Integral [deg-hr]"],
+            names=["Metric", "Streak Index"],
+        )
 
-    over_df = build_df(over_lengths, over_arr, "Overheat [hr]")
-    under_df = build_df(under_lengths, under_arr, "Underheat [hr]")
+    over_df = build_df(over_lengths, over_integrals, over_arr, "Overheat")
+    under_df = build_df(under_lengths, under_integrals, under_arr, "Underheat")
 
     if over_df.size == 0 and under_df.size == 0:
         return pd.DataFrame(
@@ -583,52 +601,80 @@ def calculate_consecutive_hours_above_threshold(
     return pd.concat([over_df, under_df], axis=0)
 
 
-def _consecutive_run_lengths_looped(M: NDArray[np.bool_]) -> NDArray[np.float64]:
+def _consecutive_run_lengths_looped(
+    M_diff: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Compute lengths of consecutive True runs along the last axis, for all leading dimensions.
 
     M has shape (..., n_timesteps). For each (..., :) slice, returns run lengths in a padded
     2D array of shape (n_slices, max_runs), with NaN padding.
     """
     # TODO: use this method in a test to validate the vectorized version.
+    M = M_diff > 0
     orig_shape = M.shape
     n_timesteps = orig_shape[-1]
     n_slices = int(np.prod(orig_shape[:-1]))
 
     M_2d = M.reshape(n_slices, n_timesteps)
+    M_diff_2d = M_diff.reshape(n_slices, n_timesteps)
 
     slice_streaks = []
+    slice_streak_integrals = []
     for slice_ix in range(n_slices):
         slice_data = M_2d[slice_ix, :]
         is_streaking = False
         streak_len = 0
+        streak_integral = 0
         streaks = []
+        streak_integrals = []
         for i in range(n_timesteps):
             flag = slice_data[i]
+            diff = M_diff_2d[slice_ix, i]
             if flag and not is_streaking:
                 is_streaking = True
                 streak_len = 1
+                streak_integral = diff
             elif flag and is_streaking:
                 streak_len += 1
+                streak_integral += diff
             elif not flag and is_streaking:
                 streaks.append(streak_len)
+                streak_integrals.append(streak_integral)
                 is_streaking = False
                 streak_len = 0
+                streak_integral = 0
             else:
                 streak_len = 0
+                streak_integral = 0
         if is_streaking:
             streaks.append(streak_len)
+            streak_integrals.append(streak_integral)
         slice_streaks.append(streaks)
+        slice_streak_integrals.append(streak_integrals)
     most_streaks = max(len(streaks) for streaks in slice_streaks)
+    most_streak_integrals = max(
+        len(streak_integrals) for streak_integrals in slice_streak_integrals
+    )
     padded_streaks = np.full((n_slices, most_streaks), np.nan, dtype=np.float64)
+    padded_streak_integrals = np.full(
+        (n_slices, most_streak_integrals), np.nan, dtype=np.float64
+    )
     for slice_ix in range(n_slices):
         padded_streaks[slice_ix, : len(slice_streaks[slice_ix])] = slice_streaks[
             slice_ix
         ]
+        padded_streak_integrals[slice_ix, : len(slice_streak_integrals[slice_ix])] = (
+            slice_streak_integrals[slice_ix]
+        )
     reshaped_streaks = padded_streaks.reshape((
         *orig_shape[:-1],
         most_streaks,
     ))
-    return reshaped_streaks
+    reshaped_streak_integrals = padded_streak_integrals.reshape((
+        *orig_shape[:-1],
+        most_streak_integrals,
+    ))
+    return reshaped_streaks, reshaped_streak_integrals
 
 
 if __name__ == "__main__":
