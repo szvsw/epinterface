@@ -1,18 +1,20 @@
 """A module for computing and analyzing metrics related to overheating, such as heat index, exceedance hours, etc."""
 
+from dataclasses import dataclass
 from typing import cast
 
 import numpy as np
 import pandas as pd
+from archetypal.idfclass.sql import Sql
 from numpy.typing import NDArray
 
 
-def calculate_heat_index_hourly_summary(
-    temperature_mat: NDArray[np.float64],
-    relative_humidity_mat: NDArray[np.float64],
+def calculate_hi_categories(
+    dbt_mat: NDArray[np.float64],
+    rh_mat: NDArray[np.float64],
     zone_names: list[str] | None = None,
     zone_weights: NDArray[np.float64] | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """Computes heat index per hour across all zones and bins into 5 categories (sum = 8760), then takes the most common category for each timestep and the worst category for each timestep.
 
     Uses Rothfusz regression and NOAA categories:
@@ -23,35 +25,30 @@ def calculate_heat_index_hourly_summary(
       - Normal: <80°F
 
     Args:
-        temperature_mat (np.ndarray): The temperature matrix (zones x timesteps).
-        relative_humidity_mat (np.ndarray): The relative humidity matrix (zones x timesteps).
+        dbt_mat (np.ndarray): The dry bulb temperature matrix (zones x timesteps).
+        rh_mat (np.ndarray): The relative humidity matrix (zones x timesteps).
         zone_names (list[str] | None): The names of the zones. If None, the zones will be named "Zone 001", "Zone 002", etc.
         zone_weights (NDArray[np.float64] | None): The weights of the zones. If None, the zones will be weighted equally when summing the heat index.
 
     Returns:
-        building_cat_counts (pd.DataFrame): A dataframe with the count of timesteps that the building is in each category, using various aggregation methods.
-        zone_cat_counts (pd.DataFrame): A dataframe with the count of timesteps that the each zone's heat index falls into each category, by zone.
+        cat_counts (pd.DataFrame): A dataframe with the count of timesteps that the building is in each category, using various aggregation methods.
 
     """
     zone_names_ = (
-        [f"Zone {i:03d}" for i in range(temperature_mat.shape[0])]
+        [f"Zone {i:03d}" for i in range(dbt_mat.shape[0])]
         if zone_names is None
         else zone_names
     )
     zone_weights_ = (
-        zone_weights if zone_weights is not None else np.ones(temperature_mat.shape[0])
+        zone_weights if zone_weights is not None else np.ones(dbt_mat.shape[0])
     )
     if len(zone_names_) != len(zone_weights_):
         msg = f"Zone names and zone weights must have the same length. Got {len(zone_names_)} zone names and {len(zone_weights_)} zone weights."
         raise ValueError(msg)
     normalized_zone_weights: NDArray[np.float64] = zone_weights_ / zone_weights_.sum()
     n_zones = len(zone_weights_)
-    check_timeseries_shape(
-        temperature_mat, expected_zones=n_zones, expected_timesteps=8760
-    )
-    check_timeseries_shape(
-        relative_humidity_mat, expected_zones=n_zones, expected_timesteps=8760
-    )
+    check_timeseries_shape(dbt_mat, expected_zones=n_zones, expected_timesteps=8760)
+    check_timeseries_shape(rh_mat, expected_zones=n_zones, expected_timesteps=8760)
     # we use an index map to solve ties and guarantee the "worst" category in the event of a tie is always chosen.
     cat_index_map = {
         "Extreme Danger": 4,
@@ -94,7 +91,7 @@ def calculate_heat_index_hourly_summary(
             ),
         )
 
-    heat_index_mat = compute_hi(temperature_mat, relative_humidity_mat)
+    heat_index_mat = compute_hi(dbt_mat, rh_mat)
     zone_weighted_heat_index = heat_index_mat * normalized_zone_weights.reshape(-1, 1)
     aggregated_heat_index = zone_weighted_heat_index.sum(axis=0)
 
@@ -109,7 +106,7 @@ def calculate_heat_index_hourly_summary(
 
     val_counts_by_timestep = [df.loc[zone].value_counts() for zone in zone_names_]
     cat_counts_by_zone = (
-        pd.concat(val_counts_by_timestep, axis=1, keys=zone_names_, names=["Zone"])
+        pd.concat(val_counts_by_timestep, axis=1, keys=zone_names_, names=["Group"])
         .fillna(0)
         .sort_index()
     )
@@ -161,9 +158,14 @@ def calculate_heat_index_hourly_summary(
         keys=["Modal per Timestep", "Worst per Timestep", "Zone Weighted"],
     ).loc[list(cat_index_map.keys())]
     building_counts.index.name = "Heat Index Category"
-    building_counts.columns.name = "Zone Aggregation"
+    building_counts.columns.name = "Group"
 
-    return building_counts, cat_counts_by_zone
+    return pd.concat(
+        [building_counts.T, cat_counts_by_zone.T],
+        axis=0,
+        names=["Aggregation Unit"],
+        keys=["Building", "Zone"],
+    ).rename(columns={c: f"{c} [hr]" for c in cat_index_map})
 
 
 def check_timeseries_shape(
@@ -196,16 +198,16 @@ def check_timeseries_shape(
 
 
 def calculate_edh(
-    dry_bulb_temperature_mat: NDArray[np.float64],
-    relative_humidity_mat: NDArray[np.float64],
-    mean_radiant_temperature_mat: NDArray[np.float64],
+    dbt_mat: NDArray[np.float64],
+    rh_mat: NDArray[np.float64],
+    mrt_mat: NDArray[np.float64],
     met: float = 1.1,
     clo: float = 0.5,
     v: float = 0.1,
     comfort_bounds: tuple[float, float] = (22, 27),
     zone_names: list[str] | None = None,
     zone_weights: NDArray[np.float64] | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """Calculates Exceedance Degree Hours (EDH) using fixed comfort bounds and separates hot and cold contributions.
 
     When aggregating at the building scale, we compute a few variants:
@@ -230,12 +232,10 @@ def calculate_edh(
     from pythermalcomfort.models import set_tmp
 
     _zone_weights = (
-        zone_weights
-        if zone_weights is not None
-        else np.ones(dry_bulb_temperature_mat.shape[0])
+        zone_weights if zone_weights is not None else np.ones(dbt_mat.shape[0])
     )
     _zone_names = (
-        [f"Zone {i:03d}" for i in range(dry_bulb_temperature_mat.shape[0])]
+        [f"Zone {i:03d}" for i in range(dbt_mat.shape[0])]
         if zone_names is None
         else zone_names
     )
@@ -246,15 +246,15 @@ def calculate_edh(
         raise ValueError(msg)
 
     check_timeseries_shape(
-        dry_bulb_temperature_mat, expected_zones=zone_names_len, expected_timesteps=8760
+        dbt_mat, expected_zones=zone_names_len, expected_timesteps=8760
     )
     check_timeseries_shape(
-        mean_radiant_temperature_mat,
+        mrt_mat,
         expected_zones=zone_names_len,
         expected_timesteps=8760,
     )
     check_timeseries_shape(
-        relative_humidity_mat, expected_zones=zone_names_len, expected_timesteps=8760
+        rh_mat, expected_zones=zone_names_len, expected_timesteps=8760
     )
 
     SETs = np.stack(
@@ -269,9 +269,9 @@ def calculate_edh(
                 limit_inputs=False,  # TODO: remove this, or set it and handle NaN cases appropriately.
             )["set"]
             for dbt_row, mrt_row, relative_humidity_row in zip(
-                dry_bulb_temperature_mat,
-                mean_radiant_temperature_mat,
-                relative_humidity_mat,
+                dbt_mat,
+                mrt_mat,
+                rh_mat,
                 strict=False,
             )
         ],
@@ -305,17 +305,23 @@ def calculate_edh(
 
     building_edhs = pd.concat(
         [aggregated_edhs, worst_edh], axis=1, keys=["Zone Weighted", "Worst Zone"]
+    ).T
+    final = pd.concat(
+        [building_edhs, edhs],
+        axis=0,
+        names=["Aggregation Unit", "Group"],
+        keys=["Building", "Zone"],
     )
-    return building_edhs, edhs
+    return final.rename(columns={c: f"{c} [degC-hr]" for c in final.columns})
 
 
 def calculate_basic_overheating_stats(
-    dry_bulb_temperature_mat: NDArray[np.float64],
+    dbt_mat: NDArray[np.float64],
     zone_names: list[str] | None = None,
     zone_weights: NDArray[np.float64] | None = None,
     overheating_thresholds: tuple[float, ...] = (26, 30, 35),
     undercooling_thresholds: tuple[float, ...] = (10, 5),
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """Calculates basic overheating hours by zone and for the whole building.
 
     When aggregating at the building scale, we compute a few variants:
@@ -324,46 +330,37 @@ def calculate_basic_overheating_stats(
         - Worst Zone: The number of timesteps that the threshold is violated for the zone with the worst number of violations.
 
     Args:
-        dry_bulb_temperature_mat (NDArray[np.float64]): The dry bulb temperature matrix (zones x timesteps).
+        dbt_mat (NDArray[np.float64]): The dry bulb temperature matrix (zones x timesteps).
         zone_names (list[str] | None): The names of the zones. If None, the zones will be named "Zone 001", "Zone 002", etc.
         zone_weights (NDArray[np.float64] | None): The weights of the zones. If None, the zones will be weighted equally when summing the overheating hours.
         overheating_thresholds (tuple[float, ...]): The thresholds for overheating.
         undercooling_thresholds (tuple[float, ...]): The thresholds for undercooling.
 
     Returns:
-        building_hours (pd.DataFrame): A dataframe with the overheating and undercooling hours by threshold for the whole building.
-        zone_hours (pd.DataFrame): A dataframe with the overheating and undercooling hours by zone and threshold for each zone.
+        hours (pd.DataFrame): A dataframe with the overheating and undercooling hours by threshold for the whole building and by zone and threshold for each zone.
 
     """
     zone_names_ = (
-        [f"Zone {i:03d}" for i in range(dry_bulb_temperature_mat.shape[0])]
+        [f"Zone {i:03d}" for i in range(dbt_mat.shape[0])]
         if zone_names is None
         else zone_names
     )
     zone_weights_ = (
-        zone_weights
-        if zone_weights is not None
-        else np.ones(dry_bulb_temperature_mat.shape[0])
+        zone_weights if zone_weights is not None else np.ones(dbt_mat.shape[0])
     )
     if len(zone_names_) != len(zone_weights_):
         msg = f"Zone names and zone weights must have the same length. Got {len(zone_names_)} zone names and {len(zone_weights_)} zone weights."
         raise ValueError(msg)
     normalized_zone_weights: NDArray[np.float64] = zone_weights_ / zone_weights_.sum()
     n_zones = len(zone_weights_)
-    check_timeseries_shape(
-        dry_bulb_temperature_mat, expected_zones=n_zones, expected_timesteps=8760
-    )
+    check_timeseries_shape(dbt_mat, expected_zones=n_zones, expected_timesteps=8760)
 
     overheat_thresholds = np.array(overheating_thresholds)
     undercool_thresholds = np.array(undercooling_thresholds)
 
     # threshold comparisons have shape (n_thresholds, n_zones, n_timesteps)
-    over_thresh_by_zone = dry_bulb_temperature_mat > overheat_thresholds.reshape(
-        -1, 1, 1
-    )
-    under_thresh_by_zone = dry_bulb_temperature_mat < undercool_thresholds.reshape(
-        -1, 1, 1
-    )
+    over_thresh_by_zone = dbt_mat > overheat_thresholds.reshape(-1, 1, 1)
+    under_thresh_by_zone = dbt_mat < undercool_thresholds.reshape(-1, 1, 1)
     # max returns true if any of the zones are above the threshold
     # thresh_any has shape (n_thresholds, n_timesteps)
     over_thresh_any: NDArray[np.bool_] = over_thresh_by_zone.max(
@@ -424,21 +421,35 @@ def calculate_basic_overheating_stats(
     ouh_counts_by_zone_and_threshold = pd.concat(
         [over_hours_by_zone, under_hours_by_zone],
         axis=0,
-        keys=["Overheat Hours [hr]", "Undercool Hours [hr]"],
+        keys=["Overheat", "Underheat"],
         names=["Metric", "Threshold [degC]"],
     )
 
     ouh_counts_by_building_and_threshold = pd.concat(
         [over_whole_bldg, under_whole_bldg],
         axis=0,
-        keys=["Overheat Hours [hr]", "Undercool Hours [hr]"],
+        keys=["Overheat", "Underheat"],
         names=["Metric", "Threshold [degC]"],
     )
 
-    return ouh_counts_by_building_and_threshold, ouh_counts_by_zone_and_threshold
+    combined = pd.concat(
+        [ouh_counts_by_building_and_threshold, ouh_counts_by_zone_and_threshold],
+        axis=1,
+        names=["Aggregation Unit", "Group"],
+        keys=["Building", "Zone"],
+    ).T
+    combined.columns.names = ["Polarity", "Threshold [degC]"]
+    combined = (
+        cast(pd.Series, cast(pd.DataFrame, combined.stack()).stack())
+        .rename("Total Hours [hr]")
+        .dropna()
+        .to_frame()
+        .reorder_levels(
+            ["Polarity", "Threshold [degC]", "Aggregation Unit", "Group"], axis=0
+        )
+    )
 
-    # print(ouh_counts_by_building_and_threshold)
-    # print(ouh_counts_by_zone_and_threshold)
+    return combined
 
 
 def _consecutive_run_lengths_vectorized(
@@ -496,7 +507,7 @@ def _consecutive_run_lengths_vectorized(
 
 
 def calculate_consecutive_hours_above_threshold(
-    dry_bulb_temperature_mat: NDArray[np.float64],
+    dbt_mat: NDArray[np.float64],
     overheating_thresholds: list[float] | tuple[float, ...] = (26, 30, 35),
     underheating_thresholds: list[float] | tuple[float, ...] = (10, 5),
     zone_names: list[str] | None = None,
@@ -510,7 +521,7 @@ def calculate_consecutive_hours_above_threshold(
     processed with run-length logic.
 
     Args:
-        dry_bulb_temperature_mat (NDArray[np.float64]): The dry bulb temperature matrix (zones x timesteps).
+        dbt_mat (NDArray[np.float64]): The dry bulb temperature matrix (zones x timesteps).
         overheating_thresholds (list[float] | tuple[float, ...]): Thresholds for consecutive hours *above*. If None, uses (26, 30, 35).
         underheating_thresholds (list[float] | tuple[float, ...]): Thresholds for consecutive hours *below*. If None, uses (10, 5).
         zone_names (list[str] | None): The names of the zones. If None, zones are named "Zone 001", "Zone 002", etc.
@@ -518,7 +529,7 @@ def calculate_consecutive_hours_above_threshold(
     Returns:
         pd.DataFrame: MultiIndex (Metric, Threshold [degC], Zone). Columns "Streak 001", ... (run lengths, NaN-padded) and "Integral 001", ... (sum of excess/deficit per run, degree-hours, NaN-padded).
     """
-    n_zones, _ = dry_bulb_temperature_mat.shape
+    n_zones, _ = dbt_mat.shape
     zone_names_ = (
         [f"Zone {i + 1:03d}" for i in range(n_zones)]
         if zone_names is None
@@ -528,13 +539,11 @@ def calculate_consecutive_hours_above_threshold(
     over_arr = np.asarray(overheating_thresholds, dtype=np.float64)
     under_arr = np.asarray(underheating_thresholds, dtype=np.float64)
 
-    check_timeseries_shape(
-        dry_bulb_temperature_mat, expected_zones=n_zones, expected_timesteps=8760
-    )
+    check_timeseries_shape(dbt_mat, expected_zones=n_zones, expected_timesteps=8760)
 
     # Excess/deficit for integrals: (n_thresholds, n_zones, n_timesteps)
-    over_diff = dry_bulb_temperature_mat - over_arr.reshape(-1, 1, 1)
-    under_diff = under_arr.reshape(-1, 1, 1) - dry_bulb_temperature_mat
+    over_diff = dbt_mat - over_arr.reshape(-1, 1, 1)
+    under_diff = under_arr.reshape(-1, 1, 1) - dbt_mat
 
     # Compute run lengths and integrals for all (threshold, zone) slices in one go per metric
     if over_arr.size > 0:
@@ -598,7 +607,14 @@ def calculate_consecutive_hours_above_threshold(
         return under_df
     if under_df.size == 0:
         return over_df
-    return pd.concat([over_df, under_df], axis=0)
+    return cast(
+        pd.DataFrame,
+        (
+            pd.concat([over_df, under_df], axis=0)
+            .stack(level="Streak Index", future_stack=True)
+            .dropna()
+        ),
+    )
 
 
 def _consecutive_run_lengths_looped(
@@ -677,6 +693,105 @@ def _consecutive_run_lengths_looped(
     return reshaped_streaks, reshaped_streak_integrals
 
 
+def overheating_results_postprocess(
+    sql: Sql,
+    zone_weights: NDArray[np.float64],
+    zone_names: list[str],
+):
+    """Postprocess the sql file to get the temperature results.
+
+    Args:
+        sql (Sql): The sql file to postprocess.
+        zone_weights (NDArray[np.float64]): The weights of the zones.
+        zone_names (list[str]): The names of the zones.
+    """
+    # TODO: compare the single request flamegraph to splitting it out as multiple requests
+    hourly = sql.timeseries_by_name(
+        [
+            "Zone Mean Air Temperature",
+            "Zone Air Relative Humidity",
+            "Zone Mean Radiant Temperature",
+        ],
+        "Hourly",
+    )
+    hourly.index.names = ["Timestep"]
+    hourly.columns.names = ["_", "Zone", "Meter"]
+
+    hourly: pd.DataFrame = cast(
+        pd.DataFrame,
+        hourly.droplevel("Trash", axis=1)
+        .stack(level="Zone", future_stack=True)
+        .unstack(level="Timestep"),
+    )
+
+    rh = hourly.xs("Zone Air Relative Humidity", level="Meter", axis=1)
+    dbt = hourly.xs("Zone Mean Air Temperature", level="Meter", axis=1)
+    radiant = hourly.xs("Zone Mean Radiant Temperature", level="Meter", axis=1)
+
+    zone_names_: list[str] = dbt.index.tolist()
+    zone_names__: list[str] = radiant.index.tolist()
+    zone_names___: list[str] = rh.index.tolist()
+    if (
+        set(zone_names) != set(zone_names_)
+        or set(zone_names) != set(zone_names__)
+        or set(zone_names) != set(zone_names___)
+    ):
+        msg = f"Zone names do not match! Expected: {zone_names}, Found: {zone_names_}, {zone_names__}, {zone_names___}."
+        raise ValueError(msg)
+    if zone_names_ != zone_names__ or zone_names_ != zone_names___:
+        msg = f"Dataframe zone names are not in the same order as each other! Expected: {zone_names_}, but got {zone_names__}, {zone_names___}."
+        raise ValueError(msg)
+
+    # reorder the zone weights to match the zone names.
+    zone_weights_to_use = np.array([
+        zone_weights[zone_names.index(zone)] for zone in zone_names_
+    ])
+    zone_names_to_use = zone_names_
+
+    dbt_mat = dbt.to_numpy()
+    rh_mat = rh.to_numpy()
+    radiant_mat = radiant.to_numpy()
+
+    hi = calculate_hi_categories(
+        dbt_mat=dbt_mat,
+        rh_mat=rh_mat,
+        zone_names=zone_names_to_use,
+        zone_weights=zone_weights_to_use,
+    )
+
+    edh = calculate_edh(
+        dbt_mat=dbt_mat,
+        rh_mat=rh_mat,
+        mrt_mat=radiant_mat,
+        zone_names=zone_names_to_use,
+        zone_weights=zone_weights_to_use,
+    )
+
+    consecutive_e_zone = calculate_consecutive_hours_above_threshold(
+        dbt_mat=dbt_mat,
+        zone_names=zone_names_to_use,
+    )
+
+    basic_oh = calculate_basic_overheating_stats(
+        dbt_mat=dbt_mat,
+        zone_names=zone_names_to_use,
+        zone_weights=zone_weights_to_use,
+    )
+    return OverheatingAnalysisResults(
+        hi=hi, edh=edh, basic_oh=basic_oh, consecutive_e_zone=consecutive_e_zone
+    )
+
+
+@dataclass
+class OverheatingAnalysisResults:
+    """The results of a overheating analysis."""
+
+    hi: pd.DataFrame
+    edh: pd.DataFrame
+    basic_oh: pd.DataFrame
+    consecutive_e_zone: pd.DataFrame
+
+
 if __name__ == "__main__":
     # Timesteps should be along the columns
     # Zones should be along the rows
@@ -688,9 +803,7 @@ if __name__ == "__main__":
     _mean_radiant_temperature_matrix = (
         _temperature_matrix + np.random.randn(_n_zones, _n_timesteps) * 1
     )
-    r = calculate_heat_index_hourly_summary(
-        _temperature_matrix, _relative_humidity_matrix
-    )
+    r = calculate_hi_categories(_temperature_matrix, _relative_humidity_matrix)
 
     edh = calculate_edh(
         _temperature_matrix,
@@ -698,9 +811,7 @@ if __name__ == "__main__":
         _mean_radiant_temperature_matrix,
     )
 
-    basic_oh_stats = calculate_basic_overheating_stats(
-        _temperature_matrix,
-    )
+    basic_oh_stats = calculate_basic_overheating_stats(_temperature_matrix)
 
     consecutive_hours = calculate_consecutive_hours_above_threshold(
         np.array(
@@ -724,4 +835,16 @@ if __name__ == "__main__":
             ],
         ),
     )
+
+    print("---- Heat Index ----")
+    print("\n")
+    print(r)
+    print("--- EDH ----")
+    print("\n")
+    print(edh)
+    print("--- Basic Overheating Stats ----")
+    print("\n")
+    print(basic_oh_stats)
+    print("--- Consecutive Hours ----")
+    print("\n")
     print(consecutive_hours)

@@ -39,7 +39,7 @@ def test_builder(preseeded_readonly_db: Prisma):
         ),
     )
 
-    _idf, _results, _err_text, _sql, _ = model.run()
+    _r = model.run()
 
 
 # TODO: add parameterized tests for different attic/basement configurations
