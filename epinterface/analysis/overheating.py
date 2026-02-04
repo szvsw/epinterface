@@ -732,9 +732,9 @@ def overheating_results_postprocess(
     zone_names__: list[str] = radiant.index.tolist()
     zone_names___: list[str] = rh.index.tolist()
     if (
-        set(zone_names) != set(zone_names_)
-        or set(zone_names) != set(zone_names__)
-        or set(zone_names) != set(zone_names___)
+        {z.lower() for z in zone_names} != {z.lower() for z in zone_names_}
+        or {z.lower() for z in zone_names} != {z.lower() for z in zone_names__}
+        or {z.lower() for z in zone_names} != {z.lower() for z in zone_names___}
     ):
         msg = f"Zone names do not match! Expected: {zone_names}, Found: {zone_names_}, {zone_names__}, {zone_names___}."
         raise ValueError(msg)
@@ -744,7 +744,8 @@ def overheating_results_postprocess(
 
     # reorder the zone weights to match the zone names.
     zone_weights_to_use = np.array([
-        zone_weights[zone_names.index(zone)] for zone in zone_names_
+        zone_weights[[z.lower() for z in zone_names].index(zone.lower())]
+        for zone in zone_names_
     ])
     zone_names_to_use = zone_names_
 
