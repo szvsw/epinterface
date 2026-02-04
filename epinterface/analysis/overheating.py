@@ -719,7 +719,7 @@ def overheating_results_postprocess(
 
     hourly: pd.DataFrame = cast(
         pd.DataFrame,
-        hourly.droplevel("Trash", axis=1)
+        hourly.droplevel("_", axis=1)
         .stack(level="Zone", future_stack=True)
         .unstack(level="Timestep"),
     )
