@@ -2122,11 +2122,13 @@ class FlatModel(BaseModel):
             post_geometry_callback,
         )
 
-    def simulate(self):
+    def simulate(self, calculate_overheating: bool = False):
         """Simulate the model and return the IDF, result, and error."""
         model, cb = self.to_model()
 
-        r = model.run(post_geometry_callback=cb)
+        r = model.run(
+            post_geometry_callback=cb, calculate_overheating=calculate_overheating
+        )
 
         return r
 
@@ -2207,4 +2209,4 @@ if __name__ == "__main__":
         ),
     )
 
-    r = flat_model.simulate()
+    r = flat_model.simulate(calculate_overheating=True)

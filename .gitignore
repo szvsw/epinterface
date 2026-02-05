@@ -154,3 +154,6 @@ epinterface/sbem/prisma/**/*.db-journal
 prisma_minimal/
 
 .DS_Store
+
+benchmarking/**/*.png
+benchmarking/**/*.csv
