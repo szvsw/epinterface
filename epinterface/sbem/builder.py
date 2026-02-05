@@ -1361,7 +1361,7 @@ class Model(BaseWeather, validate_assignment=True):
             gc.collect()
             # if eplus_parent_dir is not None, we return the path to the output directory
             output_dir_result = output_dir if eplus_parent_dir is not None else None
-            # return idf, results, err_text, sql, output_dir_result
+
             return ModelRunResults(
                 idf=idf,
                 sql=sql,
