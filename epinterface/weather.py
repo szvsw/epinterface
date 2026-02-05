@@ -59,7 +59,7 @@ class BaseWeather(BaseModel):
         )
     )
 
-    async def fetch_weather(self, cache_dir: Path | str):  # noqa: C901
+    def fetch_weather(self, cache_dir: Path | str):  # noqa: C901
         """Fetch the weather file from the URL and extract the .epw and .ddy files.
 
         Args:
@@ -104,8 +104,8 @@ class BaseWeather(BaseModel):
                 "https",
                 "http",
             ]:
-                client = httpx.AsyncClient()
-                response = await client.get(str(self.Weather))
+                client = httpx.Client()
+                response = client.get(str(self.Weather))
                 with tempfile.TemporaryFile() as f:
                     f.write(response.content)
                     f.seek(0)
@@ -118,7 +118,7 @@ class BaseWeather(BaseModel):
                             raise FileNotFoundError(msg)
                         z.extract(epw_path.name, weather_dir)
                         z.extract(ddy_path.name, weather_dir)
-                await client.aclose()
+                client.close()
             elif isinstance(self.Weather, Path):
                 with zipfile.ZipFile(self.Weather, "r") as z:
                     if epw_path.name not in z.namelist():

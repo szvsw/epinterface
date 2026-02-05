@@ -1,6 +1,5 @@
 """A module for building the energy model using the Climate Studio API."""
 
-import asyncio
 import gc
 import shutil
 import tempfile
@@ -162,7 +161,7 @@ class Model(BaseWeather, validate_assignment=True):
         base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
         target_base_filepath = config.output_dir / "Minimal.idf"
         shutil.copy(base_filepath, target_base_filepath)
-        epw_path, ddy_path = asyncio.run(self.fetch_weather(config.weather_dir))
+        epw_path, ddy_path = self.fetch_weather(config.weather_dir)
         idf = IDF(
             target_base_filepath.as_posix(),
             as_version=None,  # pyright: ignore [reportArgumentType]
@@ -594,7 +593,6 @@ class Model(BaseWeather, validate_assignment=True):
 
 # TODO: move to interface?
 if __name__ == "__main__":
-    import asyncio
     import json
 
     # import tempfile

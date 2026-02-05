@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import Mock, patch
 
 import httpx
 import pytest
@@ -37,11 +37,10 @@ def temporary_weather_dir():
         yield Path(temp_dir)
 
 
-@pytest.mark.asyncio
-async def test_weather_file_download_from_file(temporary_weather_dir: Path):
+def test_weather_file_download_from_file(temporary_weather_dir: Path):
     """Test that the weather file is downloaded from the file and cached."""
     weather = BaseWeather(Weather=DefaultEPWZipPath)  # pyright: ignore [reportCallIssue]
-    epw_path, ddy_path = await weather.fetch_weather(temporary_weather_dir)
+    epw_path, ddy_path = weather.fetch_weather(temporary_weather_dir)
     assert epw_path.exists()
     assert ddy_path.exists()
     assert epw_path.suffix == ".epw"
@@ -52,7 +51,7 @@ async def test_weather_file_download_from_file(temporary_weather_dir: Path):
 
     # we will now run it again, but we want to check that zipfile is not called
     with patch("epinterface.weather.zipfile.ZipFile") as mock_zipfile:
-        epw_path, ddy_path = await weather.fetch_weather(temporary_weather_dir)
+        epw_path, ddy_path = weather.fetch_weather(temporary_weather_dir)
         assert not mock_zipfile.called
         assert epw_path.exists()
         assert ddy_path.exists()
@@ -63,10 +62,9 @@ async def test_weather_file_download_from_file(temporary_weather_dir: Path):
         assert Path(DefaultEPWZipPath).stem == epw_path.stem
 
 
-@pytest.mark.asyncio
-@patch("epinterface.weather.httpx.AsyncClient.get")
-async def test_weather_file_download_from_url(
-    mock_get: AsyncMock,
+@patch("epinterface.weather.httpx.Client.get")
+def test_weather_file_download_from_url(
+    mock_get: Mock,
     temporary_weather_dir: Path,
     chicopee_epwzip_bytes: bytes,
     default_epwzip_bytes: bytes,
@@ -88,7 +86,7 @@ async def test_weather_file_download_from_url(
         )
     )
 
-    epw_path, ddy_path = await weather.fetch_weather(temporary_weather_dir)
+    epw_path, ddy_path = weather.fetch_weather(temporary_weather_dir)
     assert mock_get.call_count == 1
     assert (
         mock_get.call_args[0][0]
@@ -112,9 +110,9 @@ async def test_weather_file_download_from_url(
         / "WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023/USA_MA_Boston-Logan.Intl.AP.725090_TMYx.2009-2023.ddy"
     )
 
-    # we will now run it again, but we want to check that neither zipfile.ZipFile nor httpx.AsyncClient.get are called
+    # we will now run it again, but we want to check that neither zipfile.ZipFile nor httpx.Client.get are called
     with patch("epinterface.weather.zipfile.ZipFile") as mock_zipfile:
-        epw_path, ddy_path = await weather.fetch_weather(temporary_weather_dir)
+        epw_path, ddy_path = weather.fetch_weather(temporary_weather_dir)
         assert not mock_zipfile.called
         assert mock_get.call_count == 1
 
@@ -122,9 +120,7 @@ async def test_weather_file_download_from_url(
         "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Chicopee-Westover.Metro.AP.744910_TMYx.2009-2023.zip"
     )
     weather = BaseWeather(Weather=new_weather)
-    chicopee_epw_path, chicopee_ddy_path = await weather.fetch_weather(
-        temporary_weather_dir
-    )
+    chicopee_epw_path, chicopee_ddy_path = weather.fetch_weather(temporary_weather_dir)
     assert mock_get.call_count == 2
     assert chicopee_epw_path.exists()
     assert chicopee_ddy_path.exists()
@@ -139,17 +135,16 @@ async def test_weather_file_download_from_url(
     assert "chicopee" in chicopee_epw_path.stem.lower()
 
     with patch("epinterface.weather.zipfile.ZipFile") as mock_zipfile:
-        chicopee_epw_path, chicopee_ddy_path = await weather.fetch_weather(
+        chicopee_epw_path, chicopee_ddy_path = weather.fetch_weather(
             temporary_weather_dir
         )
         assert not mock_zipfile.called
         assert mock_get.call_count == 2
 
 
-@pytest.mark.asyncio
-@patch("epinterface.weather.httpx.AsyncClient.get")
-async def test_weather_file_download_from_url_with_missing_files(
-    mock_get: AsyncMock,
+@patch("epinterface.weather.httpx.Client.get")
+def test_weather_file_download_from_url_with_missing_files(
+    mock_get: Mock,
     temporary_weather_dir: Path,
     chicopee_epwzip_bytes: bytes,
 ):
@@ -166,5 +161,5 @@ async def test_weather_file_download_from_url_with_missing_files(
     )
 
     with pytest.raises(FileNotFoundError, match=r".*Boston.*2009-2023\.epw.*not found"):
-        await weather.fetch_weather(temporary_weather_dir)
+        weather.fetch_weather(temporary_weather_dir)
     assert mock_get.call_count == 1

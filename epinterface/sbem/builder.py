@@ -1,6 +1,5 @@
 """A module for building the energy model using the SBEM template library approach."""
 
-import asyncio
 import gc
 import logging
 import shutil
@@ -833,7 +832,7 @@ class Model(BaseWeather, validate_assignment=True):
         base_filepath = EnergyPlusArtifactDir / "Minimal.idf"
         target_base_filepath = config.output_dir / "Minimal.idf"
         shutil.copy(base_filepath, target_base_filepath)
-        epw_path, ddy_path = asyncio.run(self.fetch_weather(config.weather_dir))
+        epw_path, ddy_path = self.fetch_weather(config.weather_dir)
         output_meters = (
             [
                 {
