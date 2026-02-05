@@ -45,7 +45,7 @@ class SimpleResidentialModel(BaseWeather, extra="allow"):
     Infiltration: float = 0.1
     timestep: int = 6
 
-    async def build(
+    def build(
         self, output_dir: Path | str, weather_cache_dir: Path | str | None = None
     ) -> IDF:
         """Build the energy model.
@@ -63,7 +63,7 @@ class SimpleResidentialModel(BaseWeather, extra="allow"):
 
         material_lib = DefaultMaterialLibrary()
         weather_cache_dir = Path(weather_cache_dir) if weather_cache_dir else output_dir
-        epw_path, ddy_path = await self.fetch_weather(weather_cache_dir)
+        epw_path, ddy_path = self.fetch_weather(weather_cache_dir)
         schedules = pd.read_parquet(
             Path(__file__).parent / "data" / "res_schedules.parquet"
         )
