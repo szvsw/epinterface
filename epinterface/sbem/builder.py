@@ -16,8 +16,13 @@ import pandas as pd
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
 from ladybug.epw import EPW
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from epinterface.analysis.overheating import (
+    OverheatingAnalysisResults,
+    overheating_results_postprocess,
+)
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
@@ -54,6 +59,7 @@ AvailableHourlyVariables = Literal[
     "Zone Mean Air Temperature",
     "Zone Air Relative Humidity",
     "Site Outdoor Air Drybulb Temperature",
+    "Zone Mean Radiant Temperature",
 ]
 
 AVAILABLE_HOURLY_VARIABLES = get_args(AvailableHourlyVariables)
@@ -862,6 +868,16 @@ class Model(BaseWeather, validate_assignment=True):
             epw=epw_path.as_posix(),
             output_directory=config.output_dir.as_posix(),
         )
+
+        # Remove undesired outputs from the IDF file.
+        # TODO: test the perfrmance benefits, if any
+        for output in idf.idfobjects["OUTPUT:METER"]:
+            if output.Key_Name not in DESIRED_METERS:
+                idf.removeidfobject(output)
+        for output in idf.idfobjects["OUTPUT:VARIABLE"]:
+            if output.Variable_Name not in AVAILABLE_HOURLY_VARIABLES:
+                idf.removeidfobject(output)
+
         ddy = IDF(
             ddy_path.as_posix(),
             as_version="22.2",
@@ -1296,20 +1312,18 @@ class Model(BaseWeather, validate_assignment=True):
         weather_dir: Path | None = None,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
         eplus_parent_dir: Path | None = None,
-    ) -> tuple[IDF, pd.Series, str, Sql, Path | None]:
+        calculate_overheating: bool = False,
+    ) -> "ModelRunResults":
         """Build and simualte the idf model.
 
         Args:
             weather_dir (Path): The directory to store the weather files.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
             eplus_parent_dir (Path | None): The parent directory to store the eplus working directory.  If None, a temporary directory will be used.
+            calculate_overheating (bool): Whether to calculate the overheating results.
 
         Returns:
-            idf (IDF): The built energy model.
-            results (pd.Series): The postprocessed results including energy, peak, and temperature data.
-            err_text (str): The warning text.
-            sql (Sql): The SQL results file with simulation data.
-            eplus_dir (Path | None): The path to the eplus artifact directory (None if a temporary directory was used).
+            ModelRunResults: The results of the model run.
         """
         with tempfile.TemporaryDirectory() as output_dir_name:
             output_dir = (
@@ -1332,12 +1346,62 @@ class Model(BaseWeather, validate_assignment=True):
                 post_geometry_callback=post_geometry_callback,
             )
             results = self.standard_results_postprocess(sql)
+            zone_weights, zone_names = self.get_zone_weights_and_names(idf)
+
+            overheating_results = (
+                overheating_results_postprocess(
+                    sql, zone_weights=zone_weights, zone_names=zone_names
+                )
+                if calculate_overheating
+                else None
+            )
+
             err_text = self.get_warnings(idf)
 
             gc.collect()
             # if eplus_parent_dir is not None, we return the path to the output directory
             output_dir_result = output_dir if eplus_parent_dir is not None else None
-            return idf, results, err_text, sql, output_dir_result
+
+            return ModelRunResults(
+                idf=idf,
+                sql=sql,
+                energy_and_peak=results,
+                err_text=err_text,
+                output_dir=output_dir_result,
+                overheating_results=overheating_results,
+            )
+
+    @staticmethod
+    def get_zone_weights_and_names(idf: IDF) -> tuple[NDArray[np.float64], list[str]]:
+        """Get the zone weights and names from the idf model.
+
+        Args:
+            idf (IDF): The idf model to get the zone weights and names from.
+
+        Returns:
+            zone_weights (NDArray[np.float64]): The weights of the zones.
+            zone_names (list[str]): The names of the zones.
+        """
+        zone_weights_: list[float] = []
+        zone_names: list[str] = []
+        for zone in idf.idfobjects["ZONE"]:
+            floor_area = get_zone_floor_area(idf, zone.Name)
+            zone_weights_.append(floor_area)
+            zone_names.append(zone.Name)
+        zone_weights: NDArray[np.float64] = np.array(zone_weights_)
+        return zone_weights, zone_names
+
+
+@dataclass
+class ModelRunResults:
+    """The results of a model run."""
+
+    idf: IDF
+    sql: Sql
+    energy_and_peak: pd.Series
+    err_text: str
+    output_dir: Path | None
+    overheating_results: OverheatingAnalysisResults | None = None
 
 
 if __name__ == "__main__":
@@ -1422,8 +1486,15 @@ if __name__ == "__main__":
 
         # post_geometry_callback = lambda x: x.saveas("notebooks/badgeo.idf")
 
-        _idf, results, _err_text, _sql, _ = model.run(
+        r = model.run(
             # post_geometry_callback=post_geometry_callback,
+        )
+        _idf, results, _err_text, _sql, _ = (
+            r.idf,
+            r.energy_and_peak,
+            r.err_text,
+            r.sql,
+            r.output_dir,
         )
 
         # temp_config = TemperatureOutputConfig(mode="hours_above_threshold", threshold=26.0)

@@ -1,6 +1,6 @@
 [project]
 name = "epinterface"
-version = "1.0.5"
+version = "1.1.0"
 description = "This is a repository for dynamically generating energy models within Python, relying on Archetypal and Eppy for most of its functionality."
 readme = "README.md"
 authors = [
@@ -17,6 +17,7 @@ dependencies = [
     "pandas>=2.2,<2.3",
     "prisma~=0.15.0",
     "pydantic>=2.9,<3",
+    "pythermalcomfort>=3.8.0",
 ]
 
 [project.scripts]
@@ -32,6 +33,7 @@ dev = [
     "pandas-stubs>=2.2,<2.3",
     "pre-commit~=4.2.0",
     "pyarrow~=20.0.0",
+    "pyinstrument>=5.1.2",
     "pyright~=1.1.400",
     "pytest~=8.3.5",
     "pytest-asyncio~=0.26.0",

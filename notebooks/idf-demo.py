@@ -921,7 +921,8 @@ if __name__ == "__main__":
 
     model = params.to_model()
 
-    idf, results, err_text, *_ = model.run()
+    result = model.run()
+    idf, results, err_text = (result.idf, result.energy_and_peak, result.err_text)
     idf.saveas("model.idf")
     results.to_csv("results.csv")
     agg_results = results.groupby(["Meter", "Aggregation"]).sum()
