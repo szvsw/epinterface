@@ -1,6 +1,6 @@
 [project]
 name = "epinterface"
-version = "1.1.0"
+version = "1.1.1"
 description = "This is a repository for dynamically generating energy models within Python, relying on Archetypal and Eppy for most of its functionality."
 readme = "README.md"
 authors = [
@@ -8,7 +8,7 @@ authors = [
 ]
 requires-python =">=3.10,<3.13"
 dependencies = [
-    "archetypal",
+    "archetypal==2.18.10",
     "click==8.1.7",
     "geopandas~=1.0.1",
     "httpx~=0.27.2",
@@ -48,7 +48,7 @@ docs = [
 ]
 
 [tool.uv.sources]
-archetypal = { git = "https://github.com/samuelduchesne/archetypal", branch = "main" }
+# archetypal = { git = "https://github.com/samuelduchesne/archetypal", branch = "main" }
 
 [build-system]
 requires = ["hatchling"]
