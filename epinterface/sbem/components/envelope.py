@@ -50,14 +50,14 @@ class GlazingConstructionSimpleComponent(
             IDF: The updated IDF object.
         """
         glazing_mat = SimpleGlazingMaterial(
-            Name=self.Name,
+            Name=self.safe_name,
             UFactor=self.UValue,
             Solar_Heat_Gain_Coefficient=self.SHGF,
             Visible_Transmittance=self.TVis,
         )
 
         construction = Construction(
-            name=self.Name,
+            name=self.safe_name,
             layers=[glazing_mat],
         )
 
@@ -127,11 +127,9 @@ class InfiltrationComponent(
             return idf
 
         infiltration_schedule_name = (
-            f"{target_zone_or_zone_list_name}_{self.safe_name}_INFILTRATION_Schedule"
+            f"{target_zone_or_zone_list_name}_{self.Name}_INFILTRATION_Schedule"
         )
-        infiltration_name = (
-            f"{target_zone_or_zone_list_name}_{self.safe_name}_INFILTRATION"
-        )
+        infiltration_name = f"{target_zone_or_zone_list_name}_{self.Name}_INFILTRATION"
         schedule = Schedule.constant_schedule(
             value=1, Name=infiltration_schedule_name, Type="Fraction"
         )
