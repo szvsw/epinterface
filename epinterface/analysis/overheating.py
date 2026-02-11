@@ -440,7 +440,12 @@ def calculate_basic_overheating_stats(
     ).T
     combined.columns.names = ["Polarity", "Threshold [degC]"]
     combined = (
-        cast(pd.Series, cast(pd.DataFrame, combined.stack()).stack())
+        cast(
+            pd.Series,
+            cast(pd.DataFrame, combined.stack(future_stack=True)).stack(
+                future_stack=True
+            ),
+        )
         .rename("Total Hours [hr]")
         .dropna()
         .to_frame()
