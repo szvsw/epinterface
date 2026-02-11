@@ -1163,7 +1163,7 @@ class Model(BaseWeather, validate_assignment=True):
         )
         raw_hourly.columns.name = "Meter"
         raw_hourly_max: pd.Series = raw_hourly.max(axis=0)
-        raw_monthly_hourly_max = raw_hourly.resample("M").max()
+        raw_monthly_hourly_max = raw_hourly.resample("MS").max()
 
         ops = self.Zone.Operations
         cond_sys = ops.HVAC.ConditioningSystems
@@ -1276,7 +1276,7 @@ class Model(BaseWeather, validate_assignment=True):
             raise ValueError(msg)
 
         utility_max = utilities_df_hourly.max()
-        utility_monthly_hourly_max = utilities_df_hourly.resample("M").max()
+        utility_monthly_hourly_max = utilities_df_hourly.resample("MS").max()
         utility_max.index.name = "Meter"
         max_data = pd.concat(
             [utility_max, raw_hourly_max],
