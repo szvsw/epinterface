@@ -73,14 +73,14 @@ class ThermalComfortAssumptions(BaseModel):
 class OverheatingAnalysisConfig(BaseModel):
     """Configuration for overheating analysis and zone-at-risk assessment."""
 
-    heating_thresholds: tuple[ThresholdWithCriteria, ...] = Field(
+    heat_thresholds: tuple[ThresholdWithCriteria, ...] = Field(
         default_factory=lambda: (
             ThresholdWithCriteria(threshold=26.0),
             ThresholdWithCriteria(threshold=30.0),
             ThresholdWithCriteria(threshold=35.0),
         )
     )
-    cooling_thresholds: tuple[ThresholdWithCriteria, ...] = Field(
+    cold_thresholds: tuple[ThresholdWithCriteria, ...] = Field(
         default_factory=lambda: (
             ThresholdWithCriteria(threshold=10.0),
             ThresholdWithCriteria(threshold=5.0),
@@ -284,8 +284,8 @@ def calculate_edh(
     dbt_mat: NDArray[np.float64],
     rh_mat: NDArray[np.float64],
     mrt_mat: NDArray[np.float64],
-    heating_thresholds: tuple[ThresholdWithCriteria, ...],
-    cooling_thresholds: tuple[ThresholdWithCriteria, ...],
+    heat_thresholds: tuple[ThresholdWithCriteria, ...],
+    cold_thresholds: tuple[ThresholdWithCriteria, ...],
     thermal_comfort: ThermalComfortAssumptions,
     zone_names: list[str] | None = None,
     zone_weights: NDArray[np.float64] | None = None,
@@ -303,8 +303,8 @@ def calculate_edh(
         dbt_mat: The dry bulb temperature matrix (zones x timesteps).
         rh_mat: The relative humidity matrix (zones x timesteps).
         mrt_mat: The mean radiant temperature matrix (zones x timesteps).
-        heating_thresholds: Thresholds for heat exceedance (SET above threshold).
-        cooling_thresholds: Thresholds for cold exceedance (SET below threshold).
+        heat_thresholds: Thresholds for heat exceedance (SET above threshold).
+        cold_thresholds: Thresholds for cold exceedance (SET below threshold).
         thermal_comfort: MET, CLO, v for SET calculation.
         zone_names: The names of the zones.
         zone_weights: The weights of the zones.
@@ -362,8 +362,8 @@ def calculate_edh(
         axis=0,
     )
 
-    heat_thresh_vals = np.array([t.threshold for t in heating_thresholds])
-    cool_thresh_vals = np.array([t.threshold for t in cooling_thresholds])
+    heat_thresh_vals = np.array([t.threshold for t in heat_thresholds])
+    cool_thresh_vals = np.array([t.threshold for t in cold_thresholds])
 
     # hot_edh: (n_heat_thresholds, n_zones), cold_edh: (n_cool_thresholds, n_zones)
     hot_edh_by_zone = np.maximum(0, SETs - heat_thresh_vals.reshape(-1, 1, 1)).sum(
@@ -448,8 +448,8 @@ def calculate_edh(
 
 def calculate_basic_overheating_stats(
     dbt_mat: NDArray[np.float64],
-    heating_thresholds: tuple[ThresholdWithCriteria, ...],
-    cooling_thresholds: tuple[ThresholdWithCriteria, ...],
+    heat_thresholds: tuple[ThresholdWithCriteria, ...],
+    cold_thresholds: tuple[ThresholdWithCriteria, ...],
     zone_names: list[str] | None = None,
     zone_weights: NDArray[np.float64] | None = None,
 ) -> pd.DataFrame:
@@ -462,17 +462,17 @@ def calculate_basic_overheating_stats(
 
     Args:
         dbt_mat: The dry bulb temperature matrix (zones x timesteps).
+        heat_thresholds: Thresholds for overheating.
+        cold_thresholds: Thresholds for undercooling.
         zone_names: The names of the zones. If None, the zones will be named "Zone 000", "Zone 001", etc.
         zone_weights: The weights of the zones. If None, the zones will be weighted equally.
-        heating_thresholds: Thresholds for overheating.
-        cooling_thresholds: Thresholds for undercooling.
 
     Returns:
         hours (pd.DataFrame): A dataframe with the overheating and undercooling hours by threshold for the whole building and by zone and threshold for each zone.
 
     """
-    overheat_thresholds = np.array([t.threshold for t in heating_thresholds])
-    undercool_thresholds = np.array([t.threshold for t in cooling_thresholds])
+    overheat_thresholds = np.array([t.threshold for t in heat_thresholds])
+    undercool_thresholds = np.array([t.threshold for t in cold_thresholds])
 
     zone_names_ = (
         [f"Zone {i:03d}" for i in range(dbt_mat.shape[0])]
@@ -644,8 +644,8 @@ def _consecutive_run_lengths_vectorized(
 
 def calculate_consecutive_hours_above_threshold(
     dbt_mat: NDArray[np.float64],
-    heating_thresholds: tuple[ThresholdWithCriteria, ...],
-    cooling_thresholds: tuple[ThresholdWithCriteria, ...],
+    heat_thresholds: tuple[ThresholdWithCriteria, ...],
+    cold_thresholds: tuple[ThresholdWithCriteria, ...],
     zone_names: list[str] | None = None,
 ) -> pd.DataFrame:
     """Calculates consecutive hours above (overheating) or below (underheating) thresholds per zone.
@@ -658,8 +658,8 @@ def calculate_consecutive_hours_above_threshold(
 
     Args:
         dbt_mat (NDArray[np.float64]): The dry bulb temperature matrix (zones x timesteps).
-        heating_thresholds: Thresholds for consecutive hours *above*.
-        cooling_thresholds: Thresholds for consecutive hours *below*.
+        heat_thresholds: Thresholds for consecutive hours *above*.
+        cold_thresholds: Thresholds for consecutive hours *below*.
         zone_names: The names of the zones. If None, zones are named "Zone 001", "Zone 002", etc.
 
     Returns:
@@ -670,8 +670,8 @@ def calculate_consecutive_hours_above_threshold(
         [f"Zone {i:03d}" for i in range(n_zones)] if zone_names is None else zone_names
     )
 
-    over_arr = np.array([t.threshold for t in heating_thresholds], dtype=np.float64)
-    under_arr = np.array([t.threshold for t in cooling_thresholds], dtype=np.float64)
+    over_arr = np.array([t.threshold for t in heat_thresholds], dtype=np.float64)
+    under_arr = np.array([t.threshold for t in cold_thresholds], dtype=np.float64)
 
     check_timeseries_shape(dbt_mat, expected_zones=n_zones, expected_timesteps=8760)
 
@@ -1041,8 +1041,8 @@ def compute_zone_at_risk(
 
     # Threshold criteria
     for polarity, thresholds in [
-        ("Overheat", config.heating_thresholds),
-        ("Underheat", config.cooling_thresholds),
+        ("Overheat", config.heat_thresholds),
+        ("Underheat", config.cold_thresholds),
     ]:
         for tc in thresholds:
             thresh_val = float(tc.threshold)
@@ -1180,8 +1180,8 @@ def overheating_results_postprocess(
         dbt_mat=dbt_mat,
         rh_mat=rh_mat,
         mrt_mat=radiant_mat,
-        heating_thresholds=_config.heating_thresholds,
-        cooling_thresholds=_config.cooling_thresholds,
+        heat_thresholds=_config.heat_thresholds,
+        cold_thresholds=_config.cold_thresholds,
         thermal_comfort=_config.thermal_comfort,
         zone_names=zone_names_to_use,
         zone_weights=zone_weights_to_use,
@@ -1189,8 +1189,8 @@ def overheating_results_postprocess(
 
     consecutive_e_zone = calculate_consecutive_hours_above_threshold(
         dbt_mat=dbt_mat,
-        heating_thresholds=_config.heating_thresholds,
-        cooling_thresholds=_config.cooling_thresholds,
+        heat_thresholds=_config.heat_thresholds,
+        cold_thresholds=_config.cold_thresholds,
         zone_names=zone_names_to_use,
     )
 
@@ -1198,8 +1198,8 @@ def overheating_results_postprocess(
         dbt_mat=dbt_mat,
         zone_names=zone_names_to_use,
         zone_weights=zone_weights_to_use,
-        heating_thresholds=_config.heating_thresholds,
-        cooling_thresholds=_config.cooling_thresholds,
+        heat_thresholds=_config.heat_thresholds,
+        cold_thresholds=_config.cold_thresholds,
     )
 
     zone_at_risk = compute_zone_at_risk(
@@ -1253,12 +1253,12 @@ if __name__ == "__main__":
         clo=0.5,
         v=0.1,
     )
-    _heating_thresholds = (
+    _heat_thresholds = (
         ThresholdWithCriteria(threshold=26.0),
         ThresholdWithCriteria(threshold=30.0),
         ThresholdWithCriteria(threshold=35.0),
     )
-    _cooling_thresholds = (
+    _cold_thresholds = (
         ThresholdWithCriteria(threshold=10.0),
         ThresholdWithCriteria(threshold=5.0),
     )
@@ -1275,8 +1275,8 @@ if __name__ == "__main__":
         _mean_radiant_temperature_matrix,
         zone_names=_zone_names,
         zone_weights=_zone_weights,
-        heating_thresholds=_heating_thresholds,
-        cooling_thresholds=_cooling_thresholds,
+        heat_thresholds=_heat_thresholds,
+        cold_thresholds=_cold_thresholds,
         thermal_comfort=_thermal_comfort,
     )
 
@@ -1284,15 +1284,15 @@ if __name__ == "__main__":
         _temperature_matrix,
         zone_names=_zone_names,
         zone_weights=_zone_weights,
-        heating_thresholds=_heating_thresholds,
-        cooling_thresholds=_cooling_thresholds,
+        heat_thresholds=_heat_thresholds,
+        cold_thresholds=_cold_thresholds,
     )
 
     consecutive_hours = calculate_consecutive_hours_above_threshold(
         _temperature_matrix,
         zone_names=_zone_names,
-        heating_thresholds=_heating_thresholds,
-        cooling_thresholds=_cooling_thresholds,
+        heat_thresholds=_heat_thresholds,
+        cold_thresholds=_cold_thresholds,
     )
 
     config = OverheatingAnalysisConfig()

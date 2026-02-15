@@ -34,12 +34,12 @@ N_TIMESTEPS = 8760
 HOURS_PER_MONTH = 744  # 31 days in Jan, etc. - use 744 for simplicity
 
 # Default thresholds (heating = overheat, cooling = underheat)
-DEFAULT_HEATING_THRESHOLDS = (
+DEFAULT_HEAT_THRESHOLDS = (
     ThresholdWithCriteria(threshold=26.0),
     ThresholdWithCriteria(threshold=30.0),
     ThresholdWithCriteria(threshold=35.0),
 )
-DEFAULT_COOLING_THRESHOLDS = (
+DEFAULT_COOL_THRESHOLDS = (
     ThresholdWithCriteria(threshold=10.0),
     ThresholdWithCriteria(threshold=5.0),
 )
@@ -283,8 +283,8 @@ class TestCalculateBasicOverheatingStats:
         dbt = synthetic_constant(1, 28.0)
         result = calculate_basic_overheating_stats(
             dbt,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
         )
         # Overheat, 26°C, Zone, Zone 000
         val_26 = result.loc[("Overheat", 26.0, "Zone", "Zone 000"), "Total Hours [hr]"]
@@ -299,8 +299,8 @@ class TestCalculateBasicOverheatingStats:
         dbt = synthetic_constant(1, 5.0)
         result = calculate_basic_overheating_stats(
             dbt,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
         )
         val_10 = result.loc[("Underheat", 10.0, "Zone", "Zone 000"), "Total Hours [hr]"]
         val_5 = result.loc[("Underheat", 5.0, "Zone", "Zone 000"), "Total Hours [hr]"]
@@ -318,8 +318,8 @@ class TestCalculateBasicOverheatingStats:
             dbt,
             zone_names=zone_names,
             zone_weights=np.ones(2),
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
         )
         # Above 26°C: Zone A=8760, Zone B=0
         # Any Zone: 8760 (at least one zone above)
@@ -344,8 +344,8 @@ class TestCalculateBasicOverheatingStats:
         dbt = synthetic_constant(1, 25.0)
         result = calculate_basic_overheating_stats(
             dbt,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
         )
         assert result.index.names == [
             "Polarity",
@@ -372,8 +372,8 @@ class TestCalculateConsecutiveHoursAboveThreshold:
         dbt[:, 750:755] = 5.0  # 5h below 10°C for underheat streak
         result = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         # One overheat streak of 744h, integral = 744 * (28-26) = 1488
         subset = result.xs(("Overheat", 26.0), level=("Polarity", "Threshold [degC]"))
@@ -388,8 +388,8 @@ class TestCalculateConsecutiveHoursAboveThreshold:
         dbt[:, 756:761] = 5.0  # cooling for stacked output
         result = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         subset = result.xs(("Overheat", 26.0), level=("Polarity", "Threshold [degC]"))
         overheat_rows = subset[subset["Streak [hr]"] == 100]
@@ -405,8 +405,8 @@ class TestCalculateConsecutiveHoursAboveThreshold:
         dbt[:, 756:761] = 5.0  # cooling for stacked output
         result = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         subset = result.xs(("Overheat", 26.0), level=("Polarity", "Threshold [degC]"))
         total_integral = subset["Integral [deg-hr]"].sum()
@@ -424,8 +424,8 @@ class TestCalculateConsecutiveHoursAboveThreshold:
         dbt[:, 756:761] = 5.0
         result = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         subset = result.xs(("Overheat", 26.0), level=("Polarity", "Threshold [degC]"))
         assert len(subset) == 365
@@ -438,8 +438,8 @@ class TestCalculateConsecutiveHoursAboveThreshold:
         dbt = synthetic_constant(1, 5.0)
         result = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(),
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=(),
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
         )
         assert "Underheat" in result.index.get_level_values("Polarity")
         assert "Overheat" not in result.index.get_level_values("Polarity")
@@ -449,8 +449,8 @@ class TestCalculateConsecutiveHoursAboveThreshold:
         dbt = synthetic_constant(1, 28.0)
         result = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=(),
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=(),
         )
         assert "Overheat" in result.index.get_level_values("Polarity")
         assert "Underheat" not in result.index.get_level_values("Polarity")
@@ -460,8 +460,8 @@ class TestCalculateConsecutiveHoursAboveThreshold:
         dbt = synthetic_constant(1, 28.0)
         result = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         assert "Streak [hr]" in result.columns
         assert "Integral [deg-hr]" in result.columns
@@ -528,8 +528,8 @@ class TestCalculateEdh:
             dbt,
             rh,
             mrt,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
             thermal_comfort=THERMAL_COMFORT,
         )
         for thresh in [26.0, 30.0, 35.0]:
@@ -560,8 +560,8 @@ class TestCalculateEdh:
             dbt,
             rh,
             mrt,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
             thermal_comfort=THERMAL_COMFORT,
         )
         expected_10 = N_TIMESTEPS * max(0, 10 - set_val)
@@ -583,8 +583,8 @@ class TestCalculateEdh:
             rh,
             mrt,
             zone_weights=np.array([0.5, 0.5]),
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
             thermal_comfort=THERMAL_COMFORT,
         )
         edh_26 = result.loc[result.index.get_level_values("Threshold [degC]") == 26.0]
@@ -605,8 +605,8 @@ class TestCalculateEdh:
             dbt,
             rh,
             mrt,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
             thermal_comfort=THERMAL_COMFORT,
         )
         assert result.index.names == [
@@ -753,19 +753,19 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0, count_failure=CountFailureCriterion(max_hours=50)
                 ),
             ),
-            cooling_thresholds=(),
+            cold_thresholds=(),
         )
         hi = _make_hi_for_zone_at_risk(zone_names, {"Zone A": 0})
         edh = _make_edh_simple(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -775,12 +775,12 @@ class TestComputeZoneAtRisk:
             zone_at_risk=pd.DataFrame(),
         )
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0, count_failure=CountFailureCriterion(max_hours=50)
                 ),
             ),
-            cooling_thresholds=(),
+            cold_thresholds=(),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
         assert out.loc["Zone A", "at_risk"]
@@ -793,19 +793,20 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0, count_failure=CountFailureCriterion(max_hours=50)
                 ),
             ),
-            cooling_thresholds=(),
+            cold_thresholds=(),
         )
         hi = _make_hi_for_zone_at_risk(zone_names, {"Zone A": 0})
         edh = _make_edh_simple(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             dbt,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            zone_names=zone_names,
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -815,12 +816,12 @@ class TestComputeZoneAtRisk:
             zone_at_risk=pd.DataFrame(),
         )
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0, count_failure=CountFailureCriterion(max_hours=50)
                 ),
             ),
-            cooling_thresholds=(),
+            cold_thresholds=(),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
         assert not out.loc["Zone A", "at_risk"]
@@ -831,16 +832,16 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             synthetic_constant(1, 25.0),
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         # Manually set EDH high for Zone A
         edh = _make_edh_simple(zone_names, {"Zone A": 10000})
         hi = _make_hi_for_zone_at_risk(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             synthetic_constant(1, 25.0),
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -850,13 +851,13 @@ class TestComputeZoneAtRisk:
             zone_at_risk=pd.DataFrame(),
         )
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0,
                     exceedance_failure=ExceedanceCriterion(max_deg_hours=5000),
                 ),
             ),
-            cooling_thresholds=(),
+            cold_thresholds=(),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
         assert out.loc["Zone A", "at_risk"]
@@ -872,16 +873,16 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         edh = _make_edh_simple(zone_names, {"Zone A": 200})
         hi = _make_hi_for_zone_at_risk(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -891,7 +892,7 @@ class TestComputeZoneAtRisk:
             zone_at_risk=pd.DataFrame(),
         )
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0,
                     streak_failure=StreakCriterion(
@@ -899,7 +900,7 @@ class TestComputeZoneAtRisk:
                     ),
                 ),
             ),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
         assert out.loc["Zone A", "at_risk"]
@@ -913,16 +914,16 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         edh = _make_edh_simple(zone_names, {"Zone A": 200})
         hi = _make_hi_for_zone_at_risk(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -932,7 +933,7 @@ class TestComputeZoneAtRisk:
             zone_at_risk=pd.DataFrame(),
         )
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0,
                     integrated_streak_failure=IntegratedStreakCriterion(
@@ -940,7 +941,7 @@ class TestComputeZoneAtRisk:
                     ),
                 ),
             ),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
         assert out.loc["Zone A", "at_risk"]
@@ -954,16 +955,16 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         edh = _make_edh_simple(zone_names, {"Zone A": 200})
         hi = _make_hi_for_zone_at_risk(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -973,7 +974,7 @@ class TestComputeZoneAtRisk:
             zone_at_risk=pd.DataFrame(),
         )
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0,
                     integrated_streak_failure=IntegratedStreakCriterion(
@@ -981,7 +982,7 @@ class TestComputeZoneAtRisk:
                     ),
                 ),
             ),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
         assert not out.loc["Zone A", "at_risk"]
@@ -998,16 +999,16 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         edh = _make_edh_simple(zone_names, {"Zone A": 80})
         hi = _make_hi_for_zone_at_risk(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -1018,7 +1019,7 @@ class TestComputeZoneAtRisk:
         )
         # min_streak_length=30: no streaks qualify (both are 20h), so integral sum = 0
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(
+            heat_thresholds=(
                 ThresholdWithCriteria(
                     threshold=26.0,
                     integrated_streak_failure=IntegratedStreakCriterion(
@@ -1026,7 +1027,7 @@ class TestComputeZoneAtRisk:
                     ),
                 ),
             ),
-            cooling_thresholds=(ThresholdWithCriteria(threshold=10.0),),
+            cold_thresholds=(ThresholdWithCriteria(threshold=10.0),),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
         assert not out.loc["Zone A", "at_risk"]
@@ -1040,14 +1041,14 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             synthetic_constant(1, 25.0),
             zone_names=zone_names,
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         edh = _make_edh_simple(zone_names, {"Zone A": 0})
         consecutive = calculate_consecutive_hours_above_threshold(
             synthetic_constant(1, 25.0),
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
         )
         results = OverheatingAnalysisResults(
             hi=hi,
@@ -1057,8 +1058,8 @@ class TestComputeZoneAtRisk:
             zone_at_risk=pd.DataFrame(),
         )
         config = OverheatingAnalysisConfig(
-            heating_thresholds=(ThresholdWithCriteria(threshold=26.0),),
-            cooling_thresholds=(),
+            heat_thresholds=(ThresholdWithCriteria(threshold=26.0),),
+            cold_thresholds=(),
             heat_index_criteria=HeatIndexCriteria(caution_or_worse_hours=4000),
         )
         out = compute_zone_at_risk(results, config, np.ones(1), zone_names)
@@ -1074,23 +1075,23 @@ class TestComputeZoneAtRisk:
         basic_oh = calculate_basic_overheating_stats(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
         )
         edh = calculate_edh(
             dbt,
             rh,
             mrt,
             zone_names=zone_names,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
             thermal_comfort=THERMAL_COMFORT,
         )
         consecutive = calculate_consecutive_hours_above_threshold(
             dbt,
             zone_names=zone_names,
-            heating_thresholds=DEFAULT_HEATING_THRESHOLDS,
-            cooling_thresholds=DEFAULT_COOLING_THRESHOLDS,
+            heat_thresholds=DEFAULT_HEAT_THRESHOLDS,
+            cold_thresholds=DEFAULT_COOL_THRESHOLDS,
         )
         results = OverheatingAnalysisResults(
             hi=hi,

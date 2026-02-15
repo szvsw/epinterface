@@ -107,7 +107,7 @@ def benchmark() -> None:
             start = perf_counter()
             flat_model.simulate(
                 overheating_config=OverheatingAnalysisConfig(
-                    heating_thresholds=(
+                    heat_thresholds=(
                         ThresholdWithCriteria(
                             threshold=26.0,
                             count_failure=CountFailureCriterion(max_hours=50),
@@ -142,7 +142,7 @@ def benchmark() -> None:
                             exceedance_failure=ExceedanceCriterion(max_deg_hours=50),
                         ),
                     ),
-                    cooling_thresholds=(
+                    cold_thresholds=(
                         ThresholdWithCriteria(
                             threshold=10.0,
                             count_failure=CountFailureCriterion(max_hours=50),
