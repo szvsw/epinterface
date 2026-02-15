@@ -1,0 +1,171 @@
+"""Field inventory for SBEM component no-op review.
+
+Phase 1 catalog: All component fields in epinterface/sbem/.
+"""
+
+# Component -> list of field names (excluding inherited Name from NamedObject for brevity;
+# Name is used everywhere via safe_name, construction.Name, etc.)
+FIELD_INVENTORY: dict[str, list[str]] = {
+    # zones.py
+    "ZoneComponent": ["Operations", "Envelope"],
+    # operations.py (ZoneOperationsComponent inherits NamedObject, MetadataMixin)
+    "ZoneOperationsComponent": ["SpaceUse", "HVAC", "DHW"],
+    # space_use.py
+    "OccupancyComponent": ["PeopleDensity", "Schedule", "IsOn", "MetabolicRate"],
+    "LightingComponent": ["PowerDensity", "DimmingType", "Schedule", "IsOn"],
+    "EquipmentComponent": ["PowerDensity", "Schedule", "IsOn"],
+    "ThermostatComponent": [
+        "IsOn",
+        "HeatingSetpoint",
+        "HeatingSchedule",
+        "CoolingSetpoint",
+        "CoolingSchedule",
+    ],
+    "WaterUseComponent": ["FlowRatePerPerson", "Schedule"],
+    "ZoneSpaceUseComponent": [
+        "Occupancy",
+        "Lighting",
+        "Equipment",
+        "Thermostat",
+        "WaterUse",
+    ],
+    # envelope.py
+    "GlazingConstructionSimpleComponent": ["SHGF", "UValue", "TVis", "Type"],
+    "InfiltrationComponent": [
+        "IsOn",
+        "ConstantCoefficient",
+        "TemperatureCoefficient",
+        "WindVelocityCoefficient",
+        "WindVelocitySquaredCoefficient",
+        "AFNAirMassFlowCoefficientCrack",
+        "AirChangesPerHour",
+        "FlowPerExteriorSurfaceArea",
+        "CalculationMethod",
+    ],
+    "ConstructionLayerComponent": ["Thickness", "LayerOrder", "ConstructionMaterial"],
+    "ConstructionAssemblyComponent": ["Layers", "VegetationLayer", "Type"],
+    "EnvelopeAssemblyComponent": [
+        "FlatRoofAssembly",
+        "FacadeAssembly",
+        "FloorCeilingAssembly",
+        "AtticRoofAssembly",
+        "AtticFloorAssembly",
+        "PartitionAssembly",
+        "ExternalFloorAssembly",
+        "GroundSlabAssembly",
+        "GroundWallAssembly",
+        "BasementCeilingAssembly",
+        "InternalMassAssembly",
+        "InternalMassExposedAreaPerArea",
+    ],
+    "ZoneEnvelopeComponent": [
+        "Assemblies",
+        "Infiltration",
+        "AtticInfiltration",
+        "BasementInfiltration",
+        "Window",
+    ],
+    # systems.py
+    "ThermalSystemComponent": [
+        "ConditioningType",
+        "Fuel",
+        "SystemCOP",
+        "DistributionCOP",
+    ],
+    "ConditioningSystemsComponent": ["Heating", "Cooling"],
+    "VentilationComponent": [
+        "FreshAirPerFloorArea",
+        "FreshAirPerPerson",
+        "Schedule",
+        "Provider",
+        "HRV",
+        "Economizer",
+        "DCV",
+    ],
+    "ZoneHVACComponent": ["ConditioningSystems", "Ventilation"],
+    "DHWComponent": [
+        "SystemCOP",
+        "WaterTemperatureInlet",
+        "DistributionCOP",
+        "WaterSupplyTemperature",
+        "IsOn",
+        "FuelType",
+    ],
+    # materials.py (EnvironmentalMixin, ConstructionMaterialProperties, ConstructionMaterialComponent)
+    "ConstructionMaterialComponent": [
+        "Conductivity",
+        "Density",
+        "SpecificHeat",
+        "ThermalAbsorptance",
+        "SolarAbsorptance",
+        "VisibleAbsorptance",
+        "Roughness",
+        "TemperatureCoefficientThermalConductivity",
+        "Type",
+        # EnvironmentalMixin (via StandardMaterialMetadataMixin)
+        "Cost",
+        "RateUnit",
+        "Life",
+        "EmbodiedCarbon",
+        # MetadataMixin
+        "Category",
+        "Comment",
+        "DataSource",
+        "Version",
+    ],
+    # schedules.py
+    "DayComponent": [
+        "Type",
+        "Hour_00",
+        "Hour_01",
+        "Hour_02",
+        "Hour_03",
+        "Hour_04",
+        "Hour_05",
+        "Hour_06",
+        "Hour_07",
+        "Hour_08",
+        "Hour_09",
+        "Hour_10",
+        "Hour_11",
+        "Hour_12",
+        "Hour_13",
+        "Hour_14",
+        "Hour_15",
+        "Hour_16",
+        "Hour_17",
+        "Hour_18",
+        "Hour_19",
+        "Hour_20",
+        "Hour_21",
+        "Hour_22",
+        "Hour_23",
+    ],
+    "WeekComponent": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ],
+    "YearComponent": [
+        "Type",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ],
+}
+
+# MetadataMixin fields - applied to many components
+METADATA_MIXIN_FIELDS = ["Category", "Comment", "DataSource", "Version"]
