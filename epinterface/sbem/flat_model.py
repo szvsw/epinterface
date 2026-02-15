@@ -6,6 +6,7 @@ from pathlib import Path
 from archetypal import IDF
 from pydantic import BaseModel, Field
 
+from epinterface.analysis.overheating import OverheatingAnalysisConfig
 from epinterface.geometry import ShoeboxGeometry
 from epinterface.sbem.builder import AtticAssumptions, BasementAssumptions, Model
 from epinterface.sbem.components.envelope import (
@@ -2122,12 +2123,16 @@ class FlatModel(BaseModel):
             post_geometry_callback,
         )
 
-    def simulate(self, calculate_overheating: bool = False):
+    def simulate(
+        self,
+        overheating_config: OverheatingAnalysisConfig | None = None,
+    ):
         """Simulate the model and return the IDF, result, and error."""
         model, cb = self.to_model()
 
         r = model.run(
-            post_geometry_callback=cb, calculate_overheating=calculate_overheating
+            post_geometry_callback=cb,
+            overheating_config=overheating_config,
         )
 
         return r
@@ -2209,4 +2214,4 @@ if __name__ == "__main__":
         ),
     )
 
-    r = flat_model.simulate(calculate_overheating=True)
+    r = flat_model.simulate()

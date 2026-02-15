@@ -23,6 +23,7 @@ from epinterface.analysis.energy_and_peak import (
     standard_results_postprocess as energy_and_peak_postprocess,
 )
 from epinterface.analysis.overheating import (
+    OverheatingAnalysisConfig,
     OverheatingAnalysisResults,
     overheating_results_postprocess,
 )
@@ -1109,7 +1110,7 @@ class Model(BaseWeather, validate_assignment=True):
         weather_dir: Path | None = None,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
         eplus_parent_dir: Path | None = None,
-        calculate_overheating: bool = False,
+        overheating_config: OverheatingAnalysisConfig | None = None,
     ) -> "ModelRunResults":
         """Build and simualte the idf model.
 
@@ -1117,7 +1118,7 @@ class Model(BaseWeather, validate_assignment=True):
             weather_dir (Path): The directory to store the weather files.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
             eplus_parent_dir (Path | None): The parent directory to store the eplus working directory.  If None, a temporary directory will be used.
-            calculate_overheating (bool): Whether to calculate the overheating results.
+            overheating_config (OverheatingAnalysisConfig | None): Configuration for overheating analysis. Skips if None.
 
         Returns:
             ModelRunResults: The results of the model run.
@@ -1147,9 +1148,12 @@ class Model(BaseWeather, validate_assignment=True):
 
             overheating_results = (
                 overheating_results_postprocess(
-                    sql, zone_weights=zone_weights, zone_names=zone_names
+                    sql,
+                    zone_weights=zone_weights,
+                    zone_names=zone_names,
+                    config=overheating_config,
                 )
-                if calculate_overheating
+                if overheating_config is not None
                 else None
             )
 
