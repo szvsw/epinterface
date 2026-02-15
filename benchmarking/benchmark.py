@@ -4,6 +4,16 @@ import csv
 from pathlib import Path
 from time import perf_counter
 
+from epinterface.analysis.overheating import (
+    CountFailureCriterion,
+    ExceedanceCriterion,
+    HeatIndexCriteria,
+    IntegratedStreakCriterion,
+    OverheatingAnalysisConfig,
+    StreakCriterion,
+    ThermalComfortAssumptions,
+    ThresholdWithCriteria,
+)
 from epinterface.sbem.flat_model import FlatModel
 from epinterface.weather import WeatherUrl
 
@@ -95,7 +105,77 @@ def benchmark() -> None:
             flat_model = base_parameters.model_copy(update={"NFloors": num_floors})
 
             start = perf_counter()
-            flat_model.simulate(calculate_overheating=calculate_overheating)
+            flat_model.simulate(
+                overheating_config=OverheatingAnalysisConfig(
+                    heating_thresholds=(
+                        ThresholdWithCriteria(
+                            threshold=26.0,
+                            count_failure=CountFailureCriterion(max_hours=50),
+                            streak_failure=StreakCriterion(
+                                min_streak_length_hours=50, max_count=0
+                            ),
+                            integrated_streak_failure=IntegratedStreakCriterion(
+                                min_streak_length_hours=50, max_integral=0
+                            ),
+                            exceedance_failure=ExceedanceCriterion(max_deg_hours=50),
+                        ),
+                        ThresholdWithCriteria(
+                            threshold=30.0,
+                            count_failure=CountFailureCriterion(max_hours=50),
+                            streak_failure=StreakCriterion(
+                                min_streak_length_hours=50, max_count=0
+                            ),
+                            integrated_streak_failure=IntegratedStreakCriterion(
+                                min_streak_length_hours=50, max_integral=0
+                            ),
+                            exceedance_failure=ExceedanceCriterion(max_deg_hours=50),
+                        ),
+                        ThresholdWithCriteria(
+                            threshold=35.0,
+                            count_failure=CountFailureCriterion(max_hours=50),
+                            streak_failure=StreakCriterion(
+                                min_streak_length_hours=50, max_count=0
+                            ),
+                            integrated_streak_failure=IntegratedStreakCriterion(
+                                min_streak_length_hours=50, max_integral=0
+                            ),
+                            exceedance_failure=ExceedanceCriterion(max_deg_hours=50),
+                        ),
+                    ),
+                    cooling_thresholds=(
+                        ThresholdWithCriteria(
+                            threshold=10.0,
+                            count_failure=CountFailureCriterion(max_hours=50),
+                            streak_failure=StreakCriterion(
+                                min_streak_length_hours=50, max_count=0
+                            ),
+                            integrated_streak_failure=IntegratedStreakCriterion(
+                                min_streak_length_hours=50, max_integral=0
+                            ),
+                            exceedance_failure=ExceedanceCriterion(max_deg_hours=50),
+                        ),
+                        ThresholdWithCriteria(
+                            threshold=5.0,
+                            count_failure=CountFailureCriterion(max_hours=50),
+                            streak_failure=StreakCriterion(
+                                min_streak_length_hours=50, max_count=0
+                            ),
+                            integrated_streak_failure=IntegratedStreakCriterion(
+                                min_streak_length_hours=50, max_integral=0
+                            ),
+                            exceedance_failure=ExceedanceCriterion(max_deg_hours=50),
+                        ),
+                    ),
+                    heat_index_criteria=HeatIndexCriteria(
+                        caution_or_worse_hours=4000,
+                    ),
+                    thermal_comfort=ThermalComfortAssumptions(
+                        met=1.1,
+                        clo=0.5,
+                        v=0.1,
+                    ),
+                )
+            )
             elapsed = perf_counter() - start
 
             results.append((num_floors, calculate_overheating, elapsed))
