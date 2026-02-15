@@ -464,8 +464,8 @@ def calculate_basic_overheating_stats(
         dbt_mat: The dry bulb temperature matrix (zones x timesteps).
         zone_names: The names of the zones. If None, the zones will be named "Zone 000", "Zone 001", etc.
         zone_weights: The weights of the zones. If None, the zones will be weighted equally.
-        heating_thresholds: Thresholds for overheating (uses default if None).
-        cooling_thresholds: Thresholds for undercooling (uses default if None).
+        heating_thresholds: Thresholds for overheating.
+        cooling_thresholds: Thresholds for undercooling.
 
     Returns:
         hours (pd.DataFrame): A dataframe with the overheating and undercooling hours by threshold for the whole building and by zone and threshold for each zone.
