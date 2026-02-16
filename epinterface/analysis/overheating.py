@@ -1,12 +1,95 @@
 """A module for computing and analyzing metrics related to overheating, such as heat index, exceedance hours, etc."""
 
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 import numpy as np
 import pandas as pd
 from archetypal.idfclass.sql import Sql
 from numpy.typing import NDArray
+from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Configuration models
+# ---------------------------------------------------------------------------
+
+
+class CountFailureCriterion(BaseModel):
+    """Simple check: fail if total hours above/below threshold across the year exceeds max."""
+
+    max_hours: float
+
+
+class ExceedanceCriterion(BaseModel):
+    """Fail if EDH (degree-hours) exceeds max."""
+
+    max_deg_hours: float
+
+
+class StreakCriterion(BaseModel):
+    """Fail if count of streaks longer than min_streak_length exceeds max_count."""
+
+    min_streak_length_hours: float
+    max_count: float
+
+
+class IntegratedStreakCriterion(BaseModel):
+    """Fail if sum of integrals (for streaks longer than min) exceeds max_integral."""
+
+    min_streak_length_hours: float
+    max_integral: float
+
+
+class ThresholdWithCriteria(BaseModel):
+    """A temperature threshold with optional failure criteria."""
+
+    threshold: float
+    exceedance_failure: ExceedanceCriterion | None = None  # EDH degree-hours
+    streak_failure: StreakCriterion | None = None  # count of long streaks
+    integrated_streak_failure: IntegratedStreakCriterion | None = None
+    count_failure: CountFailureCriterion | None = None  # simple hours above threshold
+
+
+class HeatIndexCriteria(BaseModel):
+    """Criteria for heat index categories (fixed NOAA categories)."""
+
+    extreme_danger_hours: float | None = None  # fail if hours in Extreme Danger > this
+    danger_or_worse_hours: float | None = (
+        None  # fail if hours in Danger+Extreme Danger > this
+    )
+    caution_or_worse_hours: float | None = (
+        None  # fail if hours in Caution+Extreme Caution+Danger+Extreme Danger > this
+    )
+
+
+class ThermalComfortAssumptions(BaseModel):
+    """MET, CLO, v for SET (Standard Effective Temperature) calculation in EDH."""
+
+    met: float = 1.1
+    clo: float = 0.5
+    v: float = 0.1
+
+
+class OverheatingAnalysisConfig(BaseModel):
+    """Configuration for overheating analysis and zone-at-risk assessment."""
+
+    heat_thresholds: tuple[ThresholdWithCriteria, ...] = Field(
+        default_factory=lambda: (
+            ThresholdWithCriteria(threshold=26.0),
+            ThresholdWithCriteria(threshold=30.0),
+            ThresholdWithCriteria(threshold=35.0),
+        )
+    )
+    cold_thresholds: tuple[ThresholdWithCriteria, ...] = Field(
+        default_factory=lambda: (
+            ThresholdWithCriteria(threshold=10.0),
+            ThresholdWithCriteria(threshold=5.0),
+        )
+    )
+    heat_index_criteria: HeatIndexCriteria = Field(default_factory=HeatIndexCriteria)
+    thermal_comfort: ThermalComfortAssumptions = Field(
+        default_factory=ThermalComfortAssumptions
+    )
 
 
 def calculate_hi_categories(
@@ -201,33 +284,34 @@ def calculate_edh(
     dbt_mat: NDArray[np.float64],
     rh_mat: NDArray[np.float64],
     mrt_mat: NDArray[np.float64],
-    met: float = 1.1,
-    clo: float = 0.5,
-    v: float = 0.1,
-    comfort_bounds: tuple[float, float] = (22, 27),
+    heat_thresholds: tuple[ThresholdWithCriteria, ...],
+    cold_thresholds: tuple[ThresholdWithCriteria, ...],
+    thermal_comfort: ThermalComfortAssumptions,
     zone_names: list[str] | None = None,
     zone_weights: NDArray[np.float64] | None = None,
 ) -> pd.DataFrame:
-    """Calculates Exceedance Degree Hours (EDH) using fixed comfort bounds and separates hot and cold contributions.
+    """Calculates Exceedance Degree Hours (EDH) per threshold for heating and cooling.
 
-    When aggregating at the building scale, we compute a few variants:
+    For each heating threshold T, computes integral of max(0, SET - T) over the year.
+    For each cooling threshold T, computes integral of max(0, T - SET) over the year.
+
+    When aggregating at the building scale, we compute:
         - Zone Weighted: The weighted average of the EDHs for all zones.
         - Worst Zone: The EDH for the zone with the worst EDH.
 
     Parameters:
-        dry_bulb_temperature_mat (np.ndarray): The dry bulb temperature matrix (zones x timesteps).
-        relative_humidity_mat (np.ndarray): The relative humidity matrix (zones x timesteps).
-        mean_radiant_temperature_mat (np.ndarray): The mean radiant temperature matrix (zones x timesteps).
-        met (float): The metabolic rate in metabolic equivalents (MET).
-        clo (float): The clothing insulation in clo.
-        v (float): The air speed in meters per second.
-        comfort_bounds (tuple[float, float]): The comfort bounds in degrees Celsius considered comfortable.
-        zone_names (list[str] | None): The names of the zones. If None, the zones will be named "Zone 001", "Zone 002", etc.
-        zone_weights (NDArray[np.float64] | None): The weights of the zones. If None, the zones will be weighted equally when summing the EDHs.
+        dbt_mat: The dry bulb temperature matrix (zones x timesteps).
+        rh_mat: The relative humidity matrix (zones x timesteps).
+        mrt_mat: The mean radiant temperature matrix (zones x timesteps).
+        heat_thresholds: Thresholds for heat exceedance (SET above threshold).
+        cold_thresholds: Thresholds for cold exceedance (SET below threshold).
+        thermal_comfort: MET, CLO, v for SET calculation.
+        zone_names: The names of the zones.
+        zone_weights: The weights of the zones.
 
     Returns:
-        building_edhs (pd.DataFrame): A dataframe with the building weighted EDHs.
-        zone_edhs (pd.DataFrame): A dataframe with the EDHs for each zone.
+        pd.DataFrame: MultiIndex (Polarity, Threshold [degC], Aggregation Unit, Group),
+            column "EDH [degC-hr]".
     """
     from pythermalcomfort.models import set_tmp
 
@@ -263,9 +347,9 @@ def calculate_edh(
                 tdb=dbt_row,
                 tr=mrt_row,
                 rh=relative_humidity_row,
-                met=met,
-                clo=clo,
-                v=v,
+                met=thermal_comfort.met,
+                clo=thermal_comfort.clo,
+                v=thermal_comfort.v,
                 limit_inputs=False,  # TODO: remove this, or set it and handle NaN cases appropriately.
             )["set"]
             for dbt_row, mrt_row, relative_humidity_row in zip(
@@ -277,50 +361,97 @@ def calculate_edh(
         ],
         axis=0,
     )
-    low, high = np.sort(comfort_bounds)
-    hot_edh = np.maximum(0, SETs - high)
-    cold_edh = np.maximum(0, low - SETs)
-    total_edh = hot_edh + cold_edh
 
-    edhs_by_zone: NDArray[np.float64] = np.stack(
-        [total_edh, hot_edh, cold_edh], axis=2
-    ).sum(axis=1)
-    edhs = pd.DataFrame(
-        edhs_by_zone,
-        index=_zone_names,
-        columns=["Total", "Heat Exceedance", "Cold Exceedance"],
-        dtype=np.float64,
+    heat_thresh_vals = np.array([t.threshold for t in heat_thresholds])
+    cool_thresh_vals = np.array([t.threshold for t in cold_thresholds])
+
+    # hot_edh: (n_heat_thresholds, n_zones), cold_edh: (n_cool_thresholds, n_zones)
+    hot_edh_by_zone = np.maximum(0, SETs - heat_thresh_vals.reshape(-1, 1, 1)).sum(
+        axis=2
     )
-    edhs.index.name = "Zone"
-    edhs.columns.name = "EDH Type"
+    cold_edh_by_zone = np.maximum(0, cool_thresh_vals.reshape(-1, 1, 1) - SETs).sum(
+        axis=2
+    )
 
     normalized_zone_weights: NDArray[np.float64] = _zone_weights / _zone_weights.sum()
-    # weighted_edhs_by_zone: NDArray[np.float64] = (
-    #     edhs_by_zone * normalized_zone_weights.reshape(-1, 1)
-    # )
-    weighted_edhs_by_zone = edhs.mul(normalized_zone_weights, axis=0)
 
-    aggregated_edhs = weighted_edhs_by_zone.sum(axis=0)
-    worst_edh = edhs.max(axis=0)
-
-    building_edhs = pd.concat(
-        [aggregated_edhs, worst_edh], axis=1, keys=["Zone Weighted", "Worst Zone"]
-    ).T
-    final = pd.concat(
-        [building_edhs, edhs],
-        axis=0,
-        names=["Aggregation Unit", "Group"],
-        keys=["Building", "Zone"],
+    # Build zone-level DataFrames
+    hot_edh_df = pd.DataFrame(
+        hot_edh_by_zone,
+        index=pd.Index(heat_thresh_vals, name="Threshold [degC]"),
+        columns=pd.Index(_zone_names, name="Zone"),
+        dtype=np.float64,
     )
-    return final.rename(columns={c: f"{c} [degC-hr]" for c in final.columns})
+    cold_edh_df = pd.DataFrame(
+        cold_edh_by_zone,
+        index=pd.Index(cool_thresh_vals, name="Threshold [degC]"),
+        columns=pd.Index(_zone_names, name="Zone"),
+        dtype=np.float64,
+    )
+
+    # Building aggregations
+    weighted_hot = hot_edh_df.mul(normalized_zone_weights).sum(axis=1)
+    weighted_cold = cold_edh_df.mul(normalized_zone_weights).sum(axis=1)
+    worst_hot = hot_edh_df.max(axis=1)
+    worst_cold = cold_edh_df.max(axis=1)
+
+    hot_whole_bldg = pd.DataFrame({
+        "Zone Weighted": weighted_hot,
+        "Worst Zone": worst_hot,
+    })
+    cold_whole_bldg = pd.DataFrame({
+        "Zone Weighted": weighted_cold,
+        "Worst Zone": worst_cold,
+    })
+
+    # Stack to match basic_oh structure: (Polarity, Threshold, Aggregation Unit, Group)
+    hot_zone = hot_edh_df.T
+    cold_zone = cold_edh_df.T
+
+    combined = pd.concat(
+        [
+            pd.concat(
+                [hot_whole_bldg.T, hot_zone],
+                axis=0,
+                keys=["Building", "Zone"],
+                names=["Aggregation Unit", "Group"],
+            ),
+            pd.concat(
+                [cold_whole_bldg.T, cold_zone],
+                axis=0,
+                keys=["Building", "Zone"],
+                names=["Aggregation Unit", "Group"],
+            ),
+        ],
+        axis=1,
+        keys=["Overheat", "Underheat"],
+        names=["Polarity", "Threshold [degC]"],
+    ).T
+
+    combined.columns.names = ["Aggregation Unit", "Group"]
+    combined = (
+        cast(
+            pd.Series,
+            cast(pd.DataFrame, combined.stack(future_stack=True)).stack(
+                future_stack=True
+            ),
+        )
+        .rename("EDH [degC-hr]")
+        .dropna()
+        .to_frame()
+        .reorder_levels(
+            ["Polarity", "Threshold [degC]", "Aggregation Unit", "Group"], axis=0
+        )
+    )
+    return combined
 
 
 def calculate_basic_overheating_stats(
     dbt_mat: NDArray[np.float64],
+    heat_thresholds: tuple[ThresholdWithCriteria, ...],
+    cold_thresholds: tuple[ThresholdWithCriteria, ...],
     zone_names: list[str] | None = None,
     zone_weights: NDArray[np.float64] | None = None,
-    overheating_thresholds: tuple[float, ...] = (26, 30, 35),
-    undercooling_thresholds: tuple[float, ...] = (10, 5),
 ) -> pd.DataFrame:
     """Calculates basic overheating hours by zone and for the whole building.
 
@@ -330,16 +461,19 @@ def calculate_basic_overheating_stats(
         - Worst Zone: The number of timesteps that the threshold is violated for the zone with the worst number of violations.
 
     Args:
-        dbt_mat (NDArray[np.float64]): The dry bulb temperature matrix (zones x timesteps).
-        zone_names (list[str] | None): The names of the zones. If None, the zones will be named "Zone 001", "Zone 002", etc.
-        zone_weights (NDArray[np.float64] | None): The weights of the zones. If None, the zones will be weighted equally when summing the overheating hours.
-        overheating_thresholds (tuple[float, ...]): The thresholds for overheating.
-        undercooling_thresholds (tuple[float, ...]): The thresholds for undercooling.
+        dbt_mat: The dry bulb temperature matrix (zones x timesteps).
+        heat_thresholds: Thresholds for overheating.
+        cold_thresholds: Thresholds for undercooling.
+        zone_names: The names of the zones. If None, the zones will be named "Zone 000", "Zone 001", etc.
+        zone_weights: The weights of the zones. If None, the zones will be weighted equally.
 
     Returns:
         hours (pd.DataFrame): A dataframe with the overheating and undercooling hours by threshold for the whole building and by zone and threshold for each zone.
 
     """
+    overheat_thresholds = np.array([t.threshold for t in heat_thresholds])
+    undercool_thresholds = np.array([t.threshold for t in cold_thresholds])
+
     zone_names_ = (
         [f"Zone {i:03d}" for i in range(dbt_mat.shape[0])]
         if zone_names is None
@@ -354,9 +488,6 @@ def calculate_basic_overheating_stats(
     normalized_zone_weights: NDArray[np.float64] = zone_weights_ / zone_weights_.sum()
     n_zones = len(zone_weights_)
     check_timeseries_shape(dbt_mat, expected_zones=n_zones, expected_timesteps=8760)
-
-    overheat_thresholds = np.array(overheating_thresholds)
-    undercool_thresholds = np.array(undercooling_thresholds)
 
     # threshold comparisons have shape (n_thresholds, n_zones, n_timesteps)
     over_thresh_by_zone = dbt_mat > overheat_thresholds.reshape(-1, 1, 1)
@@ -513,8 +644,8 @@ def _consecutive_run_lengths_vectorized(
 
 def calculate_consecutive_hours_above_threshold(
     dbt_mat: NDArray[np.float64],
-    overheating_thresholds: list[float] | tuple[float, ...] = (26, 30, 35),
-    underheating_thresholds: list[float] | tuple[float, ...] = (10, 5),
+    heat_thresholds: tuple[ThresholdWithCriteria, ...],
+    cold_thresholds: tuple[ThresholdWithCriteria, ...],
     zone_names: list[str] | None = None,
 ) -> pd.DataFrame:
     """Calculates consecutive hours above (overheating) or below (underheating) thresholds per zone.
@@ -527,22 +658,20 @@ def calculate_consecutive_hours_above_threshold(
 
     Args:
         dbt_mat (NDArray[np.float64]): The dry bulb temperature matrix (zones x timesteps).
-        overheating_thresholds (list[float] | tuple[float, ...]): Thresholds for consecutive hours *above*. If None, uses (26, 30, 35).
-        underheating_thresholds (list[float] | tuple[float, ...]): Thresholds for consecutive hours *below*. If None, uses (10, 5).
-        zone_names (list[str] | None): The names of the zones. If None, zones are named "Zone 001", "Zone 002", etc.
+        heat_thresholds: Thresholds for consecutive hours *above*.
+        cold_thresholds: Thresholds for consecutive hours *below*.
+        zone_names: The names of the zones. If None, zones are named "Zone 001", "Zone 002", etc.
 
     Returns:
         pd.DataFrame: MultiIndex (Metric, Threshold [degC], Zone). Columns "Streak 001", ... (run lengths, NaN-padded) and "Integral 001", ... (sum of excess/deficit per run, degree-hours, NaN-padded).
     """
     n_zones, _ = dbt_mat.shape
     zone_names_ = (
-        [f"Zone {i + 1:03d}" for i in range(n_zones)]
-        if zone_names is None
-        else zone_names
+        [f"Zone {i:03d}" for i in range(n_zones)] if zone_names is None else zone_names
     )
 
-    over_arr = np.asarray(overheating_thresholds, dtype=np.float64)
-    under_arr = np.asarray(underheating_thresholds, dtype=np.float64)
+    over_arr = np.array([t.threshold for t in heat_thresholds], dtype=np.float64)
+    under_arr = np.array([t.threshold for t in cold_thresholds], dtype=np.float64)
 
     check_timeseries_shape(dbt_mat, expected_zones=n_zones, expected_timesteps=8760)
 
@@ -698,18 +827,300 @@ def _consecutive_run_lengths_looped(
     return reshaped_streaks, reshaped_streak_integrals
 
 
+def _check_heat_index_caution_or_worse(
+    hi: pd.DataFrame,
+    zone_names: list[str],
+    crit: float,
+    level: Literal["Caution", "Extreme Caution", "Danger", "Extreme Danger"],
+) -> pd.Series:
+    """Check each zone to see if the number of hours in the given heat index level or worse exceeds the criterion.
+
+    Args:
+        hi (pd.DataFrame): The heat index dataframe.
+        zone_names (list[str]): The names of the zones.
+        crit (float): The criterion for the given heat index level or worse.
+        level (Literal["Caution", "Extreme Caution", "Danger", "Extreme Danger"]): The heat index level to check.
+
+    Returns:
+        Series(index=zone_names, dtype=bool): True where zone fails (at risk).
+    """
+    hi_zone = hi.loc["Zone"].reindex(zone_names)
+    base_levels = [
+        "Extreme Danger [hr]",
+        "Danger [hr]",
+        "Extreme Caution [hr]",
+        "Caution [hr]",
+    ]
+    levels_to_use = base_levels[: base_levels.index(f"{level} [hr]") + 1]
+    cols = [c for c in levels_to_use if c in hi_zone.columns]
+    vals = (
+        cast(pd.DataFrame, hi_zone[cols].fillna(0)).sum(axis=1)
+        if cols
+        else pd.Series(0.0, index=zone_names)
+    )
+    return vals.reindex(zone_names, fill_value=0).gt(crit)
+
+
+def _check_count_failure(
+    basic_zone: pd.DataFrame,
+    polarity: str,
+    thresh_val: float,
+    zone_names: list[str],
+    max_hours: float,
+) -> pd.Series:
+    """Check each zone to see if the number of hours above/below threshold exceeds the criterion.
+
+    Args:
+        basic_zone (pd.DataFrame): The basic overheating dataframe.
+        polarity (str): The polarity of the threshold ("Overheat" or "Underheat").
+        thresh_val (float): The threshold value.
+        zone_names (list[str]): The names of the zones.
+        max_hours (float): The maximum number of hours allowed.
+
+    Returns:
+        Series(index=zone_names, dtype=bool): True where zone fails (at risk).
+    """
+    try:
+        s = cast(pd.Series, basic_zone.loc[(polarity, thresh_val), "Total Hours [hr]"])
+    except KeyError:
+        return pd.Series(False, index=zone_names)
+    return s.reindex(zone_names, fill_value=0).gt(max_hours)
+
+
+def _check_exceedance_failure(
+    edh_zone: pd.DataFrame,
+    polarity: str,
+    thresh_val: float,
+    zone_names: list[str],
+    max_deg_hours: float,
+) -> pd.Series:
+    """Check each zone to see if the EDH exceeds the criterion.
+
+    Args:
+        edh_zone (pd.DataFrame): The EDH dataframe.
+        polarity (str): The polarity of the threshold ("Overheat" or "Underheat").
+        thresh_val (float): The threshold value.
+        zone_names (list[str]): The names of the zones.
+        max_deg_hours (float): The maximum number of degree-hours allowed.
+
+    Returns:
+        Series(index=zone_names, dtype=bool): True where zone fails (at risk).
+    """
+    try:
+        s = cast(pd.Series, edh_zone.loc[(polarity, thresh_val), "EDH [degC-hr]"])
+    except KeyError:
+        return pd.Series(False, index=zone_names)
+    return s.reindex(zone_names, fill_value=0).gt(max_deg_hours)
+
+
+def _check_streak_failure(
+    consecutive: pd.DataFrame,
+    polarity: str,
+    thresh_val: float,
+    zone_names: list[str],
+    min_streak_length_hours: float,
+    max_count: float,
+) -> pd.Series:
+    """Returns Series(index=zone_names, dtype=bool): True where zone fails (at risk)."""
+    streak_col = next(
+        (c for c in consecutive.columns if "Streak" in str(c)),
+        consecutive.columns[0] if len(consecutive.columns) > 0 else None,
+    )
+    if streak_col is None:
+        return pd.Series(False, index=zone_names)
+    try:
+        subset = consecutive.xs(
+            (polarity, thresh_val),
+            level=("Polarity", "Threshold [degC]"),
+        )
+    except KeyError:
+        return pd.Series(False, index=zone_names)
+    count_long = subset.groupby(level="Zone")[streak_col].apply(
+        lambda g: (g > min_streak_length_hours).sum()
+    )
+    return count_long.reindex(zone_names, fill_value=0).gt(max_count)
+
+
+def _check_integrated_streak_failure(
+    consecutive: pd.DataFrame,
+    polarity: str,
+    thresh_val: float,
+    zone_names: list[str],
+    min_streak_length_hours: float,
+    max_integral: float,
+) -> pd.Series:
+    """Returns Series(index=zone_names, dtype=bool): True where zone fails (at risk)."""
+    streak_col = next(
+        (c for c in consecutive.columns if "Streak" in str(c)),
+        consecutive.columns[0] if len(consecutive.columns) > 0 else None,
+    )
+    int_col = next(
+        (c for c in consecutive.columns if "Integral" in str(c)),
+        consecutive.columns[-1] if len(consecutive.columns) > 1 else None,
+    )
+    if streak_col is None or int_col is None:
+        return pd.Series(False, index=zone_names)
+    try:
+        subset = consecutive.xs(
+            (polarity, thresh_val),
+            level=("Polarity", "Threshold [degC]"),
+        )
+    except KeyError:
+        return pd.Series(False, index=zone_names)
+
+    def _sum_integral_long_streaks(g: pd.DataFrame) -> float:
+        mask = g[streak_col] > min_streak_length_hours
+        # TODO: this is the sum of *ALL* the long streaks, not just the longest one.
+        # Consider separating out that check.
+        return float(g.loc[mask, int_col].sum())
+
+    total_int = subset.groupby(level="Zone").apply(_sum_integral_long_streaks)
+    return total_int.reindex(zone_names, fill_value=0).gt(max_integral)
+
+
+def compute_zone_at_risk(
+    results: "OverheatingAnalysisResults",
+    config: OverheatingAnalysisConfig,
+    zone_weights: NDArray[np.float64],
+    zone_names: list[str],
+) -> pd.DataFrame:
+    """Compute a boolean for each zone indicating whether it is at risk.
+
+    A zone is at risk if it fails any configured criterion (heat index, EDH,
+    hours above/below threshold, or consecutive streak criteria).
+
+    Args:
+        results: The overheating analysis results.
+        config: The configuration with criteria for each threshold.
+        zone_weights: Weights for each zone.
+        zone_names: Names of the zones.
+
+    Returns:
+        DataFrame with index=zone names, columns=weight, at_risk (bool).
+    """
+    hi = results.hi
+    basic_zone: pd.DataFrame = cast(
+        pd.DataFrame, results.basic_oh.xs("Zone", level="Aggregation Unit")
+    )
+    edh_zone: pd.DataFrame = cast(
+        pd.DataFrame, results.edh.xs("Zone", level="Aggregation Unit")
+    )
+    consecutive = results.consecutive_e_zone
+
+    normalized_weights = zone_weights / zone_weights.sum()
+    fail_series_list: list[pd.Series] = []
+
+    # Heat index criteria
+    if config.heat_index_criteria.extreme_danger_hours is not None:
+        fail_series_list.append(
+            _check_heat_index_caution_or_worse(
+                hi,
+                zone_names,
+                config.heat_index_criteria.extreme_danger_hours,
+                level="Extreme Danger",
+            )
+        )
+    if config.heat_index_criteria.danger_or_worse_hours is not None:
+        fail_series_list.append(
+            _check_heat_index_caution_or_worse(
+                hi,
+                zone_names,
+                config.heat_index_criteria.danger_or_worse_hours,
+                level="Danger",
+            )
+        )
+    if config.heat_index_criteria.caution_or_worse_hours is not None:
+        fail_series_list.append(
+            _check_heat_index_caution_or_worse(
+                hi,
+                zone_names,
+                config.heat_index_criteria.caution_or_worse_hours,
+                level="Caution",
+            )
+        )
+
+    # Threshold criteria
+    for polarity, thresholds in [
+        ("Overheat", config.heat_thresholds),
+        ("Underheat", config.cold_thresholds),
+    ]:
+        for tc in thresholds:
+            thresh_val = float(tc.threshold)
+            if tc.count_failure is not None:
+                fail_series_list.append(
+                    _check_count_failure(
+                        basic_zone,
+                        polarity,
+                        thresh_val,
+                        zone_names,
+                        tc.count_failure.max_hours,
+                    )
+                )
+            if tc.exceedance_failure is not None:
+                fail_series_list.append(
+                    _check_exceedance_failure(
+                        edh_zone,
+                        polarity,
+                        thresh_val,
+                        zone_names,
+                        tc.exceedance_failure.max_deg_hours,
+                    )
+                )
+            if tc.streak_failure is not None:
+                fail_series_list.append(
+                    _check_streak_failure(
+                        consecutive,
+                        polarity,
+                        thresh_val,
+                        zone_names,
+                        tc.streak_failure.min_streak_length_hours,
+                        tc.streak_failure.max_count,
+                    )
+                )
+            if tc.integrated_streak_failure is not None:
+                fail_series_list.append(
+                    _check_integrated_streak_failure(
+                        consecutive,
+                        polarity,
+                        thresh_val,
+                        zone_names,
+                        tc.integrated_streak_failure.min_streak_length_hours,
+                        tc.integrated_streak_failure.max_integral,
+                    )
+                )
+
+    at_risk = (
+        pd.concat(fail_series_list, axis=1).any(axis=1)
+        if fail_series_list
+        else pd.Series(False, index=zone_names)
+    )
+
+    out = pd.DataFrame(
+        {"weight": normalized_weights, "at_risk": at_risk},
+        index=zone_names,
+    )
+    out.index.name = "Zone"
+    return out
+
+
 def overheating_results_postprocess(
     sql: Sql,
     zone_weights: NDArray[np.float64],
     zone_names: list[str],
-):
+    config: OverheatingAnalysisConfig | None = None,
+) -> "OverheatingAnalysisResults":
     """Postprocess the sql file to get the temperature results.
 
     Args:
-        sql (Sql): The sql file to postprocess.
-        zone_weights (NDArray[np.float64]): The weights of the zones.
-        zone_names (list[str]): The names of the zones.
+        sql: The sql file to postprocess.
+        zone_weights: The weights of the zones.
+        zone_names: The names of the zones.
+        config: Overheating analysis configuration. Uses defaults if None.
+
+    Returns:
+        OverheatingAnalysisResults with hi, edh, basic_oh, consecutive_e_zone, zone_at_risk.
     """
+    _config = config if config is not None else OverheatingAnalysisConfig()
     # TODO: compare the single request flamegraph to splitting it out as multiple requests
     hourly = sql.timeseries_by_name(
         [
@@ -769,12 +1180,17 @@ def overheating_results_postprocess(
         dbt_mat=dbt_mat,
         rh_mat=rh_mat,
         mrt_mat=radiant_mat,
+        heat_thresholds=_config.heat_thresholds,
+        cold_thresholds=_config.cold_thresholds,
+        thermal_comfort=_config.thermal_comfort,
         zone_names=zone_names_to_use,
         zone_weights=zone_weights_to_use,
     )
 
     consecutive_e_zone = calculate_consecutive_hours_above_threshold(
         dbt_mat=dbt_mat,
+        heat_thresholds=_config.heat_thresholds,
+        cold_thresholds=_config.cold_thresholds,
         zone_names=zone_names_to_use,
     )
 
@@ -782,9 +1198,29 @@ def overheating_results_postprocess(
         dbt_mat=dbt_mat,
         zone_names=zone_names_to_use,
         zone_weights=zone_weights_to_use,
+        heat_thresholds=_config.heat_thresholds,
+        cold_thresholds=_config.cold_thresholds,
     )
+
+    zone_at_risk = compute_zone_at_risk(
+        results=OverheatingAnalysisResults(
+            hi=hi,
+            edh=edh,
+            basic_oh=basic_oh,
+            consecutive_e_zone=consecutive_e_zone,
+            zone_at_risk=pd.DataFrame(),  # placeholder, not used by compute_zone_at_risk
+        ),
+        config=_config,
+        zone_weights=zone_weights_to_use,
+        zone_names=zone_names_to_use,
+    )
+
     return OverheatingAnalysisResults(
-        hi=hi, edh=edh, basic_oh=basic_oh, consecutive_e_zone=consecutive_e_zone
+        hi=hi,
+        edh=edh,
+        basic_oh=basic_oh,
+        consecutive_e_zone=consecutive_e_zone,
+        zone_at_risk=zone_at_risk,
     )
 
 
@@ -796,6 +1232,7 @@ class OverheatingAnalysisResults:
     edh: pd.DataFrame
     basic_oh: pd.DataFrame
     consecutive_e_zone: pd.DataFrame
+    zone_at_risk: pd.DataFrame
 
 
 if __name__ == "__main__":
@@ -803,43 +1240,81 @@ if __name__ == "__main__":
     # Zones should be along the rows
     _n_timesteps = 8760
     _n_zones = 10
+    _zone_names = [f"Zone {i:03d}" for i in range(_n_zones)]
+    _zone_weights = np.ones(_n_zones)
     _temperature_matrix = np.random.rand(_n_zones, _n_timesteps) * 30 + 10
     _relative_humidity_matrix = np.random.rand(_n_zones, _n_timesteps) * 50 + 50
-    # _mean_radiant_temperature_matrix = np.random.rand(_n_zones, _n_timesteps) * 40 - 10
     _mean_radiant_temperature_matrix = (
         _temperature_matrix + np.random.randn(_n_zones, _n_timesteps) * 1
     )
-    r = calculate_hi_categories(_temperature_matrix, _relative_humidity_matrix)
+
+    _thermal_comfort = ThermalComfortAssumptions(
+        met=1.1,
+        clo=0.5,
+        v=0.1,
+    )
+    _heat_thresholds = (
+        ThresholdWithCriteria(threshold=26.0),
+        ThresholdWithCriteria(threshold=30.0),
+        ThresholdWithCriteria(threshold=35.0),
+    )
+    _cold_thresholds = (
+        ThresholdWithCriteria(threshold=10.0),
+        ThresholdWithCriteria(threshold=5.0),
+    )
+    r = calculate_hi_categories(
+        _temperature_matrix,
+        _relative_humidity_matrix,
+        zone_names=_zone_names,
+        zone_weights=_zone_weights,
+    )
 
     edh = calculate_edh(
         _temperature_matrix,
         _relative_humidity_matrix,
         _mean_radiant_temperature_matrix,
+        zone_names=_zone_names,
+        zone_weights=_zone_weights,
+        heat_thresholds=_heat_thresholds,
+        cold_thresholds=_cold_thresholds,
+        thermal_comfort=_thermal_comfort,
     )
 
-    basic_oh_stats = calculate_basic_overheating_stats(_temperature_matrix)
+    basic_oh_stats = calculate_basic_overheating_stats(
+        _temperature_matrix,
+        zone_names=_zone_names,
+        zone_weights=_zone_weights,
+        heat_thresholds=_heat_thresholds,
+        cold_thresholds=_cold_thresholds,
+    )
 
     consecutive_hours = calculate_consecutive_hours_above_threshold(
-        np.array(
-            [
-                [
-                    np.sin(i / _n_timesteps * 2 * np.pi) * 30 + 5
-                    for i in range(_n_timesteps)
-                ],
-                [
-                    np.cos(i / _n_timesteps * 2 * np.pi) * 30 + 5
-                    for i in range(_n_timesteps)
-                ],
-                [
-                    np.cos(2 * i / _n_timesteps * 2 * np.pi) * 30 + 5
-                    for i in range(_n_timesteps)
-                ],
-                [
-                    np.sin(2 * i / _n_timesteps * 2 * np.pi) * 30 + 5
-                    for i in range(_n_timesteps)
-                ],
-            ],
-        ),
+        _temperature_matrix,
+        zone_names=_zone_names,
+        heat_thresholds=_heat_thresholds,
+        cold_thresholds=_cold_thresholds,
+    )
+
+    config = OverheatingAnalysisConfig()
+    results = OverheatingAnalysisResults(
+        hi=r,
+        edh=edh,
+        basic_oh=basic_oh_stats,
+        consecutive_e_zone=consecutive_hours,
+        zone_at_risk=pd.DataFrame(),  # placeholder, will be overwritten
+    )
+    zone_at_risk = compute_zone_at_risk(
+        results=results,
+        config=config,
+        zone_weights=_zone_weights,
+        zone_names=_zone_names,
+    )
+    results = OverheatingAnalysisResults(
+        hi=r,
+        edh=edh,
+        basic_oh=basic_oh_stats,
+        consecutive_e_zone=consecutive_hours,
+        zone_at_risk=zone_at_risk,
     )
 
     print("---- Heat Index ----")
@@ -854,3 +1329,6 @@ if __name__ == "__main__":
     print("--- Consecutive Hours ----")
     print("\n")
     print(consecutive_hours)
+    print("--- Zone at Risk ----")
+    print("\n")
+    print(zone_at_risk)
