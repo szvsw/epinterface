@@ -13,6 +13,7 @@ This is a repository for dynamically generating energy models within Python, rel
 ## Configuration
 
 The EnergyPlus version used when creating IDF objects can be configured via the `EPINTERFACE_ENERGYPLUS_VERSION` environment variable. It defaults to `22.2.0`. Both dotted (`22.2.0`) and hyphenated (`22-2-0`) version formats are accepted.
+
 - **Documentation** <https://szvsw.github.io/epinterface/>
 
 ## Getting started with your project

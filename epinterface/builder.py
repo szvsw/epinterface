@@ -11,7 +11,6 @@ from archetypal.schedule import ScheduleTypeLimits as AScheduleTypeLimits
 
 from epinterface.ddy_injector_bayes import DDYSizingSpec
 from epinterface.geometry import ShoeboxGeometry
-from epinterface.settings import energyplus_settings
 from epinterface.interface import (
     Construction,
     DefaultMaterialLibrary,
@@ -27,6 +26,7 @@ from epinterface.interface import (
     ZoneInfiltrationDesignFlowRate,
     ZoneList,
 )
+from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
 logger = logging.getLogger(__name__)

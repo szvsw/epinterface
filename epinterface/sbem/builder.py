@@ -29,7 +29,6 @@ from epinterface.analysis.overheating import (
 )
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
-from epinterface.settings import energyplus_settings
 from epinterface.ddy_injector_bayes import DDYSizingSpec
 from epinterface.geometry import ShoeboxGeometry, get_zone_floor_area
 from epinterface.interface import (
@@ -47,6 +46,7 @@ from epinterface.sbem.components.envelope import (
 from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
+from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
 logger = logging.getLogger(__name__)
