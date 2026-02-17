@@ -22,9 +22,9 @@ DESIRED_METERS_22 = {
 DESIRED_METERS_23 = {
     "InteriorEquipment:Electricity": "Equipment",
     "InteriorLights:Electricity": "Lighting",
-    "Heating:DistrictHeating": "Heating",
+    "Heating:DistrictHeatingWater": "Heating",
     "Cooling:DistrictCooling": "Cooling",
-    "WaterSystems:DistrictHeating": "Domestic Hot Water",
+    "WaterSystems:DistrictHeatingWater": "Domestic Hot Water",
 }
 DESIRED_METERS_24 = {
     "InteriorEquipment:Electricity": "Equipment",
@@ -58,7 +58,7 @@ DESIRED_METERS_FOR_VERSION = {
 
 TABULAR_DATA_COLUMNS_FOR_VERSION = {
     22: ["Electricity", "District Cooling", "District Heating"],
-    23: ["Electricity", "District Cooling", "District Heating"],
+    23: ["Electricity", "District Cooling", "District Heating Water"],
     24: ["Electricity", "District Cooling", "District Heating Water"],
     25: ["Electricity", "District Cooling", "District Heating Water"],
 }
