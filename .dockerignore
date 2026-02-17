@@ -1,0 +1,6 @@
+dist/
+.venv/
+.poetry/
+prisma_minimal/
+site/
+**/__pycache__/
