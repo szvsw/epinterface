@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from logging import getLogger
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 import numpy as np
 from archetypal.idfclass import IDF
@@ -16,6 +16,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from epinterface.settings import energyplus_settings
 
 try:
     from typing import Self
@@ -633,6 +635,14 @@ class HVACTemplateZoneIdealLoadsAirSystem(BaseModel):
 DesignLevelCalculationMethodType = Literal["Watts/Area", "Watts/Person", "Watts"]
 
 
+def _energyplus_version_gte(major: float) -> bool:
+    """Return True if configured EnergyPlus version is >= major (e.g. 24.0)."""
+    try:
+        return energyplus_settings.archetypal_energyplus_version.major >= major
+    except (ValueError, IndexError):
+        return False
+
+
 # TODO: add water mains?
 class WaterUseEquipment(BaseObj, extra="ignore"):
     """WaterUseEquipment object."""
@@ -666,6 +676,13 @@ class ElectricEquipment(BaseObj, extra="ignore"):
     Fraction_Lost: float = 0
     EndUse_Subcategory: str | None = None
 
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        """Dump model to dict; use Watts_per_Floor_Area alias when EnergyPlus >= 24.0."""
+        data = super().model_dump(**kwargs)
+        if _energyplus_version_gte(24.0) and "Watts_per_Zone_Floor_Area" in data:
+            data["Watts_per_Floor_Area"] = data.pop("Watts_per_Zone_Floor_Area")
+        return data
+
 
 class Lights(BaseObj, extra="ignore"):
     """Lights object."""
@@ -683,6 +700,13 @@ class Lights(BaseObj, extra="ignore"):
     Fraction_Visible: float = 0.18
     Fraction_Replaceable: float | None = 1
     EndUse_Subcategory: str | None = None
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        """Dump model to dict; use Watts_per_Floor_Area alias when EnergyPlus >= 24.0."""
+        data = super().model_dump(**kwargs)
+        if _energyplus_version_gte(24.0) and "Watts_per_Zone_Floor_Area" in data:
+            data["Watts_per_Floor_Area"] = data.pop("Watts_per_Zone_Floor_Area")
+        return data
 
 
 InfDesignFlowRateCalculationMethodType = Literal[
@@ -968,7 +992,7 @@ def add_default_sim_controls(idf: IDF) -> IDF:
     sim_control = SimulationControl(
         Do_Zone_Sizing_Calculation="Yes",
         Do_System_Sizing_Calculation="Yes",
-        Do_Plant_Sizing_Calculation="Yes",
+        Do_Plant_Sizing_Calculation="No",
         Run_Simulation_for_Sizing_Periods="Yes",
         Run_Simulation_for_Weather_File_Run_Periods="Yes",
         Do_HVAC_Sizing_Simulation_for_Sizing_Periods="Yes",

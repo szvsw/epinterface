@@ -2126,12 +2126,14 @@ class FlatModel(BaseModel):
     def simulate(
         self,
         overheating_config: OverheatingAnalysisConfig | None = None,
+        eplus_parent_dir: Path | None = None,
     ):
         """Simulate the model and return the IDF, result, and error."""
         model, cb = self.to_model()
 
         r = model.run(
             post_geometry_callback=cb,
+            eplus_parent_dir=eplus_parent_dir,
             overheating_config=overheating_config,
         )
 
@@ -2215,3 +2217,5 @@ if __name__ == "__main__":
     )
 
     r = flat_model.simulate()
+
+    print(r.energy_and_peak.groupby(level=["Measurement", "Aggregation"]).sum())

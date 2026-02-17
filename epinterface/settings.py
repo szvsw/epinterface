@@ -1,6 +1,13 @@
 """Configuration settings for epinterface, loaded from environment variables."""
 
-from pydantic import field_validator
+from typing import Any
+
+from archetypal import EnergyPlusVersion
+from archetypal.eplus_interface.exceptions import (
+    EnergyPlusVersionError,
+    InvalidEnergyPlusVersion,
+)
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +25,14 @@ def _normalize_energyplus_version(value: str) -> str:
     return ".".join(parts[:3])  # Take at most major.minor.patch
 
 
+def _get_latest_energyplus_version() -> str | None:
+    """Get the latest EnergyPlus version."""
+    try:
+        return EnergyPlusVersion.latest().dash
+    except EnergyPlusVersionError:
+        return None
+
+
 class EnergyPlusSettings(BaseSettings):
     """Settings for EnergyPlus version and configuration.
 
@@ -32,14 +47,26 @@ class EnergyPlusSettings(BaseSettings):
         extra="ignore",
     )
 
-    energyplus_version: str = "22.2.0"
+    energyplus_version: str | None = Field(
+        default_factory=_get_latest_energyplus_version
+    )
+
+    @property
+    def archetypal_energyplus_version(self) -> EnergyPlusVersion:
+        """Get the Archetypal EnergyPlus version."""
+        if self.energyplus_version:
+            return EnergyPlusVersion(self.energyplus_version)
+        msg = "No EnergyPlus version specified."
+        raise InvalidEnergyPlusVersion(msg)
 
     @field_validator("energyplus_version", mode="before")
     @classmethod
-    def normalize_version(cls, v: str) -> str:
+    def normalize_version(cls, v: Any) -> str | None:
         """Normalize version string from env (e.g. 22-2-0 -> 22.2.0)."""
+        if v is None:
+            return None
         if not isinstance(v, str) or not v.strip():
-            return "22.2.0"
+            return None
         return _normalize_energyplus_version(v)
 
 
