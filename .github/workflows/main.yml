@@ -30,12 +30,12 @@ jobs:
 
   tests-and-type-check:
     runs-on: ubuntu-latest
-    env:
-      EPINTERFACE_ENERGYPLUS_VERSION: ${{ matrix.energyplus-version }}
+    # env:
+    #   EPINTERFACE_ENERGYPLUS_VERSION: ${{ matrix.energyplus-version }}
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-        energyplus-version: [22.2.0, 24.2.0, 25.2.0] # later, add 9.4.0
+        energyplus-version: [22.2.0, 23.2.0, 24.2.0, 25.2.0] # later, add 9.4.0
         energyplus-platform: [Linux-Ubuntu22.04]
         include:
           - runs-on: ubuntu-latest
@@ -43,6 +43,9 @@ jobs:
           - energyplus-version: 22.2.0
             energyplus-sha: c249759bad
             energyplus-install: 22-2-0
+          - energyplus-version: 23.2.0
+            energyplus-sha: 7636e6b3e9
+            energyplus-install: 23-2-0
           - energyplus-version: 24.2.0
             energyplus-sha: e7ecb2d53b
             energyplus-install: 24-2-0
