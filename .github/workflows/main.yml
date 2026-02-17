@@ -36,21 +36,19 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
         energyplus-version: [22.2.0, 24.2.0, 25.2.0] # later, add 9.4.0
+        energyplus-platform: [Linux-Ubuntu22.04]
         include:
           - runs-on: ubuntu-latest
             compiler: gcc
           - energyplus-version: 22.2.0
             energyplus-sha: c249759bad
             energyplus-install: 22-2-0
-            energyplus-tag: v22.2.0
           - energyplus-version: 24.2.0
             energyplus-sha: e7ecb2d53b
             energyplus-install: 24-2-0
-            energyplus-tag: v24.2.0
           - energyplus-version: 25.2.0
             energyplus-sha: cf7368216c
             energyplus-install: 25-2-0
-            energyplus-tag: v25.2.0
       fail-fast: false
     defaults:
       run:
@@ -71,12 +69,12 @@ jobs:
         run: uv run pyright
 
       - name: Install EnergyPlus
-        uses: Elementa-Engineering/install-energyplus@v1
+        uses: Elementa-Engineering/install-energyplus@v1.2.0
         with:
           energyplus-version: ${{ matrix.energyplus-version }}
           energyplus-sha: ${{ matrix.energyplus-sha }}
           energyplus-install: ${{ matrix.energyplus-install }}
-          energyplus-tag: ${{ matrix.energyplus-tag }}
+          energyplus-platform: ${{ matrix.energyplus-platform }}
 
       - name: Run tests
         run: uv run pytest tests --cov --cov-config=pyproject.toml --cov-report=xml
