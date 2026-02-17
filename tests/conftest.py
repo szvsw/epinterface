@@ -10,7 +10,6 @@ from archetypal.idfclass import IDF
 
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.geometry import ShoeboxGeometry
-from epinterface.settings import energyplus_settings
 from epinterface.sbem.prisma.client import PrismaSettings
 from epinterface.sbem.prisma.seed_fns import (
     create_dhw_systems,
@@ -21,6 +20,7 @@ from epinterface.sbem.prisma.seed_fns import (
     create_space_use_children,
     create_zone,
 )
+from epinterface.settings import energyplus_settings
 
 
 @pytest.fixture(scope="package")

@@ -25,7 +25,6 @@ from epinterface.climate_studio.interface import (
 )
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
-from epinterface.settings import energyplus_settings
 from epinterface.geometry import ShoeboxGeometry
 from epinterface.interface import (
     SiteGroundTemperature,
@@ -33,6 +32,7 @@ from epinterface.interface import (
     add_default_schedules,
     add_default_sim_controls,
 )
+from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
 
