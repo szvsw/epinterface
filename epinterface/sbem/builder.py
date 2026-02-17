@@ -29,6 +29,7 @@ from epinterface.analysis.overheating import (
 )
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
+from epinterface.settings import energyplus_settings
 from epinterface.ddy_injector_bayes import DDYSizingSpec
 from epinterface.geometry import ShoeboxGeometry, get_zone_floor_area
 from epinterface.interface import (
@@ -859,7 +860,7 @@ class Model(BaseWeather, validate_assignment=True):
         )
         idf = IDF(
             target_base_filepath.as_posix(),
-            as_version="22.2",  # pyright: ignore [reportArgumentType]
+            as_version=energyplus_settings.energyplus_version,  # pyright: ignore [reportArgumentType]
             prep_outputs=output_meters,  # pyright: ignore [reportArgumentType]
             epw=epw_path.as_posix(),
             output_directory=config.output_dir.as_posix(),
@@ -876,8 +877,8 @@ class Model(BaseWeather, validate_assignment=True):
 
         ddy = IDF(
             ddy_path.as_posix(),
-            as_version="22.2",
-            file_version="22.2",
+            as_version=energyplus_settings.energyplus_version,
+            file_version=energyplus_settings.energyplus_version,
             prep_outputs=False,
         )
         ddy_spec = DDYSizingSpec(

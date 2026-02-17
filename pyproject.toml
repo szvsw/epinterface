@@ -17,6 +17,7 @@ dependencies = [
     "pandas>=2.2,<2.3",
     "prisma~=0.15.0",
     "pydantic>=2.9,<3",
+    "pydantic-settings>=2.0,<3",
     "pythermalcomfort>=3.8.0",
 ]
 

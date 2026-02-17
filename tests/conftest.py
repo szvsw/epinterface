@@ -10,6 +10,7 @@ from archetypal.idfclass import IDF
 
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.geometry import ShoeboxGeometry
+from epinterface.settings import energyplus_settings
 from epinterface.sbem.prisma.client import PrismaSettings
 from epinterface.sbem.prisma.seed_fns import (
     create_dhw_systems,
@@ -54,7 +55,7 @@ def idf() -> Generator[IDF, None, None]:
         shutil.copy(base_filepath, target_base_filepath)
         idf = IDF(
             target_base_filepath.as_posix(),
-            as_version=None,  # pyright: ignore [reportArgumentType]
+            as_version=energyplus_settings.energyplus_version,  # pyright: ignore [reportArgumentType]
             prep_outputs=True,
             output_directory=temp_dir,
         )

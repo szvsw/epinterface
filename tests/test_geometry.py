@@ -9,6 +9,7 @@ from shapely import Polygon
 
 from epinterface.data import DefaultEPWPath, DefaultMinimalIDFPath
 from epinterface.geometry import ShoeboxGeometry, match_idf_to_building_and_neighbors
+from epinterface.settings import energyplus_settings
 
 
 @pytest.fixture(scope="function")
@@ -17,7 +18,7 @@ def minimal_idf():
     idf = IDF(
         DefaultMinimalIDFPath.as_posix(),
         epw=DefaultEPWPath.as_posix(),
-        as_version="22.2.0",
+        as_version=energyplus_settings.energyplus_version,
     )
     yield idf
 
