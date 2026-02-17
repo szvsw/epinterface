@@ -79,6 +79,7 @@ class SimpleResidentialModel(BaseWeather, extra="allow"):
             output_directory=output_dir.as_posix(),
             prep_outputs=True,
             as_version=energyplus_settings.energyplus_version,
+            file_version=energyplus_settings.energyplus_version,
         )  # pyright: ignore [reportArgumentType]
         ddy = IDF(
             (ddy_path.as_posix()),

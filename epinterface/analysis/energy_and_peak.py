@@ -12,13 +12,56 @@ GJ_per_J = 1e-9
 ANNUAL_SUMMARY_REPORT = "AnnualBuildingUtilityPerformanceSummary"
 END_USES_TABLE = "End Uses"
 
-DESIRED_METERS = (
-    "InteriorEquipment:Electricity",
-    "InteriorLights:Electricity",
-    "Heating:DistrictHeating",
-    "Cooling:DistrictCooling",
-    "WaterSystems:DistrictHeating",
-)
+DESIRED_METERS_22 = {
+    "InteriorEquipment:Electricity": "Equipment",
+    "InteriorLights:Electricity": "Lighting",
+    "Heating:DistrictHeating": "Heating",
+    "Cooling:DistrictCooling": "Cooling",
+    "WaterSystems:DistrictHeating": "Domestic Hot Water",
+}
+DESIRED_METERS_23 = {
+    "InteriorEquipment:Electricity": "Equipment",
+    "InteriorLights:Electricity": "Lighting",
+    "Heating:DistrictHeatingWater": "Heating",
+    "Cooling:DistrictCooling": "Cooling",
+    "WaterSystems:DistrictHeatingWater": "Domestic Hot Water",
+}
+DESIRED_METERS_24 = {
+    "InteriorEquipment:Electricity": "Equipment",
+    "InteriorLights:Electricity": "Lighting",
+    "Heating:DistrictHeatingWater": "Heating",
+    "Cooling:DistrictCooling": "Cooling",
+    "WaterSystems:DistrictHeatingWater": "Domestic Hot Water",
+}
+
+DESIRED_METERS_25 = {
+    "InteriorEquipment:Electricity": "Equipment",
+    "InteriorLights:Electricity": "Lighting",
+    "Heating:DistrictHeatingWater": "Heating",
+    "Cooling:DistrictCooling": "Cooling",
+    "WaterSystems:DistrictHeatingWater": "Domestic Hot Water",
+}
+
+DESIRED_METERS_COLUMN_NAMES_FOR_VERSION = {
+    22: DESIRED_METERS_22,
+    23: DESIRED_METERS_23,
+    24: DESIRED_METERS_24,
+    25: DESIRED_METERS_25,
+}
+
+DESIRED_METERS_FOR_VERSION = {
+    22: tuple(DESIRED_METERS_22.keys()),
+    23: tuple(DESIRED_METERS_23.keys()),
+    24: tuple(DESIRED_METERS_24.keys()),
+    25: tuple(DESIRED_METERS_25.keys()),
+}
+
+TABULAR_DATA_COLUMNS_FOR_VERSION = {
+    22: ["Electricity", "District Cooling", "District Heating"],
+    23: ["Electricity", "District Cooling", "District Heating Water"],
+    24: ["Electricity", "District Cooling", "District Heating Water"],
+    25: ["Electricity", "District Cooling", "District Heating Water"],
+}
 
 
 def standard_results_postprocess(
@@ -32,6 +75,7 @@ def standard_results_postprocess(
     cool_fuel: str | None,
     dhw_fuel: str,
     all_fuel_names: list[str],
+    ep_version_major: int,
 ) -> pd.Series:
     """Postprocess the sql file to get the standard results.
 
@@ -49,26 +93,24 @@ def standard_results_postprocess(
         cool_fuel: Fuel type name for cooling, or None if no cooling.
         dhw_fuel: Fuel type name for domestic hot water.
         all_fuel_names: Sorted list of all fuel type names (union of HVAC and DHW fuel types) for utilities columns.
+        ep_version_major: EnergyPlus version major number.
 
     Returns:
         series: The postprocessed results (Energy and Peak, with Aggregation and Meter index levels).
     """
-    raw_hourly = sql.timeseries_by_name(DESIRED_METERS, "Hourly")
-    raw_monthly = sql.timeseries_by_name(DESIRED_METERS, "Monthly")
+    desired_meters = DESIRED_METERS_FOR_VERSION[ep_version_major]
+    raw_hourly = sql.timeseries_by_name(desired_meters, "Hourly")
+    raw_monthly = sql.timeseries_by_name(desired_meters, "Monthly")
     raw_df = sql.tabular_data_by_name(ANNUAL_SUMMARY_REPORT, END_USES_TABLE)
 
     raw_df_relevant = (
-        raw_df[
-            [
-                "Electricity",
-                "District Cooling",
-                "District Heating",
-            ]
-        ].droplevel(-1, axis=1)
+        raw_df[[*TABULAR_DATA_COLUMNS_FOR_VERSION[ep_version_major]]].droplevel(
+            -1, axis=1
+        )
         * kWh_per_GJ
     ) / normalizing_floor_area
     raw_df_others = raw_df.drop(
-        columns=["Electricity", "District Cooling", "District Heating", "Water"]
+        columns=[*TABULAR_DATA_COLUMNS_FOR_VERSION[ep_version_major], "Water"]
     )
     if not np.allclose(raw_df_others.sum().sum(), 0):
         cols = raw_df_others.sum(axis=0)
@@ -93,15 +135,7 @@ def standard_results_postprocess(
             * kWh_per_GJ
             / normalizing_floor_area
         )
-        .rename(
-            columns={
-                "InteriorLights:Electricity": "Lighting",
-                "InteriorEquipment:Electricity": "Equipment",
-                "Heating:DistrictHeating": "Heating",
-                "Cooling:DistrictCooling": "Cooling",
-                "WaterSystems:DistrictHeating": "Domestic Hot Water",
-            }
-        )
+        .rename(columns=DESIRED_METERS_COLUMN_NAMES_FOR_VERSION[ep_version_major])
         .set_index(pd.RangeIndex(1, 13, 1, name="Month"))
     )
     raw_monthly.columns.name = "Meter"
@@ -117,15 +151,7 @@ def standard_results_postprocess(
         * GJ_per_J
         * kWh_per_GJ
         / normalizing_floor_area
-    ).rename(
-        columns={
-            "InteriorLights:Electricity": "Lighting",
-            "InteriorEquipment:Electricity": "Equipment",
-            "Heating:DistrictHeating": "Heating",
-            "Cooling:DistrictCooling": "Cooling",
-            "WaterSystems:DistrictHeating": "Domestic Hot Water",
-        }
-    )
+    ).rename(columns=DESIRED_METERS_COLUMN_NAMES_FOR_VERSION[ep_version_major])
     raw_hourly.columns.name = "Meter"
     raw_hourly_max: pd.Series = raw_hourly.max(axis=0)
     raw_monthly_hourly_max = raw_hourly.resample("MS").max()

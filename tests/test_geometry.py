@@ -19,6 +19,7 @@ def minimal_idf():
         DefaultMinimalIDFPath.as_posix(),
         epw=DefaultEPWPath.as_posix(),
         as_version=energyplus_settings.energyplus_version,
+        file_version=energyplus_settings.energyplus_version,
     )
     yield idf
 
