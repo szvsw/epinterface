@@ -20,6 +20,7 @@ from epinterface.sbem.prisma.seed_fns import (
     create_space_use_children,
     create_zone,
 )
+from epinterface.settings import energyplus_settings
 
 
 @pytest.fixture(scope="package")
@@ -54,7 +55,8 @@ def idf() -> Generator[IDF, None, None]:
         shutil.copy(base_filepath, target_base_filepath)
         idf = IDF(
             target_base_filepath.as_posix(),
-            as_version=None,  # pyright: ignore [reportArgumentType]
+            as_version=energyplus_settings.energyplus_version,  # pyright: ignore [reportArgumentType]
+            file_version=energyplus_settings.energyplus_version,
             prep_outputs=True,
             output_directory=temp_dir,
         )

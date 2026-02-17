@@ -26,6 +26,7 @@ from epinterface.interface import (
     ZoneInfiltrationDesignFlowRate,
     ZoneList,
 )
+from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
 logger = logging.getLogger(__name__)
@@ -77,11 +78,13 @@ class SimpleResidentialModel(BaseWeather, extra="allow"):
             epw=(epw_path.as_posix()),
             output_directory=output_dir.as_posix(),
             prep_outputs=True,
+            as_version=energyplus_settings.energyplus_version,
+            file_version=energyplus_settings.energyplus_version,
         )  # pyright: ignore [reportArgumentType]
         ddy = IDF(
             (ddy_path.as_posix()),
-            as_version="9.2.0",
-            file_version="9.2.0",
+            as_version=energyplus_settings.energyplus_version,
+            file_version=energyplus_settings.energyplus_version,
             prep_outputs=False,
         )
         ddyspec = DDYSizingSpec(match=True)

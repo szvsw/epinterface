@@ -6,6 +6,8 @@ from typing import Literal
 from archetypal.idfclass import IDF
 from pydantic import BaseModel, Field
 
+from epinterface.settings import energyplus_settings
+
 
 class DDYField(Enum):
     """An enumeration of the fields in a DDY file that can be injected into an IDF file."""
@@ -313,11 +315,13 @@ if __name__ == "__main__":
     idf = IDF(
         idf_path.as_posix(),
         epw=epw_path.as_posix(),
+        as_version=energyplus_settings.energyplus_version,
+        file_version=energyplus_settings.energyplus_version,
     )  # pyright: ignore [reportArgumentType]
     ddy = IDF(
         ddy_path.as_posix(),
-        as_version="9.2.0",
-        file_version="9.2.0",
+        as_version=energyplus_settings.energyplus_version,
+        file_version=energyplus_settings.energyplus_version,
         prep_outputs=False,
     )
 

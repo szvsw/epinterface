@@ -18,7 +18,7 @@ from ladybug.epw import EPW
 from numpy.typing import NDArray
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from epinterface.analysis.energy_and_peak import DESIRED_METERS
+from epinterface.analysis.energy_and_peak import DESIRED_METERS_FOR_VERSION
 from epinterface.analysis.energy_and_peak import (
     standard_results_postprocess as energy_and_peak_postprocess,
 )
@@ -46,6 +46,7 @@ from epinterface.sbem.components.envelope import (
 from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
+from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
 logger = logging.getLogger(__name__)
@@ -830,6 +831,8 @@ class Model(BaseWeather, validate_assignment=True):
         target_base_filepath = config.output_dir / "Minimal.idf"
         shutil.copy(base_filepath, target_base_filepath)
         epw_path, ddy_path = self.fetch_weather(config.weather_dir)
+        ep_version = energyplus_settings.archetypal_energyplus_version
+        desired_meters = DESIRED_METERS_FOR_VERSION[ep_version.major]
         output_meters = (
             [
                 {
@@ -837,7 +840,7 @@ class Model(BaseWeather, validate_assignment=True):
                     "Key_Name": meter,
                     "Reporting_Frequency": "Monthly",
                 }
-                for meter in DESIRED_METERS
+                for meter in desired_meters
             ]
             + [
                 {
@@ -845,7 +848,7 @@ class Model(BaseWeather, validate_assignment=True):
                     "Key_Name": meter,
                     "Reporting_Frequency": "Hourly",
                 }
-                for meter in DESIRED_METERS
+                for meter in desired_meters
             ]
             + [
                 {
@@ -859,7 +862,8 @@ class Model(BaseWeather, validate_assignment=True):
         )
         idf = IDF(
             target_base_filepath.as_posix(),
-            as_version="22.2",  # pyright: ignore [reportArgumentType]
+            as_version=ep_version.dot,
+            file_version=ep_version.dot,
             prep_outputs=output_meters,  # pyright: ignore [reportArgumentType]
             epw=epw_path.as_posix(),
             output_directory=config.output_dir.as_posix(),
@@ -868,7 +872,7 @@ class Model(BaseWeather, validate_assignment=True):
         # Remove undesired outputs from the IDF file.
         # TODO: test the perfrmance benefits, if any
         for output in idf.idfobjects["OUTPUT:METER"]:
-            if output.Key_Name not in DESIRED_METERS:
+            if output.Key_Name not in desired_meters:
                 idf.removeidfobject(output)
         for output in idf.idfobjects["OUTPUT:VARIABLE"]:
             if output.Variable_Name not in AVAILABLE_HOURLY_VARIABLES:
@@ -876,8 +880,8 @@ class Model(BaseWeather, validate_assignment=True):
 
         ddy = IDF(
             ddy_path.as_posix(),
-            as_version="22.2",
-            file_version="22.2",
+            as_version=energyplus_settings.energyplus_version,
+            file_version=energyplus_settings.energyplus_version,
             prep_outputs=False,
         )
         ddy_spec = DDYSizingSpec(
@@ -1067,7 +1071,9 @@ class Model(BaseWeather, validate_assignment=True):
         err_text = "\n".join([f.read_text() for f in err_files])
         return err_text
 
-    def standard_results_postprocess(self, sql: Sql) -> pd.Series:
+    def standard_results_postprocess(
+        self, sql: Sql, ep_version_major: int
+    ) -> pd.Series:
         """Postprocess the sql file to get the standard results.
 
         This will return a series with two levels:
@@ -1076,6 +1082,7 @@ class Model(BaseWeather, validate_assignment=True):
 
         Args:
             sql (Sql): The sql file to postprocess.
+            ep_version_major (int): The major version of EnergyPlus.
 
         Returns:
             series (pd.Series): The postprocessed results.
@@ -1103,6 +1110,7 @@ class Model(BaseWeather, validate_assignment=True):
             cool_fuel=cool_fuel,
             dhw_fuel=dhw_fuel,
             all_fuel_names=all_fuel_names,
+            ep_version_major=ep_version_major,
         )
 
     def run(
@@ -1143,7 +1151,12 @@ class Model(BaseWeather, validate_assignment=True):
                 config,
                 post_geometry_callback=post_geometry_callback,
             )
-            results = self.standard_results_postprocess(sql)
+            if not idf.as_version:
+                msg = f"EnergyPlus version not found in IDF file: {idf.idfobjects['VERSION']}"
+                raise ValueError(msg)
+            results = self.standard_results_postprocess(
+                sql, ep_version_major=idf.as_version.major
+            )
             zone_weights, zone_names = self.get_zone_weights_and_names(idf)
 
             overheating_results = (

@@ -32,6 +32,7 @@ from epinterface.interface import (
     add_default_schedules,
     add_default_sim_controls,
 )
+from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
 
@@ -164,15 +165,15 @@ class Model(BaseWeather, validate_assignment=True):
         epw_path, ddy_path = self.fetch_weather(config.weather_dir)
         idf = IDF(
             target_base_filepath.as_posix(),
-            as_version=None,  # pyright: ignore [reportArgumentType]
+            as_version=energyplus_settings.energyplus_version,  # pyright: ignore [reportArgumentType]
             prep_outputs=True,
             epw=epw_path.as_posix(),
             output_directory=config.output_dir.as_posix(),
         )
         ddy = IDF(
             ddy_path.as_posix(),
-            as_version="9.2.0",
-            file_version="9.2.0",
+            as_version=energyplus_settings.energyplus_version,
+            file_version=energyplus_settings.energyplus_version,
             prep_outputs=False,
         )
         ddy_spec = DDYSizingSpec(
