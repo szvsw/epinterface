@@ -1,0 +1,44 @@
+---
+description: How to add packages with uv and when to use optional-dependencies vs dependency-groups
+globs: pyproject.toml
+alwaysApply: false
+---
+
+# Adding Dependencies with uv
+
+Use `uv add` to add packages. Where they go depends on who needs them.
+
+## `uv add` usage
+
+- **Core runtime dependency** (always required by the library):
+  ```bash
+  uv add <package>
+  ```
+  Adds to `[project] dependencies` in `pyproject.toml`.
+
+- **Optional extra** (for downstream installers):
+  ```bash
+  uv add --optional <extra-name> <package>
+  ```
+  Adds to `[project.optional-dependencies]` under the given extra (e.g. `uv add --optional plot pandas-plot`).
+
+- **Local-only group** (dev/docs/tooling, not published as installable extras):
+  ```bash
+  uv add --group <group-name> <package>
+  ```
+  Adds to `[dependency-groups]` (e.g. `uv add --group dev pytest`).
+
+## When to use which
+
+| Place | Who gets it | Use for |
+|-------|-------------|--------|
+| **`project.dependencies`** | Everyone who installs `epinterface` | Required runtime deps only. |
+| **`project.optional-dependencies`** | Only people who install e.g. `uv add epinterface[extra-name]` or `pip install epinterface[extra-name]` | Optional features other projects may want when using epinterface as a library. |
+| **`dependency-groups`** | Only this repo (local dev, CI, docs) | Testing, linting, docs, pre-commit, etc. Not exposed as pip/uv extras. |
+
+**Rule of thumb:** If another repo would ever do `pip install epinterface[something]` to get optional functionality, put that in **optional-dependencies**. If it’s only for developing or building this repo, put it in **dependency-groups**.
+
+## Examples (this project)
+
+- **optional-dependencies:** e.g. a `viz` extra for plotting only used by some downstream users → `[project.optional-dependencies] viz = ["matplotlib", ...]`.
+- **dependency-groups:** `dev` (pytest, pyright, pre-commit), `docs` (mkdocs, mkdocstrings) — local tooling only, not installable as `epinterface[dev]`.
