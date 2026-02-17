@@ -56,6 +56,7 @@ def idf() -> Generator[IDF, None, None]:
         idf = IDF(
             target_base_filepath.as_posix(),
             as_version=energyplus_settings.energyplus_version,  # pyright: ignore [reportArgumentType]
+            file_version=energyplus_settings.energyplus_version,
             prep_outputs=True,
             output_directory=temp_dir,
         )

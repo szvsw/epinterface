@@ -316,6 +316,7 @@ if __name__ == "__main__":
         idf_path.as_posix(),
         epw=epw_path.as_posix(),
         as_version=energyplus_settings.energyplus_version,
+        file_version=energyplus_settings.energyplus_version,
     )  # pyright: ignore [reportArgumentType]
     ddy = IDF(
         ddy_path.as_posix(),
