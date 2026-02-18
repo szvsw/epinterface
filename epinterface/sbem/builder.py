@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import numpy as np
 import pandas as pd
+import yaml
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
 from ladybug.epw import EPW
@@ -1300,8 +1301,6 @@ class ModelRunResults:
 
 
 if __name__ == "__main__":
-    import yaml
-
     with tempfile.TemporaryDirectory() as temp_dir:
         # database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
         # component_map_path = Path(
