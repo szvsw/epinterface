@@ -5,6 +5,7 @@ import pytest
 from shapely import Polygon
 
 from epinterface.geometry import (
+    compute_shading_mask,
     prepare_neighbor_shading_for_idf,
     shading_fence_closed_ring,
 )
@@ -79,3 +80,72 @@ def test_prepare_neighbor_shading_for_idf_with_neighbors():
     for poly in mask_polys:
         assert poly.is_valid
         assert not poly.is_empty
+
+
+def test_shading_mask_from_real_geometry_matches_shading_mask_from_fake_ring():
+    """Shading mask from real neighbor geometry equals shading mask from the fake ring.
+
+    Manually construct a main building with neighbors scattered around it. Compute the
+    shading mask from these real polygons. Then build the fake ring (mask_polys) from
+    that shading mask and compute the shading mask again from the fake ring. The two
+    masks should match, since the fake ring is designed to reproduce the same elevation
+    angles when rays are cast from the building centroid.
+    """
+    azimuthal_angle = 2 * np.pi / 48
+    fence_radius = 100.0
+
+    # Main building: 10x10 square centered at (5, 5) - centroid at (5, 5)
+    building = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+    # Neighbors: rectangles to the east, north, and northwest with different heights.
+    # Building centroid is (5, 5). Rays will intersect these at various distances.
+    neighbor_east = Polygon([(15, 2), (25, 2), (25, 8), (15, 8)])  # east, height 12m
+    neighbor_north = Polygon([(2, 15), (8, 15), (8, 22), (2, 22)])  # north, height 9m
+    neighbor_nw = Polygon([
+        (-5, 8),
+        (-2, 8),
+        (-2, 12),
+        (-5, 12),
+    ])  # northwest, height 6m
+
+    neighbors = [neighbor_east, neighbor_north, neighbor_nw]
+    neighbor_heights = [12.0, 9.0, 6.0]
+
+    # Shading mask from real geometry
+    mask_from_real = compute_shading_mask(
+        building=building,
+        neighbors=neighbors,
+        neighbor_heights=neighbor_heights,
+        azimuthal_angle=azimuthal_angle,
+    )
+
+    # Build the fake ring from this mask
+    mask_polys, _neighbor_floors = prepare_neighbor_shading_for_idf(
+        building=building,
+        neighbors=neighbors,
+        neighbor_heights=neighbor_heights,
+        azimuthal_angle=azimuthal_angle,
+        fence_radius=fence_radius,
+        f2f_height=3.0,
+    )
+
+    # Heights of the fake ring fences: h = d * tan(elevation) for each azimuth.
+    # We need these exact heights (not the floor-discretized ones) for an exact match.
+    _, _, _, fence_heights, _ = shading_fence_closed_ring(
+        elevations=mask_from_real, d=fence_radius
+    )
+
+    # Shading mask from the fake ring (using exact fence heights)
+    mask_from_fake_ring = compute_shading_mask(
+        building=building,
+        neighbors=mask_polys,
+        neighbor_heights=fence_heights.tolist(),
+        azimuthal_angle=azimuthal_angle,
+    )
+
+    np.testing.assert_allclose(
+        mask_from_real,
+        mask_from_fake_ring,
+        atol=1e-10,
+        err_msg="Shading mask from real geometry should match shading mask from fake ring",
+    )
