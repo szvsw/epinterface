@@ -7,6 +7,7 @@ import numpy as np
 from archetypal.idfclass import IDF
 from geomeppy.geom.polygons import Polygon3D
 from geomeppy.geom.vectors import Vector2D
+from numpy.typing import ArrayLike
 from pydantic import BaseModel, Field
 from shapely import LineString, Polygon, from_wkt
 from shapely.affinity import translate
@@ -190,6 +191,125 @@ def compute_shading_mask(
 
         shading_mask[ray_angle_idx] = max_elevation_angle
     return shading_mask
+
+
+def shading_fence_closed_ring(
+    elevations: ArrayLike,
+    d: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    """Construct N vertical 'shading fence' rectangles whose bases are tangent segments forming a closed regular polygon around a circle of radius d.
+
+    Inputs:
+      elevations: (N,) elevation angles theta_k [radians]
+      d: radius to tangency points (base midpoints)
+
+    Outputs:
+      azimuths: (N,) inferred azimuths alpha_k = 2πk/N
+      p0:       (N, 2) base endpoint A (x,y)
+      p1:       (N, 2) base endpoint B (x,y)
+      h:        (N,) heights h_k = d * tan(theta_k)
+      w:        scalar side length / segment width = 2 d tan(π/N)
+
+    Notes:
+      - With this construction, the segments intersect/meet: p1[k] == p0[k+1] (cyclic),
+        up to floating point tolerance.
+      - N must be >= 3 for a closed polygon.
+    """
+    theta = np.asarray(elevations, dtype=np.float64)
+    if theta.ndim != 1:
+        msg = f"elevations must be 1D, got shape {theta.shape}"
+        raise ValueError(msg)
+
+    N = theta.shape[0]
+    if N < 3:
+        msg = "Need at least 3 elevations (N >= 3) to form a closed ring."
+        raise ValueError(msg)
+
+    # Inferred equally spaced azimuths
+    k = np.arange(N, dtype=np.float64)
+    azimuths = 2.0 * np.pi * k / N
+
+    ca, sa = np.cos(azimuths), np.sin(azimuths)
+
+    # Tangency points (base midpoints) on circle radius d
+    px = d * ca
+    py = d * sa
+
+    # Unit tangent direction (perpendicular to radius)
+    tx = -sa
+    ty = ca
+
+    # Choose width so adjacent tangent segments meet (circumscribed regular N-gon)
+    half_w = d * np.tan(np.pi / N)
+    w = 2.0 * half_w
+
+    # Endpoints in xy: p ± half_w * t
+    p0 = np.stack([px - half_w * tx, py - half_w * ty], axis=-1)
+    p1 = np.stack([px + half_w * tx, py + half_w * ty], axis=-1)
+
+    # Heights from elevation angles
+    h = d * np.tan(theta)
+
+    return azimuths, p0, p1, h, w
+
+
+def prepare_neighbor_shading_for_idf(
+    building: Polygon | str,
+    neighbors: Sequence[Polygon | str | None],
+    neighbor_heights: Sequence[float | int | None],
+    *,
+    azimuthal_angle: float = 2 * np.pi / 48,
+    fence_radius: float = 100,
+    outward_offset: float = 2,
+    f2f_height: float,
+) -> tuple[list[Polygon], list[int]]:
+    """Prepare neighbor polygons and floor counts for match_idf_to_building_and_neighbors.
+
+    Computes a shading mask from the building and neighbors, converts it to shading fence
+    quadrilaterals, and returns polygons plus floor counts suitable for IDF shading blocks.
+
+    Args:
+        building: The building polygon (or WKT string).
+        neighbors: Neighbor polygons (or WKT strings).
+        neighbor_heights: Heights of each neighbor [m].
+        azimuthal_angle: Angular spacing for shading rays (default 2π/48).
+        fence_radius: Radius for shading fence tangency points.
+        outward_offset: Distance to extend fence quadrilaterals outward.
+        f2f_height: Floor-to-floor height for converting heights to floor counts.
+
+    Returns:
+        mask_polys: List of Shapely Polygons (quadrilaterals) for each shading fence.
+        neighbor_floors: List of floor counts (int) for each fence.
+    """
+    shading_mask = compute_shading_mask(
+        building, neighbors, neighbor_heights, azimuthal_angle
+    )
+    az, p0, p1, h, _w = shading_fence_closed_ring(
+        elevations=shading_mask, d=fence_radius
+    )
+
+    building_geom = building if isinstance(building, Polygon) else from_wkt(building)
+    centroid = building_geom.centroid
+    cx, cy = centroid.x, centroid.y
+
+    angles = 2 * np.pi * np.arange(len(az)) / len(az)
+    outward = np.stack([np.cos(angles), np.sin(angles)], axis=-1)
+    p2 = p1 + outward_offset * outward
+    p3 = p0 + outward_offset * outward
+
+    mask_polys = [
+        Polygon([
+            (p0[i, 0] + cx, p0[i, 1] + cy),
+            (p1[i, 0] + cx, p1[i, 1] + cy),
+            (p2[i, 0] + cx, p2[i, 1] + cy),
+            (p3[i, 0] + cx, p3[i, 1] + cy),
+            (p0[i, 0] + cx, p0[i, 1] + cy),
+        ])
+        for i in range(len(az))
+    ]
+    neighbor_floors = [int(h[i] // f2f_height) for i in range(len(h))]
+
+    return mask_polys, neighbor_floors
 
 
 ZoningType = Literal["core/perim", "by_storey"]
