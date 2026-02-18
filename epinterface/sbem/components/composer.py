@@ -1,5 +1,6 @@
 """A module for automatically fetching and composing SBEM objects."""
 
+import logging
 import uuid
 from typing import Any, ClassVar, Literal, TypeVar, get_origin
 
@@ -8,6 +9,8 @@ import yaml
 from pydantic import BaseModel, Field, create_model
 
 from epinterface.sbem.common import NamedObject
+
+logger = logging.getLogger(__name__)
 
 """Tree construction:
 
