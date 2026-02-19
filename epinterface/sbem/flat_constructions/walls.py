@@ -10,6 +10,13 @@ from epinterface.sbem.components.envelope import (
     ConstructionLayerComponent,
 )
 from epinterface.sbem.flat_constructions.layers import (
+    _AIR_GAP_THICKNESS_M,
+    AIR_GAP_WALL,
+    ALL_CONTINUOUS_INSULATION_MATERIALS,
+    ALL_EXTERIOR_CAVITY_TYPES,
+    CONTINUOUS_INSULATION_MATERIAL_MAP,
+    ContinuousInsulationMaterial,
+    ExteriorCavityType,
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
     resolve_material,
@@ -26,18 +33,31 @@ WallStructuralSystem = Literal[
     "woodframe_24oc",
     "deep_woodframe_24oc",
     "engineered_timber",
+    "timber_panel",
     "cmu",
     "double_layer_cmu",
     "precast_concrete",
     "poured_concrete",
     "masonry",
+    "cavity_masonry",
     "rammed_earth",
+    "thick_rammed_earth",
     "reinforced_concrete",
     "sip",
     "icf",
+    "aac",
+    "thick_aac",
+    "hollow_clay_block",
+    "thick_hollow_clay_block",
+    "sandcrete_block",
+    "thick_sandcrete_block",
+    "stabilized_soil_block",
+    "wattle_and_daub",
 ]
 
-WallInteriorFinish = Literal["none", "drywall", "plaster", "wood_panel"]
+WallInteriorFinish = Literal[
+    "none", "drywall", "plaster", "cement_plaster", "wood_panel"
+]
 WallExteriorFinish = Literal[
     "none",
     "brick_veneer",
@@ -203,6 +223,73 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
+    "timber_panel": StructuralTemplate(
+        material_name="SoftwoodGeneral",
+        thickness_m=0.018,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "cavity_masonry": StructuralTemplate(
+        material_name="ConcreteBlockH",
+        thickness_m=0.100,
+        supports_cavity_insulation=True,
+        cavity_depth_m=0.075,
+        cavity_r_correction_factor=0.90,
+    ),
+    "thick_rammed_earth": StructuralTemplate(
+        material_name="RammedEarth",
+        thickness_m=0.500,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "aac": StructuralTemplate(
+        material_name="AACBlock",
+        thickness_m=0.200,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "thick_aac": StructuralTemplate(
+        material_name="AACBlock",
+        thickness_m=0.300,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "hollow_clay_block": StructuralTemplate(
+        material_name="HollowClayBlock",
+        thickness_m=0.250,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "thick_hollow_clay_block": StructuralTemplate(
+        material_name="HollowClayBlock",
+        thickness_m=0.365,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "sandcrete_block": StructuralTemplate(
+        material_name="SandcreteBlock",
+        thickness_m=0.150,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "thick_sandcrete_block": StructuralTemplate(
+        material_name="SandcreteBlock",
+        thickness_m=0.225,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "stabilized_soil_block": StructuralTemplate(
+        material_name="StabilizedSoilBlock",
+        thickness_m=0.150,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "wattle_and_daub": StructuralTemplate(
+        material_name="WattleDaub",
+        thickness_m=0.150,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
 }
 
 INTERIOR_FINISH_TEMPLATES: dict[WallInteriorFinish, FinishTemplate | None] = {
@@ -214,6 +301,10 @@ INTERIOR_FINISH_TEMPLATES: dict[WallInteriorFinish, FinishTemplate | None] = {
     "plaster": FinishTemplate(
         material_name="GypsumPlaster",
         thickness_m=0.013,
+    ),
+    "cement_plaster": FinishTemplate(
+        material_name="CementMortar",
+        thickness_m=0.015,
     ),
     "wood_panel": FinishTemplate(
         material_name="SoftwoodGeneral",
@@ -276,6 +367,14 @@ class SemiFlatWallConstruction(BaseModel):
         ge=0,
         title="Nominal interior continuous insulation R-value [m²K/W]",
     )
+    exterior_insulation_material: ContinuousInsulationMaterial = Field(
+        default="xps",
+        title="Exterior continuous insulation material",
+    )
+    interior_insulation_material: ContinuousInsulationMaterial = Field(
+        default="xps",
+        title="Interior continuous insulation material",
+    )
     interior_finish: WallInteriorFinish = Field(
         default="drywall",
         title="Interior finish selection",
@@ -283,6 +382,10 @@ class SemiFlatWallConstruction(BaseModel):
     exterior_finish: WallExteriorFinish = Field(
         default="none",
         title="Exterior finish selection",
+    )
+    exterior_cavity_type: ExteriorCavityType = Field(
+        default="none",
+        title="Exterior ventilation cavity type per ISO 6946:2017 Section 6.9",
     )
 
     @property
@@ -351,6 +454,17 @@ class SemiFlatWallConstruction(BaseModel):
             features[f"{prefix}ExteriorFinish__{exterior_finish}"] = float(
                 self.exterior_finish == exterior_finish
             )
+        for ins_mat in ALL_CONTINUOUS_INSULATION_MATERIALS:
+            features[f"{prefix}ExteriorInsulationMaterial__{ins_mat}"] = float(
+                self.exterior_insulation_material == ins_mat
+            )
+            features[f"{prefix}InteriorInsulationMaterial__{ins_mat}"] = float(
+                self.interior_insulation_material == ins_mat
+            )
+        for cavity_type in ALL_EXTERIOR_CAVITY_TYPES:
+            features[f"{prefix}ExteriorCavityType__{cavity_type}"] = float(
+                self.exterior_cavity_type == cavity_type
+            )
         return features
 
 
@@ -365,7 +479,11 @@ def build_facade_assembly(
     layer_order = 0
 
     exterior_finish = EXTERIOR_FINISH_TEMPLATES[wall.exterior_finish]
-    if exterior_finish is not None:
+
+    # ISO 6946:2017 Section 6.9 -- well-ventilated cavities: disregard cladding
+    # and air layer R. We omit the finish layer entirely; EnergyPlus applies its
+    # own exterior surface coefficient to the next layer inward.
+    if exterior_finish is not None and wall.exterior_cavity_type != "well_ventilated":
         layers.append(
             ConstructionLayerComponent(
                 ConstructionMaterial=resolve_material(exterior_finish.material_name),
@@ -375,10 +493,26 @@ def build_facade_assembly(
         )
         layer_order += 1
 
+    # ISO 6946:2017 Section 6.9 -- unventilated cavities: add equivalent
+    # still-air thermal resistance (~0.18 m2K/W for 25mm vertical gap).
+    # TODO: use a proper air gap material here
+    if wall.exterior_cavity_type == "unventilated" and exterior_finish is not None:
+        layers.append(
+            ConstructionLayerComponent(
+                ConstructionMaterial=AIR_GAP_WALL,
+                Thickness=_AIR_GAP_THICKNESS_M,
+                LayerOrder=layer_order,
+            )
+        )
+        layer_order += 1
+
     if wall.nominal_exterior_insulation_r > 0:
+        ext_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
+            wall.exterior_insulation_material
+        ]
         layers.append(
             layer_from_nominal_r(
-                material="XPSBoard",
+                material=ext_ins_material,
                 nominal_r_value=wall.nominal_exterior_insulation_r,
                 layer_order=layer_order,
             )
@@ -421,13 +555,18 @@ def build_facade_assembly(
             )
             layer_order += 1
 
-        if wall.effective_nominal_cavity_insulation_r > 0:
+        if (
+            wall.effective_nominal_cavity_insulation_r > 0
+            and template.supports_cavity_insulation
+        ):
             effective_cavity_r = (
                 wall.effective_nominal_cavity_insulation_r
                 * template.cavity_r_correction_factor
             )
             layers.append(
                 layer_from_nominal_r(
+                    # TODO: make this configurable with a CavityInsulationMaterial field
+                    # e.g. blown cellulose, fiberglass, etc.
                     material="FiberglassBatt",
                     nominal_r_value=effective_cavity_r,
                     layer_order=layer_order,
@@ -436,9 +575,12 @@ def build_facade_assembly(
             layer_order += 1
 
     if wall.nominal_interior_insulation_r > 0:
+        int_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
+            wall.interior_insulation_material
+        ]
         layers.append(
             layer_from_nominal_r(
-                material="FiberglassBatt",
+                material=int_ins_material,
                 nominal_r_value=wall.nominal_interior_insulation_r,
                 layer_order=layer_order,
             )

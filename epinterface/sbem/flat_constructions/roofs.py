@@ -10,6 +10,13 @@ from epinterface.sbem.components.envelope import (
     ConstructionLayerComponent,
 )
 from epinterface.sbem.flat_constructions.layers import (
+    _AIR_GAP_THICKNESS_M,
+    AIR_GAP_ROOF,
+    ALL_CONTINUOUS_INSULATION_MATERIALS,
+    ALL_EXTERIOR_CAVITY_TYPES,
+    CONTINUOUS_INSULATION_MATERIAL_MAP,
+    ContinuousInsulationMaterial,
+    ExteriorCavityType,
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
     resolve_material,
@@ -44,6 +51,8 @@ RoofExteriorFinish = Literal[
     "tile_roof",
     "asphalt_shingle",
     "wood_shake",
+    "thatch",
+    "fiber_cement_sheet",
 ]
 
 ALL_ROOF_STRUCTURAL_SYSTEMS = get_args(RoofStructuralSystem)
@@ -194,6 +203,14 @@ EXTERIOR_FINISH_TEMPLATES: dict[RoofExteriorFinish, FinishTemplate | None] = {
         material_name="SoftwoodGeneral",
         thickness_m=0.012,
     ),
+    "thatch": FinishTemplate(
+        material_name="ThatchReed",
+        thickness_m=0.200,
+    ),
+    "fiber_cement_sheet": FinishTemplate(
+        material_name="FiberCementBoard",
+        thickness_m=0.006,
+    ),
 }
 
 
@@ -219,6 +236,14 @@ class SemiFlatRoofConstruction(BaseModel):
         ge=0,
         title="Nominal interior continuous roof insulation R-value [m²K/W]",
     )
+    exterior_insulation_material: ContinuousInsulationMaterial = Field(
+        default="polyiso",
+        title="Exterior continuous roof insulation material",
+    )
+    interior_insulation_material: ContinuousInsulationMaterial = Field(
+        default="polyiso",
+        title="Interior continuous roof insulation material",
+    )
     interior_finish: RoofInteriorFinish = Field(
         default="gypsum_board",
         title="Interior roof finish selection",
@@ -226,6 +251,10 @@ class SemiFlatRoofConstruction(BaseModel):
     exterior_finish: RoofExteriorFinish = Field(
         default="epdm_membrane",
         title="Exterior roof finish selection",
+    )
+    exterior_cavity_type: ExteriorCavityType = Field(
+        default="none",
+        title="Exterior ventilation cavity type per ISO 6946:2017 Section 6.9",
     )
 
     @property
@@ -293,6 +322,17 @@ class SemiFlatRoofConstruction(BaseModel):
             features[f"{prefix}ExteriorFinish__{exterior_finish}"] = float(
                 self.exterior_finish == exterior_finish
             )
+        for ins_mat in ALL_CONTINUOUS_INSULATION_MATERIALS:
+            features[f"{prefix}ExteriorInsulationMaterial__{ins_mat}"] = float(
+                self.exterior_insulation_material == ins_mat
+            )
+            features[f"{prefix}InteriorInsulationMaterial__{ins_mat}"] = float(
+                self.interior_insulation_material == ins_mat
+            )
+        for cavity_type in ALL_EXTERIOR_CAVITY_TYPES:
+            features[f"{prefix}ExteriorCavityType__{cavity_type}"] = float(
+                self.exterior_cavity_type == cavity_type
+            )
         return features
 
 
@@ -307,7 +347,11 @@ def build_roof_assembly(
     layer_order = 0
 
     exterior_finish = EXTERIOR_FINISH_TEMPLATES[roof.exterior_finish]
-    if exterior_finish is not None:
+
+    # ISO 6946:2017 Section 6.9 -- well-ventilated cavities: disregard cladding
+    # and air layer R. Omit the finish layer; EnergyPlus applies its own
+    # exterior surface coefficient to the next layer inward.
+    if exterior_finish is not None and roof.exterior_cavity_type != "well_ventilated":
         layers.append(
             ConstructionLayerComponent(
                 ConstructionMaterial=resolve_material(exterior_finish.material_name),
@@ -317,10 +361,25 @@ def build_roof_assembly(
         )
         layer_order += 1
 
+    # ISO 6946:2017 Section 6.9 -- unventilated cavities: add equivalent
+    # still-air thermal resistance (~0.16 m2K/W for 25mm horizontal gap).
+    if roof.exterior_cavity_type == "unventilated" and exterior_finish is not None:
+        layers.append(
+            ConstructionLayerComponent(
+                ConstructionMaterial=AIR_GAP_ROOF,
+                Thickness=_AIR_GAP_THICKNESS_M,
+                LayerOrder=layer_order,
+            )
+        )
+        layer_order += 1
+
     if roof.nominal_exterior_insulation_r > 0:
+        ext_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
+            roof.exterior_insulation_material
+        ]
         layers.append(
             layer_from_nominal_r(
-                material="PolyisoBoard",
+                material=ext_ins_material,
                 nominal_r_value=roof.nominal_exterior_insulation_r,
                 layer_order=layer_order,
             )
@@ -363,13 +422,18 @@ def build_roof_assembly(
             )
             layer_order += 1
 
-        if roof.effective_nominal_cavity_insulation_r > 0:
+        if (
+            roof.effective_nominal_cavity_insulation_r > 0
+            and template.supports_cavity_insulation
+        ):
             effective_cavity_r = (
                 roof.effective_nominal_cavity_insulation_r
                 * template.cavity_r_correction_factor
             )
             layers.append(
                 layer_from_nominal_r(
+                    # TODO: make this configurable with a CavityInsulationMaterial field
+                    # e.g. blown cellulose, fiberglass, etc.
                     material="FiberglassBatt",
                     nominal_r_value=effective_cavity_r,
                     layer_order=layer_order,
@@ -378,9 +442,12 @@ def build_roof_assembly(
             layer_order += 1
 
     if roof.nominal_interior_insulation_r > 0:
+        int_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
+            roof.interior_insulation_material
+        ]
         layers.append(
             layer_from_nominal_r(
-                material="FiberglassBatt",
+                material=int_ins_material,
                 nominal_r_value=roof.nominal_interior_insulation_r,
                 layer_order=layer_order,
             )

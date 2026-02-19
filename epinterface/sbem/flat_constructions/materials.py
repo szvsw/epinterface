@@ -7,6 +7,8 @@ from epinterface.sbem.components.materials import ConstructionMaterialComponent
 MaterialName = Literal[
     "XPSBoard",
     "PolyisoBoard",
+    "EPSBoard",
+    "MineralWoolBoard",
     "ConcreteMC_Light",
     "ConcreteRC_Dense",
     "GypsumBoard",
@@ -28,6 +30,12 @@ MaterialName = Literal[
     "VinylSiding",
     "AsphaltShingle",
     "NaturalStone",
+    "AACBlock",
+    "SandcreteBlock",
+    "HollowClayBlock",
+    "StabilizedSoilBlock",
+    "WattleDaub",
+    "ThatchReed",
 ]
 
 MATERIAL_NAME_VALUES: tuple[MaterialName, ...] = get_args(MaterialName)
@@ -288,6 +296,83 @@ NATURAL_STONE = _material(
     visible_absorptance=0.55,
 )
 
+EPS_BOARD = _material(
+    name="EPSBoard",
+    conductivity=0.037,
+    density=25,
+    specific_heat=1400,
+    mat_type="Insulation",
+)
+
+MINERAL_WOOL_BOARD = _material(
+    name="MineralWoolBoard",
+    conductivity=0.035,
+    density=140,
+    specific_heat=840,
+    mat_type="Insulation",
+)
+
+AAC_BLOCK = _material(
+    name="AACBlock",
+    conductivity=0.11,
+    density=500,
+    specific_heat=1000,
+    mat_type="Masonry",
+    solar_absorptance=0.65,
+    visible_absorptance=0.65,
+)
+
+SANDCRETE_BLOCK = _material(
+    name="SandcreteBlock",
+    conductivity=0.72,
+    density=1700,
+    specific_heat=840,
+    mat_type="Masonry",
+    solar_absorptance=0.65,
+    visible_absorptance=0.65,
+)
+
+HOLLOW_CLAY_BLOCK = _material(
+    name="HollowClayBlock",
+    conductivity=0.35,
+    density=900,
+    specific_heat=840,
+    mat_type="Masonry",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
+)
+
+STABILIZED_SOIL_BLOCK = _material(
+    name="StabilizedSoilBlock",
+    conductivity=0.65,
+    density=1600,
+    specific_heat=900,
+    mat_type="Masonry",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
+)
+
+WATTLE_DAUB = _material(
+    name="WattleDaub",
+    conductivity=0.07,
+    density=800,
+    specific_heat=1000,
+    mat_type="Bio",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
+)
+
+THATCH_REED = _material(
+    name="ThatchReed",
+    conductivity=0.09,
+    density=150,
+    specific_heat=1000,
+    mat_type="Bio",
+    solar_absorptance=0.75,
+    visible_absorptance=0.75,
+    roughness="Rough",
+)
+
 _ALL_MATERIALS = (
     XPS_BOARD,
     POLYISO_BOARD,
@@ -312,6 +397,14 @@ _ALL_MATERIALS = (
     VINYL_SIDING,
     ASPHALT_SHINGLE,
     NATURAL_STONE,
+    EPS_BOARD,
+    MINERAL_WOOL_BOARD,
+    AAC_BLOCK,
+    SANDCRETE_BLOCK,
+    HOLLOW_CLAY_BLOCK,
+    STABILIZED_SOIL_BLOCK,
+    WATTLE_DAUB,
+    THATCH_REED,
 )
 
 MATERIALS_BY_NAME: dict[MaterialName, ConstructionMaterialComponent] = {

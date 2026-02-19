@@ -10,6 +10,9 @@ from epinterface.sbem.components.envelope import (
     ConstructionLayerComponent,
 )
 from epinterface.sbem.flat_constructions.layers import (
+    ALL_CONTINUOUS_INSULATION_MATERIALS,
+    CONTINUOUS_INSULATION_MATERIAL_MAP,
+    ContinuousInsulationMaterial,
     layer_from_nominal_r,
     resolve_material,
 )
@@ -23,6 +26,7 @@ SlabStructuralSystem = Literal[
     "precast_hollow_core",
     "mass_timber_deck",
     "sip_floor",
+    "compacted_earth_floor",
 ]
 SlabInsulationPlacement = Literal["auto", "under_slab", "above_slab"]
 
@@ -32,6 +36,7 @@ SlabInteriorFinish = Literal[
     "tile",
     "carpet",
     "wood_floor",
+    "cement_screed",
 ]
 SlabExteriorFinish = Literal["none", "gypsum_board", "plaster"]
 
@@ -94,6 +99,11 @@ STRUCTURAL_TEMPLATES: dict[SlabStructuralSystem, StructuralTemplate] = {
         thickness_m=0.18,
         supports_under_insulation=False,
     ),
+    "compacted_earth_floor": StructuralTemplate(
+        material_name="RammedEarth",
+        thickness_m=0.10,
+        supports_under_insulation=False,
+    ),
 }
 
 INTERIOR_FINISH_TEMPLATES: dict[SlabInteriorFinish, FinishTemplate | None] = {
@@ -113,6 +123,10 @@ INTERIOR_FINISH_TEMPLATES: dict[SlabInteriorFinish, FinishTemplate | None] = {
     "wood_floor": FinishTemplate(
         material_name="SoftwoodGeneral",
         thickness_m=0.015,
+    ),
+    "cement_screed": FinishTemplate(
+        material_name="CementMortar",
+        thickness_m=0.02,
     ),
 }
 
@@ -140,6 +154,10 @@ class SemiFlatSlabConstruction(BaseModel):
         default=0.0,
         ge=0,
         title="Nominal slab insulation R-value [m²K/W]",
+    )
+    insulation_material: ContinuousInsulationMaterial = Field(
+        default="xps",
+        title="Slab insulation material",
     )
     insulation_placement: SlabInsulationPlacement = Field(
         default="auto",
@@ -216,6 +234,10 @@ class SemiFlatSlabConstruction(BaseModel):
             features[f"{prefix}ExteriorFinish__{exterior_finish}"] = float(
                 self.exterior_finish == exterior_finish
             )
+        for ins_mat in ALL_CONTINUOUS_INSULATION_MATERIALS:
+            features[f"{prefix}InsulationMaterial__{ins_mat}"] = float(
+                self.insulation_material == ins_mat
+            )
         return features
 
 
@@ -225,6 +247,7 @@ def build_slab_assembly(
     name: str = "GroundSlabAssembly",
 ) -> ConstructionAssemblyComponent:
     """Translate semi-flat slab inputs into a concrete slab assembly."""
+    # TODO: check the order of layers to make sure external vs internal is in correct order
     template = STRUCTURAL_TEMPLATES[slab.structural_system]
     layers: list[ConstructionLayerComponent] = []
     layer_order = 0
@@ -240,13 +263,15 @@ def build_slab_assembly(
         )
         layer_order += 1
 
+    slab_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[slab.insulation_material]
+
     if (
         slab.effective_insulation_placement == "above_slab"
         and slab.effective_nominal_insulation_r > 0
     ):
         layers.append(
             layer_from_nominal_r(
-                material="XPSBoard",
+                material=slab_ins_material,
                 nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )
@@ -268,7 +293,7 @@ def build_slab_assembly(
     ):
         layers.append(
             layer_from_nominal_r(
-                material="XPSBoard",
+                material=slab_ins_material,
                 nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )

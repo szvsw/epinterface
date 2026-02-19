@@ -1,5 +1,7 @@
 """Shared layer and equivalent-material helpers for flat constructions."""
 
+from typing import Literal, get_args
+
 from epinterface.sbem.components.envelope import ConstructionLayerComponent
 from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.flat_constructions.materials import (
@@ -9,6 +11,49 @@ from epinterface.sbem.flat_constructions.materials import (
 )
 
 type MaterialRef = ConstructionMaterialComponent | MaterialName
+
+ContinuousInsulationMaterial = Literal["xps", "polyiso", "eps", "mineral_wool"]
+ALL_CONTINUOUS_INSULATION_MATERIALS = get_args(ContinuousInsulationMaterial)
+
+# TODO: do we really need this map?
+CONTINUOUS_INSULATION_MATERIAL_MAP: dict[ContinuousInsulationMaterial, MaterialName] = {
+    "xps": "XPSBoard",
+    "polyiso": "PolyisoBoard",
+    "eps": "EPSBoard",
+    "mineral_wool": "MineralWoolBoard",
+}
+
+ExteriorCavityType = Literal["none", "unventilated", "well_ventilated"]
+ALL_EXTERIOR_CAVITY_TYPES = get_args(ExteriorCavityType)
+
+# ISO 6946:2017 Table 2 -- thermal resistance of unventilated air layers.
+# Vertical (walls): ~0.18 m2K/W for 25mm gap.
+# Horizontal heat-flow-up (roofs): ~0.16 m2K/W for 25mm gap.
+UNVENTILATED_AIR_R_WALL = 0.18
+UNVENTILATED_AIR_R_ROOF = 0.16
+_AIR_GAP_THICKNESS_M = 0.025
+
+
+# TODO: should this be a NoMass or AirGap Material instead? Also, make sure it is not on the outside!
+def _make_air_gap_material(r_value: float) -> ConstructionMaterialComponent:
+    """Create a virtual material representing an unventilated air gap."""
+    effective_conductivity = _AIR_GAP_THICKNESS_M / r_value
+    return ConstructionMaterialComponent(
+        Name=f"AirGap_R{r_value:.2f}",
+        Conductivity=effective_conductivity,
+        Density=1.2,
+        SpecificHeat=1005,
+        ThermalAbsorptance=0.9,
+        SolarAbsorptance=0.0,
+        VisibleAbsorptance=0.0,
+        TemperatureCoefficientThermalConductivity=0.0,
+        Roughness="Smooth",
+        Type="Other",
+    )
+
+
+AIR_GAP_WALL = _make_air_gap_material(UNVENTILATED_AIR_R_WALL)
+AIR_GAP_ROOF = _make_air_gap_material(UNVENTILATED_AIR_R_ROOF)
 
 
 def resolve_material(material: MaterialRef) -> ConstructionMaterialComponent:

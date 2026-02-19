@@ -3,7 +3,10 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from epinterface.sbem.flat_constructions.materials import MATERIALS_BY_NAME
+from epinterface.sbem.flat_constructions.materials import (
+    FIBERGLASS_BATTS,
+    MATERIALS_BY_NAME,
+)
 from epinterface.sbem.flat_constructions.roofs import (
     STRUCTURAL_TEMPLATES as ROOF_STRUCTURAL_TEMPLATES,
 )
@@ -42,7 +45,7 @@ _CONDUCTIVITY_RANGES = {
     "Insulation": (0.02, 0.08),
     "Concrete": (0.4, 2.5),
     "Timber": (0.08, 0.25),
-    "Masonry": (0.3, 3.5),
+    "Masonry": (0.05, 3.5),
     "Metal": (10.0, 70.0),
     "Boards": (0.04, 0.25),
     "Other": (0.2, 1.5),
@@ -50,13 +53,14 @@ _CONDUCTIVITY_RANGES = {
     "Finishes": (0.04, 1.5),
     "Siding": (0.1, 0.8),
     "Sealing": (0.1, 0.3),
+    "Bio": (0.04, 1.2),
 }
 
 _DENSITY_RANGES = {
-    "Insulation": (8, 100),
+    "Insulation": (8, 200),
     "Concrete": (800, 2600),
     "Timber": (300, 900),
-    "Masonry": (900, 2800),
+    "Masonry": (400, 2800),
     "Metal": (6500, 8500),
     "Boards": (100, 1200),
     "Other": (500, 2600),
@@ -64,6 +68,7 @@ _DENSITY_RANGES = {
     "Finishes": (80, 2600),
     "Siding": (600, 2000),
     "Sealing": (700, 1800),
+    "Bio": (100, 2000),
 }
 
 
@@ -145,11 +150,14 @@ def audit_layups() -> list[AuditIssue]:
     issues: list[AuditIssue] = []
 
     for structural_system, template in WALL_STRUCTURAL_TEMPLATES.items():
+        if template.supports_cavity_insulation and template.cavity_depth_m is not None:
+            max_cavity_r = template.cavity_depth_m / FIBERGLASS_BATTS.Conductivity
+            audit_cavity_r = min(2.0, max_cavity_r * 0.9)
+        else:
+            audit_cavity_r = 0.0
         wall = SemiFlatWallConstruction(
             structural_system=structural_system,
-            nominal_cavity_insulation_r=(
-                2.0 if template.supports_cavity_insulation else 0.0
-            ),
+            nominal_cavity_insulation_r=audit_cavity_r,
             nominal_exterior_insulation_r=1.0,
             nominal_interior_insulation_r=0.2,
             interior_finish="drywall",

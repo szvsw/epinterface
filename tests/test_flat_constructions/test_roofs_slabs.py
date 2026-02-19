@@ -3,6 +3,10 @@
 import pytest
 
 from epinterface.sbem.flat_constructions import build_envelope_assemblies
+from epinterface.sbem.flat_constructions.layers import (
+    ALL_CONTINUOUS_INSULATION_MATERIALS,
+    ALL_EXTERIOR_CAVITY_TYPES,
+)
 from epinterface.sbem.flat_constructions.materials import (
     CERAMIC_TILE,
     CONCRETE_RC_DENSE,
@@ -31,7 +35,10 @@ from epinterface.sbem.flat_constructions.slabs import (
 from epinterface.sbem.flat_constructions.slabs import (
     STRUCTURAL_TEMPLATES as SLAB_STRUCTURAL_TEMPLATES,
 )
-from epinterface.sbem.flat_constructions.walls import SemiFlatWallConstruction
+from epinterface.sbem.flat_constructions.walls import (
+    SemiFlatWallConstruction,
+    build_facade_assembly,
+)
 
 
 def test_build_roof_assembly_from_nominal_r_values() -> None:
@@ -108,6 +115,8 @@ def test_roof_feature_dict_has_fixed_length() -> None:
         + len(ALL_ROOF_STRUCTURAL_SYSTEMS)
         + len(ALL_ROOF_INTERIOR_FINISHES)
         + len(ALL_ROOF_EXTERIOR_FINISHES)
+        + len(ALL_CONTINUOUS_INSULATION_MATERIALS) * 2
+        + len(ALL_EXTERIOR_CAVITY_TYPES)
     )
     assert len(features) == expected_length
     assert features["RoofStructuralSystem__steel_joist"] == 1.0
@@ -238,6 +247,7 @@ def test_slab_feature_dict_has_fixed_length() -> None:
         + len(ALL_SLAB_INSULATION_PLACEMENTS) * 2
         + len(ALL_SLAB_INTERIOR_FINISHES)
         + len(ALL_SLAB_EXTERIOR_FINISHES)
+        + len(ALL_CONTINUOUS_INSULATION_MATERIALS)
     )
     assert len(features) == expected_length
     assert features["SlabStructuralSystem__precast_hollow_core"] == 1.0
@@ -310,3 +320,191 @@ def test_wood_shake_exterior_finish_round_trip() -> None:
     assert outer_layer.ConstructionMaterial.Name == "SoftwoodGeneral"
     assert outer_layer.Thickness == pytest.approx(0.012)
     assert assembly.r_value > 0
+
+
+# --- Phase 4: new roof finishes ---
+
+
+def test_thatch_roof_finish_round_trip() -> None:
+    """Thatch finish should produce a valid roof assembly with ThatchReed."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="light_wood_truss",
+        nominal_cavity_insulation_r=0.0,
+        exterior_finish="thatch",
+        interior_finish="none",
+    )
+    assembly = build_roof_assembly(roof)
+    outer_layer = assembly.sorted_layers[0]
+    assert outer_layer.ConstructionMaterial.Name == "ThatchReed"
+    assert outer_layer.Thickness == pytest.approx(0.200)
+    assert assembly.r_value > 0
+
+
+def test_fiber_cement_sheet_roof_finish_round_trip() -> None:
+    """Fiber cement sheet finish should produce a thin corrugated layer."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="poured_concrete",
+        exterior_finish="fiber_cement_sheet",
+    )
+    assembly = build_roof_assembly(roof)
+    outer_layer = assembly.sorted_layers[0]
+    assert outer_layer.ConstructionMaterial.Name == "FiberCementBoard"
+    assert outer_layer.Thickness == pytest.approx(0.006)
+
+
+# --- Phase 2: roof insulation material selection ---
+
+
+def test_roof_exterior_insulation_material_affects_assembly() -> None:
+    """Switching roof insulation material should change the layer material."""
+    for mat_key, expected_name in [
+        ("polyiso", "PolyisoBoard"),
+        ("eps", "EPSBoard"),
+        ("mineral_wool", "MineralWoolBoard"),
+    ]:
+        roof = SemiFlatRoofConstruction(
+            structural_system="poured_concrete",
+            nominal_exterior_insulation_r=2.0,
+            exterior_insulation_material=mat_key,  # pyright: ignore[reportArgumentType]
+        )
+        assembly = build_roof_assembly(roof)
+        ins_layers = [
+            layer
+            for layer in assembly.sorted_layers
+            if layer.ConstructionMaterial.Name == expected_name
+        ]
+        assert len(ins_layers) == 1
+
+
+# --- Phase 6: roof ventilated cavity ---
+
+
+def test_roof_well_ventilated_cavity_omits_exterior_finish() -> None:
+    """Well-ventilated roof cavity should omit the exterior finish per ISO 6946."""
+    roof_vent = SemiFlatRoofConstruction(
+        structural_system="poured_concrete",
+        exterior_finish="tile_roof",
+        exterior_cavity_type="well_ventilated",
+    )
+    roof_none = SemiFlatRoofConstruction(
+        structural_system="poured_concrete",
+        exterior_finish="tile_roof",
+        exterior_cavity_type="none",
+    )
+    a_vent = build_roof_assembly(roof_vent)
+    a_none = build_roof_assembly(roof_none)
+    names_vent = [layer.ConstructionMaterial.Name for layer in a_vent.sorted_layers]
+    assert "CeramicTile" not in names_vent
+    assert a_vent.r_value < a_none.r_value
+
+
+def test_roof_unventilated_cavity_adds_air_gap() -> None:
+    """Unventilated roof cavity should add an air gap layer."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="poured_concrete",
+        exterior_finish="metal_roof",
+        exterior_cavity_type="unventilated",
+    )
+    assembly = build_roof_assembly(roof)
+    layer_names = [layer.ConstructionMaterial.Name for layer in assembly.sorted_layers]
+    assert any("AirGap" in n for n in layer_names)
+
+
+# --- Phase 5: slab additions ---
+
+
+def test_compacted_earth_floor_round_trip() -> None:
+    """Compacted earth floor should produce a valid assembly with RammedEarth."""
+    slab = SemiFlatSlabConstruction(
+        structural_system="compacted_earth_floor",
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    assembly = build_slab_assembly(slab)
+    struct_layer = assembly.sorted_layers[0]
+    assert struct_layer.ConstructionMaterial.Name == "RammedEarth"
+    assert struct_layer.Thickness == pytest.approx(0.10)
+
+
+def test_cement_screed_slab_finish_round_trip() -> None:
+    """Cement screed interior finish should map to CementMortar."""
+    slab = SemiFlatSlabConstruction(
+        structural_system="slab_on_grade",
+        interior_finish="cement_screed",
+    )
+    assembly = build_slab_assembly(slab)
+    inner_layer = assembly.sorted_layers[0]
+    assert inner_layer.ConstructionMaterial.Name == "CementMortar"
+    assert inner_layer.Thickness == pytest.approx(0.02)
+
+
+def test_slab_insulation_material_affects_assembly() -> None:
+    """Switching slab insulation material should change the insulation layer."""
+    slab_xps = SemiFlatSlabConstruction(
+        structural_system="slab_on_grade",
+        nominal_insulation_r=2.0,
+        insulation_material="xps",
+    )
+    slab_eps = SemiFlatSlabConstruction(
+        structural_system="slab_on_grade",
+        nominal_insulation_r=2.0,
+        insulation_material="eps",
+    )
+    a_xps = build_slab_assembly(slab_xps)
+    a_eps = build_slab_assembly(slab_eps)
+    xps_names = [layer.ConstructionMaterial.Name for layer in a_xps.sorted_layers]
+    eps_names = [layer.ConstructionMaterial.Name for layer in a_eps.sorted_layers]
+    assert "XPSBoard" in xps_names
+    assert "EPSBoard" in eps_names
+
+
+# --- Informal settlement archetype integration tests ---
+
+
+def test_corrugated_iron_shack_archetype() -> None:
+    """A corrugated iron shack should be expressible with existing + new systems."""
+    wall = SemiFlatWallConstruction(
+        structural_system="sheet_metal",
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    roof = SemiFlatRoofConstruction(
+        structural_system="none",
+        exterior_finish="metal_roof",
+        interior_finish="none",
+    )
+    slab = SemiFlatSlabConstruction(
+        structural_system="compacted_earth_floor",
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    wall_a = build_facade_assembly(wall)
+    roof_a = build_roof_assembly(roof)
+    slab_a = build_slab_assembly(slab)
+    assert wall_a.r_value > 0
+    assert roof_a.r_value > 0
+    assert slab_a.r_value > 0
+
+
+def test_mud_and_pole_with_cgi_roof_archetype() -> None:
+    """A mud-and-pole wall + corrugated iron roof should be expressible."""
+    wall = SemiFlatWallConstruction(
+        structural_system="wattle_and_daub",
+        interior_finish="cement_plaster",
+        exterior_finish="none",
+    )
+    roof = SemiFlatRoofConstruction(
+        structural_system="light_wood_truss",
+        exterior_finish="metal_roof",
+        interior_finish="none",
+    )
+    slab = SemiFlatSlabConstruction(
+        structural_system="compacted_earth_floor",
+        interior_finish="cement_screed",
+    )
+    wall_a = build_facade_assembly(wall)
+    roof_a = build_roof_assembly(roof)
+    slab_a = build_slab_assembly(slab)
+    assert wall_a.r_value > 0
+    assert roof_a.r_value > 0
+    assert slab_a.r_value > 0
