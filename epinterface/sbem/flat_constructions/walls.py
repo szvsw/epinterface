@@ -9,7 +9,11 @@ from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
 )
-from epinterface.sbem.components.materials import ConstructionMaterialComponent
+from epinterface.sbem.flat_constructions.layers import (
+    equivalent_framed_cavity_material,
+    layer_from_nominal_r,
+    resolve_material,
+)
 from epinterface.sbem.flat_constructions.materials import (
     CEMENT_MORTAR,
     CLAY_BRICK,
@@ -19,7 +23,6 @@ from epinterface.sbem.flat_constructions.materials import (
     FIBERGLASS_BATTS,
     GYPSUM_BOARD,
     GYPSUM_PLASTER,
-    MATERIALS_BY_NAME,
     RAMMED_EARTH,
     SIP_CORE,
     SOFTWOOD_GENERAL,
@@ -343,108 +346,6 @@ class SemiFlatWallConstruction(BaseModel):
         return features
 
 
-def _make_layer(
-    *,
-    material_name: str,
-    thickness_m: float,
-    layer_order: int,
-) -> ConstructionLayerComponent:
-    """Create a construction layer from a registered material."""
-    return ConstructionLayerComponent(
-        ConstructionMaterial=MATERIALS_BY_NAME[material_name],
-        Thickness=thickness_m,
-        LayerOrder=layer_order,
-    )
-
-
-def _make_layer_from_material(
-    *,
-    material: ConstructionMaterialComponent,
-    thickness_m: float,
-    layer_order: int,
-) -> ConstructionLayerComponent:
-    """Create a construction layer from a material component."""
-    return ConstructionLayerComponent(
-        ConstructionMaterial=material,
-        Thickness=thickness_m,
-        LayerOrder=layer_order,
-    )
-
-
-def _nominal_r_insulation_layer(
-    *,
-    material_name: str,
-    nominal_r_value: float,
-    layer_order: int,
-) -> ConstructionLayerComponent:
-    """Create a layer by back-solving thickness from nominal R-value."""
-    material = MATERIALS_BY_NAME[material_name]
-    thickness_m = nominal_r_value * material.Conductivity
-    return _make_layer(
-        material_name=material_name,
-        thickness_m=thickness_m,
-        layer_order=layer_order,
-    )
-
-
-def _make_consolidated_cavity_material(
-    *,
-    structural_system: WallStructuralSystem,
-    cavity_depth_m: float,
-    framing_material_name: str,
-    framing_fraction: float,
-    framing_path_r_value: float | None,
-    nominal_cavity_insulation_r: float,
-    uninsulated_cavity_r_value: float,
-) -> ConstructionMaterialComponent:
-    """Create an equivalent material for a framed cavity layer.
-
-    Uses a simple parallel-path estimate:
-      U_eq = f_frame / R_frame + (1-f_frame) / R_fill
-    where R_fill is the user-provided nominal cavity insulation R-value
-    (or a default uninsulated cavity R-value when nominal is 0).
-    """
-    framing_material = MATERIALS_BY_NAME[framing_material_name]
-    fill_r = (
-        nominal_cavity_insulation_r
-        if nominal_cavity_insulation_r > 0
-        else uninsulated_cavity_r_value
-    )
-    framing_r = (
-        framing_path_r_value
-        if framing_path_r_value is not None
-        else cavity_depth_m / framing_material.Conductivity
-    )
-    u_eq = framing_fraction / framing_r + (1 - framing_fraction) / fill_r
-    r_eq = 1 / u_eq
-    conductivity_eq = cavity_depth_m / r_eq
-
-    density_eq = (
-        framing_fraction * framing_material.Density
-        + (1 - framing_fraction) * FIBERGLASS_BATTS.Density
-    )
-    specific_heat_eq = (
-        framing_fraction * framing_material.SpecificHeat
-        + (1 - framing_fraction) * FIBERGLASS_BATTS.SpecificHeat
-    )
-
-    return ConstructionMaterialComponent(
-        Name=(
-            f"ConsolidatedCavity_{structural_system}_"
-            f"Rfill{fill_r:.3f}_f{framing_fraction:.3f}"
-        ),
-        Conductivity=conductivity_eq,
-        Density=density_eq,
-        SpecificHeat=specific_heat_eq,
-        ThermalAbsorptance=0.9,
-        SolarAbsorptance=0.6,
-        VisibleAbsorptance=0.6,
-        TemperatureCoefficientThermalConductivity=0.0,
-        Roughness="MediumRough",
-        Type="Other",
-    )
-
-
 def build_facade_assembly(
     wall: SemiFlatWallConstruction,
     *,
@@ -458,18 +359,18 @@ def build_facade_assembly(
     exterior_finish = EXTERIOR_FINISH_TEMPLATES[wall.exterior_finish]
     if exterior_finish is not None:
         layers.append(
-            _make_layer(
-                material_name=exterior_finish.material_name,
-                thickness_m=exterior_finish.thickness_m,
-                layer_order=layer_order,
+            ConstructionLayerComponent(
+                ConstructionMaterial=resolve_material(exterior_finish.material_name),
+                Thickness=exterior_finish.thickness_m,
+                LayerOrder=layer_order,
             )
         )
         layer_order += 1
 
     if wall.nominal_exterior_insulation_r > 0:
         layers.append(
-            _nominal_r_insulation_layer(
-                material_name=XPS_BOARD.Name,
+            layer_from_nominal_r(
+                material=XPS_BOARD.Name,
                 nominal_r_value=wall.nominal_exterior_insulation_r,
                 layer_order=layer_order,
             )
@@ -484,31 +385,30 @@ def build_facade_assembly(
     )
 
     if uses_framed_cavity_consolidation:
-        consolidated_cavity_material = _make_consolidated_cavity_material(
+        consolidated_cavity_material = equivalent_framed_cavity_material(
             structural_system=wall.structural_system,
             cavity_depth_m=template.cavity_depth_m or 0.0,
-            framing_material_name=template.framing_material_name
-            or SOFTWOOD_GENERAL.Name,
+            framing_material=template.framing_material_name or SOFTWOOD_GENERAL.Name,
             framing_fraction=template.framing_fraction or 0.0,
             framing_path_r_value=template.framing_path_r_value,
             nominal_cavity_insulation_r=wall.effective_nominal_cavity_insulation_r,
             uninsulated_cavity_r_value=template.uninsulated_cavity_r_value,
         )
         layers.append(
-            _make_layer_from_material(
-                material=consolidated_cavity_material,
-                thickness_m=template.cavity_depth_m or 0.0,
-                layer_order=layer_order,
+            ConstructionLayerComponent(
+                ConstructionMaterial=consolidated_cavity_material,
+                Thickness=template.cavity_depth_m or 0.0,
+                LayerOrder=layer_order,
             )
         )
         layer_order += 1
     else:
         if template.thickness_m > 0:
             layers.append(
-                _make_layer(
-                    material_name=template.material_name,
-                    thickness_m=template.thickness_m,
-                    layer_order=layer_order,
+                ConstructionLayerComponent(
+                    ConstructionMaterial=resolve_material(template.material_name),
+                    Thickness=template.thickness_m,
+                    LayerOrder=layer_order,
                 )
             )
             layer_order += 1
@@ -519,8 +419,8 @@ def build_facade_assembly(
                 * template.cavity_r_correction_factor
             )
             layers.append(
-                _nominal_r_insulation_layer(
-                    material_name=FIBERGLASS_BATTS.Name,
+                layer_from_nominal_r(
+                    material=FIBERGLASS_BATTS.Name,
                     nominal_r_value=effective_cavity_r,
                     layer_order=layer_order,
                 )
@@ -529,8 +429,8 @@ def build_facade_assembly(
 
     if wall.nominal_interior_insulation_r > 0:
         layers.append(
-            _nominal_r_insulation_layer(
-                material_name=FIBERGLASS_BATTS.Name,
+            layer_from_nominal_r(
+                material=FIBERGLASS_BATTS.Name,
                 nominal_r_value=wall.nominal_interior_insulation_r,
                 layer_order=layer_order,
             )
@@ -540,10 +440,10 @@ def build_facade_assembly(
     interior_finish = INTERIOR_FINISH_TEMPLATES[wall.interior_finish]
     if interior_finish is not None:
         layers.append(
-            _make_layer(
-                material_name=interior_finish.material_name,
-                thickness_m=interior_finish.thickness_m,
-                layer_order=layer_order,
+            ConstructionLayerComponent(
+                ConstructionMaterial=resolve_material(interior_finish.material_name),
+                Thickness=interior_finish.thickness_m,
+                LayerOrder=layer_order,
             )
         )
 

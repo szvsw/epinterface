@@ -9,6 +9,10 @@ from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
 )
+from epinterface.sbem.flat_constructions.layers import (
+    layer_from_nominal_r,
+    resolve_material,
+)
 from epinterface.sbem.flat_constructions.materials import (
     CEMENT_MORTAR,
     CERAMIC_TILE,
@@ -16,7 +20,6 @@ from epinterface.sbem.flat_constructions.materials import (
     CONCRETE_RC_DENSE,
     GYPSUM_BOARD,
     GYPSUM_PLASTER,
-    MATERIALS_BY_NAME,
     SIP_CORE,
     SOFTWOOD_GENERAL,
     URETHANE_CARPET,
@@ -227,36 +230,6 @@ class SemiFlatSlabConstruction(BaseModel):
         return features
 
 
-def _make_layer(
-    *,
-    material_name: str,
-    thickness_m: float,
-    layer_order: int,
-) -> ConstructionLayerComponent:
-    """Create a construction layer from a registered material."""
-    return ConstructionLayerComponent(
-        ConstructionMaterial=MATERIALS_BY_NAME[material_name],
-        Thickness=thickness_m,
-        LayerOrder=layer_order,
-    )
-
-
-def _nominal_r_insulation_layer(
-    *,
-    material_name: str,
-    nominal_r_value: float,
-    layer_order: int,
-) -> ConstructionLayerComponent:
-    """Create a layer by back-solving thickness from nominal R-value."""
-    material = MATERIALS_BY_NAME[material_name]
-    thickness_m = nominal_r_value * material.Conductivity
-    return _make_layer(
-        material_name=material_name,
-        thickness_m=thickness_m,
-        layer_order=layer_order,
-    )
-
-
 def build_slab_assembly(
     slab: SemiFlatSlabConstruction,
     *,
@@ -270,10 +243,10 @@ def build_slab_assembly(
     interior_finish = INTERIOR_FINISH_TEMPLATES[slab.interior_finish]
     if interior_finish is not None:
         layers.append(
-            _make_layer(
-                material_name=interior_finish.material_name,
-                thickness_m=interior_finish.thickness_m,
-                layer_order=layer_order,
+            ConstructionLayerComponent(
+                ConstructionMaterial=resolve_material(interior_finish.material_name),
+                Thickness=interior_finish.thickness_m,
+                LayerOrder=layer_order,
             )
         )
         layer_order += 1
@@ -283,8 +256,8 @@ def build_slab_assembly(
         and slab.effective_nominal_insulation_r > 0
     ):
         layers.append(
-            _nominal_r_insulation_layer(
-                material_name=XPS_BOARD.Name,
+            layer_from_nominal_r(
+                material=XPS_BOARD.Name,
                 nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )
@@ -292,10 +265,10 @@ def build_slab_assembly(
         layer_order += 1
 
     layers.append(
-        _make_layer(
-            material_name=template.material_name,
-            thickness_m=template.thickness_m,
-            layer_order=layer_order,
+        ConstructionLayerComponent(
+            ConstructionMaterial=resolve_material(template.material_name),
+            Thickness=template.thickness_m,
+            LayerOrder=layer_order,
         )
     )
     layer_order += 1
@@ -305,8 +278,8 @@ def build_slab_assembly(
         and slab.effective_nominal_insulation_r > 0
     ):
         layers.append(
-            _nominal_r_insulation_layer(
-                material_name=XPS_BOARD.Name,
+            layer_from_nominal_r(
+                material=XPS_BOARD.Name,
                 nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )
@@ -316,10 +289,10 @@ def build_slab_assembly(
     exterior_finish = EXTERIOR_FINISH_TEMPLATES[slab.exterior_finish]
     if exterior_finish is not None:
         layers.append(
-            _make_layer(
-                material_name=exterior_finish.material_name,
-                thickness_m=exterior_finish.thickness_m,
-                layer_order=layer_order,
+            ConstructionLayerComponent(
+                ConstructionMaterial=resolve_material(exterior_finish.material_name),
+                Thickness=exterior_finish.thickness_m,
+                LayerOrder=layer_order,
             )
         )
 
