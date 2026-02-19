@@ -29,6 +29,10 @@ MaterialName = Literal[
 
 MATERIAL_NAME_VALUES: tuple[MaterialName, ...] = get_args(MaterialName)
 
+DEFAULT_THERMAL_ABSORPTANCE = 0.9
+DEFAULT_SOLAR_ABSORPTANCE = 0.6
+DEFAULT_VISIBLE_ABSORPTANCE = 0.6
+
 
 def _material(
     *,
@@ -37,16 +41,31 @@ def _material(
     density: float,
     specific_heat: float,
     mat_type: str,
+    thermal_absorptance: float | None = None,
+    solar_absorptance: float | None = None,
+    visible_absorptance: float | None = None,
 ) -> ConstructionMaterialComponent:
-    """Create a construction material component with common optical defaults."""
+    """Create a construction material component with optional optical overrides."""
     return ConstructionMaterialComponent(
         Name=name,
         Conductivity=conductivity,
         Density=density,
         SpecificHeat=specific_heat,
-        ThermalAbsorptance=0.9,
-        SolarAbsorptance=0.6,
-        VisibleAbsorptance=0.6,
+        ThermalAbsorptance=(
+            DEFAULT_THERMAL_ABSORPTANCE
+            if thermal_absorptance is None
+            else thermal_absorptance
+        ),
+        SolarAbsorptance=(
+            DEFAULT_SOLAR_ABSORPTANCE
+            if solar_absorptance is None
+            else solar_absorptance
+        ),
+        VisibleAbsorptance=(
+            DEFAULT_VISIBLE_ABSORPTANCE
+            if visible_absorptance is None
+            else visible_absorptance
+        ),
         TemperatureCoefficientThermalConductivity=0.0,
         Roughness="MediumRough",
         Type=mat_type,  # pyright: ignore[reportArgumentType]
@@ -115,6 +134,8 @@ CLAY_BRICK = _material(
     density=1700,
     specific_heat=840,
     mat_type="Masonry",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
 )
 
 CONCRETE_BLOCK_H = _material(
@@ -139,6 +160,8 @@ CEMENT_MORTAR = _material(
     density=1850,
     specific_heat=840,
     mat_type="Other",
+    solar_absorptance=0.65,
+    visible_absorptance=0.65,
 )
 
 CERAMIC_TILE = _material(
@@ -163,6 +186,8 @@ STEEL_PANEL = _material(
     density=7850,
     specific_heat=500,
     mat_type="Metal",
+    solar_absorptance=0.55,
+    visible_absorptance=0.55,
 )
 
 RAMMED_EARTH = _material(
@@ -187,6 +212,8 @@ FIBER_CEMENT_BOARD = _material(
     density=1350,
     specific_heat=840,
     mat_type="Siding",
+    solar_absorptance=0.65,
+    visible_absorptance=0.65,
 )
 
 ROOF_MEMBRANE = _material(
@@ -195,6 +222,8 @@ ROOF_MEMBRANE = _material(
     density=1200,
     specific_heat=900,
     mat_type="Sealing",
+    solar_absorptance=0.88,
+    visible_absorptance=0.88,
 )
 
 COOL_ROOF_MEMBRANE = _material(
@@ -203,6 +232,8 @@ COOL_ROOF_MEMBRANE = _material(
     density=1200,
     specific_heat=900,
     mat_type="Sealing",
+    solar_absorptance=0.30,
+    visible_absorptance=0.30,
 )
 
 ACOUSTIC_TILE = _material(
