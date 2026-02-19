@@ -3,9 +3,9 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from archetypal import IDF
 from pydantic import BaseModel, Field
 
+from archetypal import IDF
 from epinterface.analysis.overheating import OverheatingAnalysisConfig
 from epinterface.geometry import ShoeboxGeometry
 from epinterface.sbem.builder import AtticAssumptions, BasementAssumptions, Model
@@ -56,10 +56,6 @@ from epinterface.sbem.flat_constructions import (
     SemiFlatRoofConstruction,
     SemiFlatSlabConstruction,
     SemiFlatWallConstruction,
-    WallExteriorFinish,
-    WallInteriorFinish,
-    WallStructuralSystem,
-    build_envelope_assemblies,
 )
 from epinterface.sbem.flat_constructions import (
     SlabExteriorFinish as SlabExteriorFinishType,
@@ -72,6 +68,12 @@ from epinterface.sbem.flat_constructions import (
 )
 from epinterface.sbem.flat_constructions import (
     SlabStructuralSystem as SlabStructuralSystemType,
+)
+from epinterface.sbem.flat_constructions import (
+    WallExteriorFinish,
+    WallInteriorFinish,
+    WallStructuralSystem,
+    build_envelope_assemblies,
 )
 from epinterface.weather import WeatherUrl
 
@@ -713,26 +715,98 @@ class FlatModel(BaseModel):
     # OccupancyRegularWeekendAfternoon: float = Field(ge=0, le=1)
     # OccupancyRegularWeekendEvening: float = Field(ge=0, le=1)
 
-    EquipmentBase: float = Field(ge=0, le=1)
-    EquipmentAMInterp: float = Field(ge=0, le=1)
-    EquipmentLunchInterp: float = Field(ge=0, le=1)
-    EquipmentPMInterp: float = Field(ge=0, le=1)
-    EquipmentWeekendPeakInterp: float = Field(ge=0, le=1)
-    EquipmentSummerPeakInterp: float = Field(ge=0, le=1)
+    EquipmentBase: float = Field(
+        ge=0,
+        le=1,
+        description="Overnight baseload fraction for equipment schedule [0-1].",
+    )
+    EquipmentAMInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Morning peak interpolation fraction for equipment schedule (6-9am) [0-1].",
+    )
+    EquipmentLunchInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Lunch period interpolation fraction for equipment schedule (12-1pm) [0-1].",
+    )
+    EquipmentPMInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Evening peak interpolation fraction for equipment schedule (6-8pm) [0-1].",
+    )
+    EquipmentWeekendPeakInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Weekend peak interpolation fraction for equipment schedule [0-1].",
+    )
+    EquipmentSummerPeakInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Summer peak interpolation fraction for equipment schedule [0-1].",
+    )
 
-    LightingBase: float = Field(ge=0, le=1)
-    LightingAMInterp: float = Field(ge=0, le=1)
-    LightingLunchInterp: float = Field(ge=0, le=1)
-    LightingPMInterp: float = Field(ge=0, le=1)
-    LightingWeekendPeakInterp: float = Field(ge=0, le=1)
-    LightingSummerPeakInterp: float = Field(ge=0, le=1)
+    LightingBase: float = Field(
+        ge=0,
+        le=1,
+        description="Overnight baseload fraction for lighting schedule [0-1].",
+    )
+    LightingAMInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Morning peak interpolation fraction for lighting schedule (6-9am) [0-1].",
+    )
+    LightingLunchInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Lunch period interpolation fraction for lighting schedule (12-1pm) [0-1].",
+    )
+    LightingPMInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Evening peak interpolation fraction for lighting schedule (6-8pm) [0-1].",
+    )
+    LightingWeekendPeakInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Weekend peak interpolation fraction for lighting schedule [0-1].",
+    )
+    LightingSummerPeakInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Summer peak interpolation fraction for lighting schedule [0-1].",
+    )
 
-    OccupancyBase: float = Field(ge=0, le=1)
-    OccupancyAMInterp: float = Field(ge=0, le=1)
-    OccupancyLunchInterp: float = Field(ge=0, le=1)
-    OccupancyPMInterp: float = Field(ge=0, le=1)
-    OccupancyWeekendPeakInterp: float = Field(ge=0, le=1)
-    OccupancySummerPeakInterp: float = Field(ge=0, le=1)
+    OccupancyBase: float = Field(
+        ge=0,
+        le=1,
+        description="Overnight baseload fraction for occupancy schedule [0-1].",
+    )
+    OccupancyAMInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Morning peak interpolation fraction for occupancy schedule (6-9am) [0-1].",
+    )
+    OccupancyLunchInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Lunch period interpolation fraction for occupancy schedule (12-1pm) [0-1].",
+    )
+    OccupancyPMInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Evening peak interpolation fraction for occupancy schedule (6-8pm) [0-1].",
+    )
+    OccupancyWeekendPeakInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Weekend peak interpolation fraction for occupancy schedule [0-1].",
+    )
+    OccupancySummerPeakInterp: float = Field(
+        ge=0,
+        le=1,
+        description="Summer peak interpolation fraction for occupancy schedule [0-1].",
+    )
 
     # HSPRegularWeekdayWorkhours: float = Field(ge=0, le=23)
     # HSPRegularWeekdayNight: float = Field(ge=0, le=23)
@@ -748,71 +822,180 @@ class FlatModel(BaseModel):
     # CSPWeekendWorkhours: float = Field(ge=20, le=30)
     # CSPWeekendNight: float = Field(ge=20, le=30)
 
-    HeatingSetpointBase: float = Field(ge=0, le=23)
-    SetpointDeadband: float = Field(ge=0, le=10)
-    HeatingSetpointSetback: float = Field(ge=0, le=10)
-    CoolingSetpointSetback: float = Field(ge=0, le=10)
-    NightSetback: float = Field(ge=0, le=1)
-    WeekendSetback: float = Field(ge=0, le=1)
-    SummerSetback: float = Field(ge=0, le=1)
+    HeatingSetpointBase: float = Field(
+        ge=0, le=23, description="Base heating setpoint temperature [degC]."
+    )
+    SetpointDeadband: float = Field(
+        ge=0,
+        le=10,
+        description="Temperature deadband between heating and cooling setpoints [degC].",
+    )
+    HeatingSetpointSetback: float = Field(
+        ge=0,
+        le=10,
+        description="Heating setpoint setback amount during unoccupied periods [degC].",
+    )
+    CoolingSetpointSetback: float = Field(
+        ge=0,
+        le=10,
+        description="Cooling setpoint setback amount during unoccupied periods [degC].",
+    )
+    NightSetback: float = Field(
+        ge=0,
+        le=1,
+        description="Night setback factor applied to thermostat schedules [0-1].",
+    )
+    WeekendSetback: float = Field(
+        ge=0,
+        le=1,
+        description="Weekend setback factor applied to thermostat schedules [0-1].",
+    )
+    SummerSetback: float = Field(
+        ge=0,
+        le=1,
+        description="Summer setback factor applied to thermostat schedules [0-1].",
+    )
 
-    HeatingFuel: FuelType
-    CoolingFuel: FuelType
-    HeatingSystemCOP: float
-    CoolingSystemCOP: float
-    HeatingDistributionCOP: float
-    CoolingDistributionCOP: float
+    HeatingFuel: FuelType = Field(description="Fuel type for the heating system.")
+    CoolingFuel: FuelType = Field(description="Fuel type for the cooling system.")
+    HeatingSystemCOP: float = Field(
+        description="Coefficient of performance for the heating system [dimensionless]."
+    )
+    CoolingSystemCOP: float = Field(
+        description="Coefficient of performance for the cooling system [dimensionless]."
+    )
+    HeatingDistributionCOP: float = Field(
+        description="Distribution efficiency for the heating system [dimensionless, 0-1]."
+    )
+    CoolingDistributionCOP: float = Field(
+        description="Distribution efficiency for the cooling system [dimensionless, 0-1]."
+    )
 
-    EquipmentPowerDensity: float = Field(ge=0, le=200)
-    LightingPowerDensity: float = Field(ge=0, le=100)
-    OccupantDensity: float = Field(ge=0, le=50)
+    EquipmentPowerDensity: float = Field(
+        ge=0, le=200, description="Internal equipment power density [W/m2]."
+    )
+    LightingPowerDensity: float = Field(
+        ge=0, le=100, description="Lighting power density [W/m2]."
+    )
+    OccupantDensity: float = Field(
+        ge=0, le=50, description="Occupant density [people/m2]."
+    )
 
-    VentFlowRatePerPerson: float
-    VentFlowRatePerArea: float
-    VentProvider: VentilationProvider
-    VentHRV: HRVMethod
-    VentEconomizer: EconomizerMethod
-    VentDCV: DCVMethod
+    VentFlowRatePerPerson: float = Field(
+        description="Outdoor air ventilation flow rate per person [m3/s/person]."
+    )
+    VentFlowRatePerArea: float = Field(
+        description="Outdoor air ventilation flow rate per floor area [m3/s/m2]."
+    )
+    VentProvider: VentilationProvider = Field(
+        description="Ventilation provider type (None, Natural, Mechanical, or Both)."
+    )
+    VentHRV: HRVMethod = Field(
+        description="Heat recovery ventilation method (NoHRV, Sensible, or Enthalpy)."
+    )
+    VentEconomizer: EconomizerMethod = Field(
+        description="Economizer method (NoEconomizer, DifferentialDryBulb, or DifferentialEnthalpy)."
+    )
+    VentDCV: DCVMethod = Field(
+        description="Demand-controlled ventilation method (NoDCV, OccupancySchedule, or CO2Setpoint)."
+    )
 
-    DHWFlowRatePerPerson: float
-    DHWFuel: DHWFuelType
-    DHWSystemCOP: float
-    DHWDistributionCOP: float
+    DHWFlowRatePerPerson: float = Field(
+        description="Domestic hot water flow rate per person [m3/s/person]."
+    )
+    DHWFuel: DHWFuelType = Field(
+        description="Fuel type for the domestic hot water system."
+    )
+    DHWSystemCOP: float = Field(
+        description="Coefficient of performance for the DHW system [dimensionless]."
+    )
+    DHWDistributionCOP: float = Field(
+        description="Distribution efficiency for the DHW system [dimensionless, 0-1]."
+    )
 
-    InfiltrationACH: float
+    InfiltrationACH: float = Field(
+        description="Envelope infiltration rate [air changes per hour]."
+    )
 
-    WindowUValue: float
-    WindowSHGF: float
-    WindowTVis: float
+    WindowUValue: float = Field(description="Window assembly U-value [W/m2K].")
+    WindowSHGF: float = Field(description="Window solar heat gain factor [0-1].")
+    WindowTVis: float = Field(description="Window visible light transmittance [0-1].")
 
-    FacadeStructuralSystem: WallStructuralSystem = "cmu"
-    FacadeCavityInsulationRValue: float = Field(default=0, ge=0)
-    FacadeExteriorInsulationRValue: float = Field(default=0, ge=0)
-    FacadeInteriorInsulationRValue: float = Field(default=0, ge=0)
-    FacadeInteriorFinish: WallInteriorFinish = "drywall"
-    FacadeExteriorFinish: WallExteriorFinish = "none"
+    FacadeStructuralSystem: WallStructuralSystem = Field(
+        default="cmu", description="Structural system type for facade walls."
+    )
+    FacadeCavityInsulationRValue: float = Field(
+        default=0, ge=0, description="Facade wall cavity insulation R-value [m2K/W]."
+    )
+    FacadeExteriorInsulationRValue: float = Field(
+        default=0,
+        ge=0,
+        description="Facade wall exterior continuous insulation R-value [m2K/W].",
+    )
+    FacadeInteriorInsulationRValue: float = Field(
+        default=0, ge=0, description="Facade wall interior insulation R-value [m2K/W]."
+    )
+    FacadeInteriorFinish: WallInteriorFinish = Field(
+        default="drywall", description="Interior finish material for facade walls."
+    )
+    FacadeExteriorFinish: WallExteriorFinish = Field(
+        default="none",
+        description="Exterior finish/cladding material for facade walls.",
+    )
 
-    RoofStructuralSystem: RoofStructuralSystemType = "poured_concrete"
-    RoofCavityInsulationRValue: float = Field(default=0, ge=0)
-    RoofExteriorInsulationRValue: float = Field(default=2.5, ge=0)
-    RoofInteriorInsulationRValue: float = Field(default=0, ge=0)
-    RoofInteriorFinish: RoofInteriorFinishType = "gypsum_board"
-    RoofExteriorFinish: RoofExteriorFinishType = "epdm_membrane"
+    RoofStructuralSystem: RoofStructuralSystemType = Field(
+        default="poured_concrete",
+        description="Structural system type for the roof assembly.",
+    )
+    RoofCavityInsulationRValue: float = Field(
+        default=0, ge=0, description="Roof cavity insulation R-value [m2K/W]."
+    )
+    RoofExteriorInsulationRValue: float = Field(
+        default=2.5,
+        ge=0,
+        description="Roof exterior continuous insulation R-value [m2K/W].",
+    )
+    RoofInteriorInsulationRValue: float = Field(
+        default=0, ge=0, description="Roof interior insulation R-value [m2K/W]."
+    )
+    RoofInteriorFinish: RoofInteriorFinishType = Field(
+        default="gypsum_board",
+        description="Interior finish material for the roof assembly.",
+    )
+    RoofExteriorFinish: RoofExteriorFinishType = Field(
+        default="epdm_membrane",
+        description="Exterior finish/membrane for the roof assembly.",
+    )
 
-    SlabStructuralSystem: SlabStructuralSystemType = "slab_on_grade"
-    SlabInsulationRValue: float = Field(default=1.5, ge=0)
-    SlabInsulationPlacement: SlabInsulationPlacementType = "auto"
-    SlabInteriorFinish: SlabInteriorFinishType = "tile"
-    SlabExteriorFinish: SlabExteriorFinishType = "none"
+    SlabStructuralSystem: SlabStructuralSystemType = Field(
+        default="slab_on_grade",
+        description="Structural system type for the floor slab.",
+    )
+    SlabInsulationRValue: float = Field(
+        default=1.5, ge=0, description="Slab insulation R-value [m2K/W]."
+    )
+    SlabInsulationPlacement: SlabInsulationPlacementType = Field(
+        default="auto",
+        description="Placement of slab insulation (auto, under_slab, or above_slab).",
+    )
+    SlabInteriorFinish: SlabInteriorFinishType = Field(
+        default="tile", description="Interior finish material for the floor slab."
+    )
+    SlabExteriorFinish: SlabExteriorFinishType = Field(
+        default="none",
+        description="Exterior/underside finish material for the floor slab.",
+    )
 
-    WWR: float
-    F2FHeight: float
-    NFloors: int
-    Width: float
-    Depth: float
-    Rotation: float
+    WWR: float = Field(description="Window-to-wall ratio [0-1].")
+    F2FHeight: float = Field(description="Floor-to-floor height [m].")
+    NFloors: int = Field(description="Number of above-grade floors.")
+    Width: float = Field(description="Building width [m].")
+    Depth: float = Field(description="Building depth [m].")
+    Rotation: float = Field(description="Building rotation angle from north [degrees].")
 
-    EPWURI: WeatherUrl | Path
+    EPWURI: WeatherUrl | Path = Field(
+        description="EPW weather file URI or local file path."
+    )
 
     @property
     def facade_wall(self) -> SemiFlatWallConstruction:
@@ -1889,7 +2072,7 @@ if __name__ == "__main__":
         Rotation=45,
         WWR=0.3,
         NFloors=2,
-        FacadeStructuralSystem="cmu",
+        FacadeStructuralSystem="light_gauge_steel",
         FacadeCavityInsulationRValue=1.2,
         FacadeExteriorInsulationRValue=1.0,
         FacadeInteriorInsulationRValue=0.0,
