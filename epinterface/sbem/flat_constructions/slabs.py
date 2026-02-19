@@ -9,22 +9,11 @@ from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
 )
-from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.flat_constructions.layers import (
     layer_from_nominal_r,
+    resolve_material,
 )
-from epinterface.sbem.flat_constructions.materials import (
-    CEMENT_MORTAR,
-    CERAMIC_TILE,
-    CONCRETE_MC_LIGHT,
-    CONCRETE_RC_DENSE,
-    GYPSUM_BOARD,
-    GYPSUM_PLASTER,
-    SIP_CORE,
-    SOFTWOOD_GENERAL,
-    URETHANE_CARPET,
-    XPS_BOARD,
-)
+from epinterface.sbem.flat_constructions.materials import MaterialName
 
 SlabStructuralSystem = Literal[
     "none",
@@ -56,7 +45,7 @@ ALL_SLAB_EXTERIOR_FINISHES = get_args(SlabExteriorFinish)
 class StructuralTemplate:
     """Default structural slab assumptions for a structural system."""
 
-    material_name: ConstructionMaterialComponent
+    material_name: MaterialName
     thickness_m: float
     supports_under_insulation: bool
 
@@ -65,43 +54,43 @@ class StructuralTemplate:
 class FinishTemplate:
     """Default slab finish material and thickness assumptions."""
 
-    material_name: ConstructionMaterialComponent
+    material_name: MaterialName
     thickness_m: float
 
 
 STRUCTURAL_TEMPLATES: dict[SlabStructuralSystem, StructuralTemplate] = {
     "none": StructuralTemplate(
-        material_name=CONCRETE_MC_LIGHT,
+        material_name="ConcreteMC_Light",
         thickness_m=0.05,
         supports_under_insulation=False,
     ),
     "slab_on_grade": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE,
+        material_name="ConcreteRC_Dense",
         thickness_m=0.15,
         supports_under_insulation=True,
     ),
     "thickened_edge_slab": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE,
+        material_name="ConcreteRC_Dense",
         thickness_m=0.20,
         supports_under_insulation=True,
     ),
     "reinforced_concrete_suspended": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE,
+        material_name="ConcreteRC_Dense",
         thickness_m=0.18,
         supports_under_insulation=False,
     ),
     "precast_hollow_core": StructuralTemplate(
-        material_name=CONCRETE_MC_LIGHT,
+        material_name="ConcreteMC_Light",
         thickness_m=0.20,
         supports_under_insulation=False,
     ),
     "mass_timber_deck": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.18,
         supports_under_insulation=False,
     ),
     "sip_floor": StructuralTemplate(
-        material_name=SIP_CORE,
+        material_name="SIPCore",
         thickness_m=0.18,
         supports_under_insulation=False,
     ),
@@ -110,19 +99,19 @@ STRUCTURAL_TEMPLATES: dict[SlabStructuralSystem, StructuralTemplate] = {
 INTERIOR_FINISH_TEMPLATES: dict[SlabInteriorFinish, FinishTemplate | None] = {
     "none": None,
     "polished_concrete": FinishTemplate(
-        material_name=CEMENT_MORTAR,
+        material_name="CementMortar",
         thickness_m=0.015,
     ),
     "tile": FinishTemplate(
-        material_name=CERAMIC_TILE,
+        material_name="CeramicTile",
         thickness_m=0.015,
     ),
     "carpet": FinishTemplate(
-        material_name=URETHANE_CARPET,
+        material_name="UrethaneCarpet",
         thickness_m=0.012,
     ),
     "wood_floor": FinishTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.015,
     ),
 }
@@ -130,11 +119,11 @@ INTERIOR_FINISH_TEMPLATES: dict[SlabInteriorFinish, FinishTemplate | None] = {
 EXTERIOR_FINISH_TEMPLATES: dict[SlabExteriorFinish, FinishTemplate | None] = {
     "none": None,
     "gypsum_board": FinishTemplate(
-        material_name=GYPSUM_BOARD,
+        material_name="GypsumBoard",
         thickness_m=0.0127,
     ),
     "plaster": FinishTemplate(
-        material_name=GYPSUM_PLASTER,
+        material_name="GypsumPlaster",
         thickness_m=0.013,
     ),
 }
@@ -244,7 +233,7 @@ def build_slab_assembly(
     if interior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=interior_finish.material_name,
+                ConstructionMaterial=resolve_material(interior_finish.material_name),
                 Thickness=interior_finish.thickness_m,
                 LayerOrder=layer_order,
             )
@@ -257,7 +246,7 @@ def build_slab_assembly(
     ):
         layers.append(
             layer_from_nominal_r(
-                material=XPS_BOARD,
+                material="XPSBoard",
                 nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )
@@ -266,7 +255,7 @@ def build_slab_assembly(
 
     layers.append(
         ConstructionLayerComponent(
-            ConstructionMaterial=template.material_name,
+            ConstructionMaterial=resolve_material(template.material_name),
             Thickness=template.thickness_m,
             LayerOrder=layer_order,
         )
@@ -279,7 +268,7 @@ def build_slab_assembly(
     ):
         layers.append(
             layer_from_nominal_r(
-                material=XPS_BOARD,
+                material="XPSBoard",
                 nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )
@@ -290,7 +279,7 @@ def build_slab_assembly(
     if exterior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=exterior_finish.material_name,
+                ConstructionMaterial=resolve_material(exterior_finish.material_name),
                 Thickness=exterior_finish.thickness_m,
                 LayerOrder=layer_order,
             )

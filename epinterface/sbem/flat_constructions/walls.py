@@ -9,25 +9,14 @@ from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
 )
-from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.flat_constructions.layers import (
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
+    resolve_material,
 )
 from epinterface.sbem.flat_constructions.materials import (
-    CEMENT_MORTAR,
-    CLAY_BRICK,
-    CONCRETE_BLOCK_H,
-    CONCRETE_RC_DENSE,
-    FIBER_CEMENT_BOARD,
     FIBERGLASS_BATTS,
-    GYPSUM_BOARD,
-    GYPSUM_PLASTER,
-    RAMMED_EARTH,
-    SIP_CORE,
-    SOFTWOOD_GENERAL,
-    STEEL_PANEL,
-    XPS_BOARD,
+    MaterialName,
 )
 
 WallStructuralSystem = Literal[
@@ -68,11 +57,11 @@ ALL_WALL_EXTERIOR_FINISHES = get_args(WallExteriorFinish)
 class StructuralTemplate:
     """Default structural wall assumptions for a structural system."""
 
-    material_name: ConstructionMaterialComponent
+    material_name: MaterialName
     thickness_m: float
     supports_cavity_insulation: bool
     cavity_depth_m: float | None
-    framing_material_name: ConstructionMaterialComponent | None = None
+    framing_material_name: MaterialName | None = None
     framing_fraction: float | None = None
     framing_path_r_value: float | None = None
     uninsulated_cavity_r_value: float = 0.17
@@ -83,29 +72,29 @@ class StructuralTemplate:
 class FinishTemplate:
     """Default finish material and thickness assumptions."""
 
-    material_name: ConstructionMaterialComponent
+    material_name: MaterialName
     thickness_m: float
 
 
 STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
     "none": StructuralTemplate(
-        material_name=GYPSUM_BOARD,
+        material_name="GypsumBoard",
         thickness_m=0.005,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "sheet_metal": StructuralTemplate(
-        material_name=STEEL_PANEL,
+        material_name="SteelPanel",
         thickness_m=0.001,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "light_gauge_steel": StructuralTemplate(
-        material_name=STEEL_PANEL,
+        material_name="SteelPanel",
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
-        framing_material_name=STEEL_PANEL,
+        framing_material_name="SteelPanel",
         framing_fraction=0.12,
         # Calibrated to reproduce ~55% effective batt R for 3.5in steel-stud walls.
         # References:
@@ -114,95 +103,95 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
         framing_path_r_value=0.26,
     ),
     "structural_steel": StructuralTemplate(
-        material_name=STEEL_PANEL,
+        material_name="SteelPanel",
         thickness_m=0.006,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "woodframe": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
-        framing_material_name=SOFTWOOD_GENERAL,
+        framing_material_name="SoftwoodGeneral",
         framing_fraction=0.23,
     ),
     "deep_woodframe": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
-        framing_material_name=SOFTWOOD_GENERAL,
+        framing_material_name="SoftwoodGeneral",
         framing_fraction=0.23,
     ),
     "woodframe_24oc": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
-        framing_material_name=SOFTWOOD_GENERAL,
+        framing_material_name="SoftwoodGeneral",
         framing_fraction=0.17,
     ),
     "deep_woodframe_24oc": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
-        framing_material_name=SOFTWOOD_GENERAL,
+        framing_material_name="SoftwoodGeneral",
         framing_fraction=0.17,
     ),
     "engineered_timber": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.160,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "cmu": StructuralTemplate(
-        material_name=CONCRETE_BLOCK_H,
+        material_name="ConcreteBlockH",
         thickness_m=0.190,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
         cavity_r_correction_factor=0.90,
     ),
     "double_layer_cmu": StructuralTemplate(
-        material_name=CONCRETE_BLOCK_H,
+        material_name="ConcreteBlockH",
         thickness_m=0.290,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
         cavity_r_correction_factor=0.92,
     ),
     "precast_concrete": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE,
+        material_name="ConcreteRC_Dense",
         thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "poured_concrete": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE,
+        material_name="ConcreteRC_Dense",
         thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "masonry": StructuralTemplate(
-        material_name=CLAY_BRICK,
+        material_name="ClayBrick",
         thickness_m=0.190,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "rammed_earth": StructuralTemplate(
-        material_name=RAMMED_EARTH,
+        material_name="RammedEarth",
         thickness_m=0.350,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "reinforced_concrete": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE,
+        material_name="ConcreteRC_Dense",
         thickness_m=0.200,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "sip": StructuralTemplate(
-        material_name=SIP_CORE,
+        material_name="SIPCore",
         thickness_m=0.150,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
@@ -212,15 +201,15 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
 INTERIOR_FINISH_TEMPLATES: dict[WallInteriorFinish, FinishTemplate | None] = {
     "none": None,
     "drywall": FinishTemplate(
-        material_name=GYPSUM_BOARD,
+        material_name="GypsumBoard",
         thickness_m=0.0127,
     ),
     "plaster": FinishTemplate(
-        material_name=GYPSUM_PLASTER,
+        material_name="GypsumPlaster",
         thickness_m=0.013,
     ),
     "wood_panel": FinishTemplate(
-        material_name=SOFTWOOD_GENERAL,
+        material_name="SoftwoodGeneral",
         thickness_m=0.012,
     ),
 }
@@ -228,19 +217,19 @@ INTERIOR_FINISH_TEMPLATES: dict[WallInteriorFinish, FinishTemplate | None] = {
 EXTERIOR_FINISH_TEMPLATES: dict[WallExteriorFinish, FinishTemplate | None] = {
     "none": None,
     "brick_veneer": FinishTemplate(
-        material_name=CLAY_BRICK,
+        material_name="ClayBrick",
         thickness_m=0.090,
     ),
     "stucco": FinishTemplate(
-        material_name=CEMENT_MORTAR,
+        material_name="CementMortar",
         thickness_m=0.020,
     ),
     "fiber_cement": FinishTemplate(
-        material_name=FIBER_CEMENT_BOARD,
+        material_name="FiberCementBoard",
         thickness_m=0.012,
     ),
     "metal_panel": FinishTemplate(
-        material_name=STEEL_PANEL,
+        material_name="SteelPanel",
         thickness_m=0.001,
     ),
 }
@@ -360,7 +349,7 @@ def build_facade_assembly(
     if exterior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=exterior_finish.material_name,
+                ConstructionMaterial=resolve_material(exterior_finish.material_name),
                 Thickness=exterior_finish.thickness_m,
                 LayerOrder=layer_order,
             )
@@ -370,7 +359,7 @@ def build_facade_assembly(
     if wall.nominal_exterior_insulation_r > 0:
         layers.append(
             layer_from_nominal_r(
-                material=XPS_BOARD,
+                material="XPSBoard",
                 nominal_r_value=wall.nominal_exterior_insulation_r,
                 layer_order=layer_order,
             )
@@ -388,7 +377,7 @@ def build_facade_assembly(
         consolidated_cavity_material = equivalent_framed_cavity_material(
             structural_system=wall.structural_system,
             cavity_depth_m=template.cavity_depth_m or 0.0,
-            framing_material=template.framing_material_name or SOFTWOOD_GENERAL,
+            framing_material=template.framing_material_name or "SoftwoodGeneral",
             framing_fraction=template.framing_fraction or 0.0,
             framing_path_r_value=template.framing_path_r_value,
             nominal_cavity_insulation_r=wall.effective_nominal_cavity_insulation_r,
@@ -406,7 +395,7 @@ def build_facade_assembly(
         if template.thickness_m > 0:
             layers.append(
                 ConstructionLayerComponent(
-                    ConstructionMaterial=template.material_name,
+                    ConstructionMaterial=resolve_material(template.material_name),
                     Thickness=template.thickness_m,
                     LayerOrder=layer_order,
                 )
@@ -420,7 +409,7 @@ def build_facade_assembly(
             )
             layers.append(
                 layer_from_nominal_r(
-                    material=FIBERGLASS_BATTS,
+                    material="FiberglassBatt",
                     nominal_r_value=effective_cavity_r,
                     layer_order=layer_order,
                 )
@@ -430,7 +419,7 @@ def build_facade_assembly(
     if wall.nominal_interior_insulation_r > 0:
         layers.append(
             layer_from_nominal_r(
-                material=FIBERGLASS_BATTS,
+                material="FiberglassBatt",
                 nominal_r_value=wall.nominal_interior_insulation_r,
                 layer_order=layer_order,
             )
@@ -441,7 +430,7 @@ def build_facade_assembly(
     if interior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=interior_finish.material_name,
+                ConstructionMaterial=resolve_material(interior_finish.material_name),
                 Thickness=interior_finish.thickness_m,
                 LayerOrder=layer_order,
             )
