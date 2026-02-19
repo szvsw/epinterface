@@ -5,8 +5,10 @@ import pytest
 from epinterface.sbem.flat_constructions.materials import (
     CEMENT_MORTAR,
     CONCRETE_BLOCK_H,
+    CONCRETE_RC_DENSE,
     GYPSUM_BOARD,
     SOFTWOOD_GENERAL,
+    MaterialName,
 )
 from epinterface.sbem.flat_constructions.walls import (
     ALL_WALL_EXTERIOR_FINISHES,
@@ -14,6 +16,7 @@ from epinterface.sbem.flat_constructions.walls import (
     ALL_WALL_STRUCTURAL_SYSTEMS,
     STRUCTURAL_TEMPLATES,
     SemiFlatWallConstruction,
+    WallExteriorFinish,
     build_facade_assembly,
 )
 
@@ -150,3 +153,61 @@ def test_wall_feature_dict_has_fixed_length() -> None:
     assert features["FacadeStructuralSystem__deep_woodframe_24oc"] == 1.0
     assert features["FacadeInteriorFinish__plaster"] == 1.0
     assert features["FacadeExteriorFinish__fiber_cement"] == 1.0
+
+
+def test_vinyl_siding_exterior_finish_round_trip() -> None:
+    """Vinyl siding finish should produce a valid assembly with the correct outer layer."""
+    wall = SemiFlatWallConstruction(
+        structural_system="woodframe",
+        nominal_cavity_insulation_r=2.0,
+        nominal_exterior_insulation_r=0.5,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="drywall",
+        exterior_finish="vinyl_siding",
+    )
+    assembly = build_facade_assembly(wall)
+    outer_layer = assembly.sorted_layers[0]
+    assert outer_layer.ConstructionMaterial.Name == "VinylSiding"
+    assert outer_layer.Thickness == pytest.approx(0.0015)
+    assert assembly.r_value > 0
+
+
+def test_icf_structural_system_round_trip() -> None:
+    """ICF wall should produce a concrete-core assembly with continuous insulation layers."""
+    wall = SemiFlatWallConstruction(
+        structural_system="icf",
+        nominal_cavity_insulation_r=0.0,
+        nominal_exterior_insulation_r=2.0,
+        nominal_interior_insulation_r=1.5,
+        interior_finish="drywall",
+        exterior_finish="none",
+    )
+    assembly = build_facade_assembly(wall)
+    icf_template = STRUCTURAL_TEMPLATES["icf"]
+
+    expected_r = (
+        2.0
+        + (icf_template.thickness_m / CONCRETE_RC_DENSE.Conductivity)
+        + 1.5
+        + (0.0127 / GYPSUM_BOARD.Conductivity)
+    )
+    assert assembly.Type == "Facade"
+    assert assembly.r_value == pytest.approx(expected_r, rel=1e-6)
+
+
+def test_wood_siding_and_stone_veneer_produce_valid_assemblies() -> None:
+    """New exterior finishes should each produce valid assemblies."""
+    finishes: list[tuple[WallExteriorFinish, MaterialName]] = [
+        ("wood_siding", "SoftwoodGeneral"),
+        ("stone_veneer", "NaturalStone"),
+    ]
+    for finish, mat_name in finishes:
+        wall = SemiFlatWallConstruction(
+            structural_system="woodframe",
+            nominal_cavity_insulation_r=2.0,
+            exterior_finish=finish,
+        )
+        assembly = build_facade_assembly(wall)
+        outer_layer = assembly.sorted_layers[0]
+        assert outer_layer.ConstructionMaterial.Name == mat_name
+        assert assembly.r_value > 0

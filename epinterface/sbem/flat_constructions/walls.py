@@ -14,10 +14,7 @@ from epinterface.sbem.flat_constructions.layers import (
     layer_from_nominal_r,
     resolve_material,
 )
-from epinterface.sbem.flat_constructions.materials import (
-    FIBERGLASS_BATTS,
-    MaterialName,
-)
+from epinterface.sbem.flat_constructions.materials import FIBERGLASS_BATTS, MaterialName
 
 WallStructuralSystem = Literal[
     "none",
@@ -37,6 +34,7 @@ WallStructuralSystem = Literal[
     "rammed_earth",
     "reinforced_concrete",
     "sip",
+    "icf",
 ]
 
 WallInteriorFinish = Literal["none", "drywall", "plaster", "wood_panel"]
@@ -46,6 +44,9 @@ WallExteriorFinish = Literal[
     "stucco",
     "fiber_cement",
     "metal_panel",
+    "vinyl_siding",
+    "wood_siding",
+    "stone_veneer",
 ]
 
 ALL_WALL_STRUCTURAL_SYSTEMS = get_args(WallStructuralSystem)
@@ -196,6 +197,12 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
+    "icf": StructuralTemplate(
+        material_name="ConcreteRC_Dense",
+        thickness_m=0.150,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
 }
 
 INTERIOR_FINISH_TEMPLATES: dict[WallInteriorFinish, FinishTemplate | None] = {
@@ -231,6 +238,18 @@ EXTERIOR_FINISH_TEMPLATES: dict[WallExteriorFinish, FinishTemplate | None] = {
     "metal_panel": FinishTemplate(
         material_name="SteelPanel",
         thickness_m=0.001,
+    ),
+    "vinyl_siding": FinishTemplate(
+        material_name="VinylSiding",
+        thickness_m=0.0015,
+    ),
+    "wood_siding": FinishTemplate(
+        material_name="SoftwoodGeneral",
+        thickness_m=0.018,
+    ),
+    "stone_veneer": FinishTemplate(
+        material_name="NaturalStone",
+        thickness_m=0.025,
     ),
 }
 

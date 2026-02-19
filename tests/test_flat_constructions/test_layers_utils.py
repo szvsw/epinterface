@@ -7,8 +7,14 @@ from epinterface.sbem.flat_constructions.layers import (
     resolve_material,
 )
 from epinterface.sbem.flat_constructions.materials import (
+    ASPHALT_SHINGLE,
+    CONCRETE_BLOCK_H,
     COOL_ROOF_MEMBRANE,
+    NATURAL_STONE,
+    RAMMED_EARTH,
     ROOF_MEMBRANE,
+    STEEL_PANEL,
+    VINYL_SIDING,
     XPS_BOARD,
 )
 
@@ -54,3 +60,38 @@ def test_xps_board_retains_default_optical_properties() -> None:
     assert XPS_BOARD.ThermalAbsorptance == pytest.approx(0.9)
     assert XPS_BOARD.SolarAbsorptance == pytest.approx(0.6)
     assert XPS_BOARD.VisibleAbsorptance == pytest.approx(0.6)
+
+
+def test_rammed_earth_has_explicit_absorptances() -> None:
+    """Rammed earth should have explicit solar/visible absorptance for exterior exposure."""
+    assert RAMMED_EARTH.SolarAbsorptance == pytest.approx(0.70)
+    assert RAMMED_EARTH.VisibleAbsorptance == pytest.approx(0.70)
+
+
+def test_concrete_block_has_explicit_absorptances() -> None:
+    """Concrete block should have explicit solar/visible absorptance for exterior exposure."""
+    assert CONCRETE_BLOCK_H.SolarAbsorptance == pytest.approx(0.65)
+    assert CONCRETE_BLOCK_H.VisibleAbsorptance == pytest.approx(0.65)
+
+
+def test_roughness_overrides_applied_correctly() -> None:
+    """Materials with non-default roughness should have the correct value."""
+    assert STEEL_PANEL.Roughness == "Smooth"
+    assert ROOF_MEMBRANE.Roughness == "Smooth"
+    assert COOL_ROOF_MEMBRANE.Roughness == "Smooth"
+    assert XPS_BOARD.Roughness == "MediumRough"
+
+
+def test_new_materials_have_expected_properties() -> None:
+    """Newly added materials should have correct key properties."""
+    assert VINYL_SIDING.Conductivity == pytest.approx(0.17)
+    assert VINYL_SIDING.SolarAbsorptance == pytest.approx(0.55)
+    assert VINYL_SIDING.Roughness == "Smooth"
+
+    assert ASPHALT_SHINGLE.Conductivity == pytest.approx(0.06)
+    assert ASPHALT_SHINGLE.SolarAbsorptance == pytest.approx(0.85)
+    assert ASPHALT_SHINGLE.Roughness == "Rough"
+
+    assert NATURAL_STONE.Conductivity == pytest.approx(2.90)
+    assert NATURAL_STONE.SolarAbsorptance == pytest.approx(0.55)
+    assert NATURAL_STONE.Density == pytest.approx(2500)

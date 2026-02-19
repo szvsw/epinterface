@@ -25,6 +25,9 @@ MaterialName = Literal[
     "RoofMembrane",
     "CoolRoofMembrane",
     "AcousticTile",
+    "VinylSiding",
+    "AsphaltShingle",
+    "NaturalStone",
 ]
 
 MATERIAL_NAME_VALUES: tuple[MaterialName, ...] = get_args(MaterialName)
@@ -44,6 +47,7 @@ def _material(
     thermal_absorptance: float | None = None,
     solar_absorptance: float | None = None,
     visible_absorptance: float | None = None,
+    roughness: str = "MediumRough",
 ) -> ConstructionMaterialComponent:
     """Create a construction material component with optional optical overrides."""
     return ConstructionMaterialComponent(
@@ -67,7 +71,7 @@ def _material(
             else visible_absorptance
         ),
         TemperatureCoefficientThermalConductivity=0.0,
-        Roughness="MediumRough",
+        Roughness=roughness,  # pyright: ignore[reportArgumentType]
         Type=mat_type,  # pyright: ignore[reportArgumentType]
     )
 
@@ -144,6 +148,8 @@ CONCRETE_BLOCK_H = _material(
     density=1100,
     specific_heat=840,
     mat_type="Concrete",
+    solar_absorptance=0.65,
+    visible_absorptance=0.65,
 )
 
 FIBERGLASS_BATTS = _material(
@@ -170,6 +176,7 @@ CERAMIC_TILE = _material(
     density=2000,
     specific_heat=840,
     mat_type="Finishes",
+    roughness="MediumSmooth",
 )
 
 URETHANE_CARPET = _material(
@@ -188,6 +195,7 @@ STEEL_PANEL = _material(
     mat_type="Metal",
     solar_absorptance=0.55,
     visible_absorptance=0.55,
+    roughness="Smooth",
 )
 
 RAMMED_EARTH = _material(
@@ -196,6 +204,8 @@ RAMMED_EARTH = _material(
     density=1900,
     specific_heat=1000,
     mat_type="Masonry",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
 )
 
 SIP_CORE = _material(
@@ -224,6 +234,7 @@ ROOF_MEMBRANE = _material(
     mat_type="Sealing",
     solar_absorptance=0.88,
     visible_absorptance=0.88,
+    roughness="Smooth",
 )
 
 COOL_ROOF_MEMBRANE = _material(
@@ -234,6 +245,7 @@ COOL_ROOF_MEMBRANE = _material(
     mat_type="Sealing",
     solar_absorptance=0.30,
     visible_absorptance=0.30,
+    roughness="Smooth",
 )
 
 ACOUSTIC_TILE = _material(
@@ -242,6 +254,38 @@ ACOUSTIC_TILE = _material(
     density=280,
     specific_heat=840,
     mat_type="Boards",
+)
+
+VINYL_SIDING = _material(
+    name="VinylSiding",
+    conductivity=0.17,
+    density=1380,
+    specific_heat=1000,
+    mat_type="Siding",
+    solar_absorptance=0.55,
+    visible_absorptance=0.55,
+    roughness="Smooth",
+)
+
+ASPHALT_SHINGLE = _material(
+    name="AsphaltShingle",
+    conductivity=0.06,
+    density=1120,
+    specific_heat=920,
+    mat_type="Finishes",
+    solar_absorptance=0.85,
+    visible_absorptance=0.85,
+    roughness="Rough",
+)
+
+NATURAL_STONE = _material(
+    name="NaturalStone",
+    conductivity=2.90,
+    density=2500,
+    specific_heat=840,
+    mat_type="Masonry",
+    solar_absorptance=0.55,
+    visible_absorptance=0.55,
 )
 
 _ALL_MATERIALS = (
@@ -265,6 +309,9 @@ _ALL_MATERIALS = (
     ROOF_MEMBRANE,
     COOL_ROOF_MEMBRANE,
     ACOUSTIC_TILE,
+    VINYL_SIDING,
+    ASPHALT_SHINGLE,
+    NATURAL_STONE,
 )
 
 MATERIALS_BY_NAME: dict[MaterialName, ConstructionMaterialComponent] = {

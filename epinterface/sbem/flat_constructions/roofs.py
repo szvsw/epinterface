@@ -14,10 +14,7 @@ from epinterface.sbem.flat_constructions.layers import (
     layer_from_nominal_r,
     resolve_material,
 )
-from epinterface.sbem.flat_constructions.materials import (
-    FIBERGLASS_BATTS,
-    MaterialName,
-)
+from epinterface.sbem.flat_constructions.materials import FIBERGLASS_BATTS, MaterialName
 
 RoofStructuralSystem = Literal[
     "none",
@@ -45,6 +42,8 @@ RoofExteriorFinish = Literal[
     "built_up_roof",
     "metal_roof",
     "tile_roof",
+    "asphalt_shingle",
+    "wood_shake",
 ]
 
 ALL_ROOF_STRUCTURAL_SYSTEMS = get_args(RoofStructuralSystem)
@@ -186,6 +185,14 @@ EXTERIOR_FINISH_TEMPLATES: dict[RoofExteriorFinish, FinishTemplate | None] = {
     "tile_roof": FinishTemplate(
         material_name="CeramicTile",
         thickness_m=0.02,
+    ),
+    "asphalt_shingle": FinishTemplate(
+        material_name="AsphaltShingle",
+        thickness_m=0.006,
+    ),
+    "wood_shake": FinishTemplate(
+        material_name="SoftwoodGeneral",
+        thickness_m=0.012,
     ),
 }
 

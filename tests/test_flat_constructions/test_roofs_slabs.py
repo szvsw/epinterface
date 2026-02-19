@@ -276,3 +276,37 @@ def test_build_envelope_assemblies_with_surface_specific_specs() -> None:
     assert envelope_assemblies.FacadeAssembly.Type == "Facade"
     assert envelope_assemblies.FlatRoofAssembly.Type == "FlatRoof"
     assert envelope_assemblies.GroundSlabAssembly.Type == "GroundSlab"
+
+
+def test_asphalt_shingle_exterior_finish_round_trip() -> None:
+    """Asphalt shingle finish should produce a valid roof assembly."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="light_wood_truss",
+        nominal_cavity_insulation_r=3.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="gypsum_board",
+        exterior_finish="asphalt_shingle",
+    )
+    assembly = build_roof_assembly(roof)
+    outer_layer = assembly.sorted_layers[0]
+    assert outer_layer.ConstructionMaterial.Name == "AsphaltShingle"
+    assert outer_layer.Thickness == pytest.approx(0.006)
+    assert assembly.r_value > 0
+
+
+def test_wood_shake_exterior_finish_round_trip() -> None:
+    """Wood shake finish should produce a valid roof assembly."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="light_wood_truss",
+        nominal_cavity_insulation_r=3.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="none",
+        exterior_finish="wood_shake",
+    )
+    assembly = build_roof_assembly(roof)
+    outer_layer = assembly.sorted_layers[0]
+    assert outer_layer.ConstructionMaterial.Name == "SoftwoodGeneral"
+    assert outer_layer.Thickness == pytest.approx(0.012)
+    assert assembly.r_value > 0
