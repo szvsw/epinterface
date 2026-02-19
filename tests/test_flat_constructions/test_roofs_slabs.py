@@ -8,6 +8,7 @@ from epinterface.sbem.flat_constructions.materials import (
     CONCRETE_RC_DENSE,
     GYPSUM_BOARD,
     ROOF_MEMBRANE,
+    SOFTWOOD_GENERAL,
 )
 from epinterface.sbem.flat_constructions.roofs import (
     ALL_ROOF_EXTERIOR_FINISHES,
@@ -112,6 +113,34 @@ def test_roof_feature_dict_has_fixed_length() -> None:
     assert features["RoofStructuralSystem__steel_joist"] == 1.0
     assert features["RoofInteriorFinish__acoustic_tile"] == 1.0
     assert features["RoofExteriorFinish__cool_membrane"] == 1.0
+
+
+def test_light_wood_truss_uses_consolidated_cavity_layer() -> None:
+    """Wood truss roofs should use a consolidated parallel-path cavity layer."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="light_wood_truss",
+        nominal_cavity_insulation_r=3.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    assembly = build_roof_assembly(roof)
+    truss_template = ROOF_STRUCTURAL_TEMPLATES["light_wood_truss"]
+    cavity_layer = assembly.sorted_layers[0]
+
+    assert cavity_layer.ConstructionMaterial.Name.startswith(
+        "ConsolidatedCavity_light_wood_truss"
+    )
+    assert truss_template.cavity_depth_m is not None
+    assert truss_template.framing_fraction is not None
+
+    framing_r = truss_template.cavity_depth_m / SOFTWOOD_GENERAL.Conductivity
+    r_eq_expected = 1 / (
+        truss_template.framing_fraction / framing_r
+        + (1 - truss_template.framing_fraction) / 3.0
+    )
+    assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
 
 
 def test_build_slab_assembly_from_nominal_r_values() -> None:

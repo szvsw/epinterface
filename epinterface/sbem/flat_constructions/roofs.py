@@ -9,6 +9,7 @@ from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
 )
+from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.flat_constructions.materials import (
     ACOUSTIC_TILE,
     CEMENT_MORTAR,
@@ -66,6 +67,9 @@ class StructuralTemplate:
     thickness_m: float
     supports_cavity_insulation: bool
     cavity_depth_m: float | None
+    framing_material_name: str | None = None
+    framing_fraction: float | None = None
+    uninsulated_cavity_r_value: float = 0.17
     cavity_r_correction_factor: float = 1.0
 
 
@@ -86,17 +90,19 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
     ),
     "light_wood_truss": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.040,
+        thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
-        cavity_r_correction_factor=0.82,
+        framing_material_name=SOFTWOOD_GENERAL.Name,
+        framing_fraction=0.14,
     ),
     "deep_wood_truss": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.060,
+        thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.240,
-        cavity_r_correction_factor=0.82,
+        framing_material_name=SOFTWOOD_GENERAL.Name,
+        framing_fraction=0.12,
     ),
     "steel_joist": StructuralTemplate(
         material_name=STEEL_PANEL.Name,
@@ -297,6 +303,20 @@ def _make_layer(
     )
 
 
+def _make_layer_from_material(
+    *,
+    material: ConstructionMaterialComponent,
+    thickness_m: float,
+    layer_order: int,
+) -> ConstructionLayerComponent:
+    """Create a construction layer from a material component."""
+    return ConstructionLayerComponent(
+        ConstructionMaterial=material,
+        Thickness=thickness_m,
+        LayerOrder=layer_order,
+    )
+
+
 def _nominal_r_insulation_layer(
     *,
     material_name: str,
@@ -310,6 +330,53 @@ def _nominal_r_insulation_layer(
         material_name=material_name,
         thickness_m=thickness_m,
         layer_order=layer_order,
+    )
+
+
+def _make_consolidated_cavity_material(
+    *,
+    structural_system: RoofStructuralSystem,
+    cavity_depth_m: float,
+    framing_material_name: str,
+    framing_fraction: float,
+    nominal_cavity_insulation_r: float,
+    uninsulated_cavity_r_value: float,
+) -> ConstructionMaterialComponent:
+    """Create an equivalent material for a framed roof cavity layer."""
+    framing_material = MATERIALS_BY_NAME[framing_material_name]
+    fill_r = (
+        nominal_cavity_insulation_r
+        if nominal_cavity_insulation_r > 0
+        else uninsulated_cavity_r_value
+    )
+    framing_r = cavity_depth_m / framing_material.Conductivity
+    u_eq = framing_fraction / framing_r + (1 - framing_fraction) / fill_r
+    r_eq = 1 / u_eq
+    conductivity_eq = cavity_depth_m / r_eq
+
+    density_eq = (
+        framing_fraction * framing_material.Density
+        + (1 - framing_fraction) * FIBERGLASS_BATTS.Density
+    )
+    specific_heat_eq = (
+        framing_fraction * framing_material.SpecificHeat
+        + (1 - framing_fraction) * FIBERGLASS_BATTS.SpecificHeat
+    )
+
+    return ConstructionMaterialComponent(
+        Name=(
+            f"ConsolidatedCavity_{structural_system}_"
+            f"Rfill{fill_r:.3f}_f{framing_fraction:.3f}"
+        ),
+        Conductivity=conductivity_eq,
+        Density=density_eq,
+        SpecificHeat=specific_heat_eq,
+        ThermalAbsorptance=0.9,
+        SolarAbsorptance=0.6,
+        VisibleAbsorptance=0.6,
+        TemperatureCoefficientThermalConductivity=0.0,
+        Roughness="MediumRough",
+        Type="Other",
     )
 
 
@@ -344,28 +411,55 @@ def build_roof_assembly(
         )
         layer_order += 1
 
-    layers.append(
-        _make_layer(
-            material_name=template.material_name,
-            thickness_m=template.thickness_m,
-            layer_order=layer_order,
-        )
+    uses_framed_cavity_consolidation = (
+        template.supports_cavity_insulation
+        and template.cavity_depth_m is not None
+        and template.framing_material_name is not None
+        and template.framing_fraction is not None
     )
-    layer_order += 1
 
-    if roof.effective_nominal_cavity_insulation_r > 0:
-        effective_cavity_r = (
-            roof.effective_nominal_cavity_insulation_r
-            * template.cavity_r_correction_factor
+    if uses_framed_cavity_consolidation:
+        consolidated_cavity_material = _make_consolidated_cavity_material(
+            structural_system=roof.structural_system,
+            cavity_depth_m=template.cavity_depth_m or 0.0,
+            framing_material_name=template.framing_material_name
+            or SOFTWOOD_GENERAL.Name,
+            framing_fraction=template.framing_fraction or 0.0,
+            nominal_cavity_insulation_r=roof.effective_nominal_cavity_insulation_r,
+            uninsulated_cavity_r_value=template.uninsulated_cavity_r_value,
         )
         layers.append(
-            _nominal_r_insulation_layer(
-                material_name=FIBERGLASS_BATTS.Name,
-                nominal_r_value=effective_cavity_r,
+            _make_layer_from_material(
+                material=consolidated_cavity_material,
+                thickness_m=template.cavity_depth_m or 0.0,
                 layer_order=layer_order,
             )
         )
         layer_order += 1
+    else:
+        if template.thickness_m > 0:
+            layers.append(
+                _make_layer(
+                    material_name=template.material_name,
+                    thickness_m=template.thickness_m,
+                    layer_order=layer_order,
+                )
+            )
+            layer_order += 1
+
+        if roof.effective_nominal_cavity_insulation_r > 0:
+            effective_cavity_r = (
+                roof.effective_nominal_cavity_insulation_r
+                * template.cavity_r_correction_factor
+            )
+            layers.append(
+                _nominal_r_insulation_layer(
+                    material_name=FIBERGLASS_BATTS.Name,
+                    nominal_r_value=effective_cavity_r,
+                    layer_order=layer_order,
+                )
+            )
+            layer_order += 1
 
     if roof.nominal_interior_insulation_r > 0:
         layers.append(

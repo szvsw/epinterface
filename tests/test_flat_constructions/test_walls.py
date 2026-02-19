@@ -6,6 +6,7 @@ from epinterface.sbem.flat_constructions.materials import (
     CEMENT_MORTAR,
     CONCRETE_BLOCK_H,
     GYPSUM_BOARD,
+    SOFTWOOD_GENERAL,
 )
 from epinterface.sbem.flat_constructions.walls import (
     ALL_WALL_EXTERIOR_FINISHES,
@@ -70,6 +71,34 @@ def test_non_cavity_structural_system_treats_cavity_r_as_dead_feature() -> None:
     assert wall.effective_nominal_cavity_insulation_r == 0.0
     assert "nominal_cavity_insulation_r" in wall.ignored_feature_names
     assert "FiberglassBatt" not in layer_material_names
+
+
+def test_woodframe_uses_consolidated_cavity_layer() -> None:
+    """Woodframe cavities should be modeled as parallel-path consolidated layers."""
+    wall = SemiFlatWallConstruction(
+        structural_system="woodframe",
+        nominal_cavity_insulation_r=2.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    assembly = build_facade_assembly(wall)
+    woodframe_template = STRUCTURAL_TEMPLATES["woodframe"]
+    cavity_layer = assembly.sorted_layers[0]
+
+    assert cavity_layer.ConstructionMaterial.Name.startswith(
+        "ConsolidatedCavity_woodframe"
+    )
+    assert woodframe_template.cavity_depth_m is not None
+    assert woodframe_template.framing_fraction is not None
+
+    framing_r = woodframe_template.cavity_depth_m / SOFTWOOD_GENERAL.Conductivity
+    r_eq_expected = 1 / (
+        woodframe_template.framing_fraction / framing_r
+        + (1 - woodframe_template.framing_fraction) / 2.0
+    )
+    assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
 
 
 def test_wall_feature_dict_has_fixed_length() -> None:

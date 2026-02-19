@@ -168,6 +168,24 @@ def audit_layups() -> list[AuditIssue]:
                 max_r_value=12.0,
             )
         )
+        if template.framing_fraction is not None:
+            has_consolidated_cavity = any(
+                layer.ConstructionMaterial.Name.startswith(
+                    f"ConsolidatedCavity_{structural_system}"
+                )
+                for layer in assembly.sorted_layers
+            )
+            if not has_consolidated_cavity:
+                issues.append(
+                    AuditIssue(
+                        severity="error",
+                        scope=f"wall:{structural_system}",
+                        message=(
+                            "Expected consolidated framed cavity layer for a framed wall "
+                            "system but did not find one."
+                        ),
+                    )
+                )
 
     for structural_system, template in ROOF_STRUCTURAL_TEMPLATES.items():
         roof = SemiFlatRoofConstruction(
@@ -193,6 +211,24 @@ def audit_layups() -> list[AuditIssue]:
                 max_r_value=14.0,
             )
         )
+        if template.framing_fraction is not None:
+            has_consolidated_cavity = any(
+                layer.ConstructionMaterial.Name.startswith(
+                    f"ConsolidatedCavity_{structural_system}"
+                )
+                for layer in assembly.sorted_layers
+            )
+            if not has_consolidated_cavity:
+                issues.append(
+                    AuditIssue(
+                        severity="error",
+                        scope=f"roof:{structural_system}",
+                        message=(
+                            "Expected consolidated framed cavity layer for a framed roof "
+                            "system but did not find one."
+                        ),
+                    )
+                )
 
     for structural_system in SLAB_STRUCTURAL_TEMPLATES:
         slab = SemiFlatSlabConstruction(
