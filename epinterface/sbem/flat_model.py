@@ -10,14 +10,10 @@ from epinterface.analysis.overheating import OverheatingAnalysisConfig
 from epinterface.geometry import ShoeboxGeometry
 from epinterface.sbem.builder import AtticAssumptions, BasementAssumptions, Model
 from epinterface.sbem.components.envelope import (
-    ConstructionAssemblyComponent,
-    ConstructionLayerComponent,
-    EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
     ZoneEnvelopeComponent,
 )
-from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.components.operations import ZoneOperationsComponent
 from epinterface.sbem.components.schedules import (
     DayComponent,
@@ -47,163 +43,14 @@ from epinterface.sbem.components.systems import (
     ZoneHVACComponent,
 )
 from epinterface.sbem.components.zones import ZoneComponent
+from epinterface.sbem.flat_constructions import (
+    SemiFlatWallConstruction,
+    WallExteriorFinish,
+    WallInteriorFinish,
+    WallStructuralSystem,
+    build_envelope_assemblies,
+)
 from epinterface.weather import WeatherUrl
-
-xps_board = ConstructionMaterialComponent(
-    Name="XPSBoard",
-    Conductivity=0.037,
-    Density=40,
-    SpecificHeat=1200,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Insulation",
-)
-
-concrete_mc_light = ConstructionMaterialComponent(
-    Name="ConcreteMC_Light",
-    Conductivity=1.65,
-    Density=2100,
-    SpecificHeat=1040,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Concrete",
-)
-
-concrete_rc_dense = ConstructionMaterialComponent(
-    Name="ConcreteRC_Dense",
-    Conductivity=1.75,
-    Density=2400,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Concrete",
-)
-
-gypsum_board = ConstructionMaterialComponent(
-    Name="GypsumBoard",
-    Conductivity=0.16,
-    Density=950,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
-
-gypsum_plaster = ConstructionMaterialComponent(
-    Name="GypsumPlaster",
-    Conductivity=0.42,
-    Density=900,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
-
-softwood_general = ConstructionMaterialComponent(
-    Name="SoftwoodGeneral",
-    Conductivity=0.13,
-    Density=496,
-    SpecificHeat=1630,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Timber",
-)
-
-clay_brick = ConstructionMaterialComponent(
-    Name="ClayBrick",
-    Conductivity=0.41,
-    Density=1000,
-    SpecificHeat=920,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Masonry",
-)
-
-concrete_block_h = ConstructionMaterialComponent(
-    Name="ConcreteBlockH",
-    Conductivity=1.25,
-    Density=880,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Concrete",
-)
-
-fiberglass_batts = ConstructionMaterialComponent(
-    Name="FiberglassBatt",
-    Conductivity=0.043,
-    Density=12,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Insulation",
-)
-
-cement_mortar = ConstructionMaterialComponent(
-    Name="CementMortar",
-    Conductivity=0.8,
-    Density=1900,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Other",
-)
-
-ceramic_tile = ConstructionMaterialComponent(
-    Name="CeramicTile",
-    Conductivity=0.8,
-    Density=2243,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
-
-urethane_carpet = ConstructionMaterialComponent(
-    Name="UrethaneCarpet",
-    Conductivity=0.045,
-    Density=110,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
 
 
 class ParametericYear(BaseModel):
@@ -915,7 +762,12 @@ class FlatModel(BaseModel):
     WindowSHGF: float
     WindowTVis: float
 
-    FacadeRValue: float
+    FacadeStructuralSystem: WallStructuralSystem
+    FacadeCavityInsulationRValue: float = Field(ge=0)
+    FacadeExteriorInsulationRValue: float = Field(ge=0)
+    FacadeInteriorInsulationRValue: float = Field(ge=0)
+    FacadeInteriorFinish: WallInteriorFinish
+    FacadeExteriorFinish: WallExteriorFinish
     RoofRValue: float
     SlabRValue: float
 
@@ -927,6 +779,18 @@ class FlatModel(BaseModel):
     Rotation: float
 
     EPWURI: WeatherUrl | Path
+
+    @property
+    def facade_wall(self) -> SemiFlatWallConstruction:
+        """Return the semantic facade-wall specification."""
+        return SemiFlatWallConstruction(
+            structural_system=self.FacadeStructuralSystem,
+            nominal_cavity_insulation_r=self.FacadeCavityInsulationRValue,
+            nominal_exterior_insulation_r=self.FacadeExteriorInsulationRValue,
+            nominal_interior_insulation_r=self.FacadeInteriorInsulationRValue,
+            interior_finish=self.FacadeInteriorFinish,
+            exterior_finish=self.FacadeExteriorFinish,
+        )
 
     def to_zone(self) -> ZoneComponent:
         """Convert the flat model to a full zone."""
@@ -1880,190 +1744,10 @@ class FlatModel(BaseModel):
             FlowPerExteriorSurfaceArea=0.0,
         )
 
-        # TODO: verify interior/exterior
-        # TODO: are we okaky with mass assumptions?
-        facade = ConstructionAssemblyComponent(
-            Name="Facade",
-            Type="Facade",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=clay_brick,
-                    Thickness=0.002,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_block_h,
-                    Thickness=0.15,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=fiberglass_batts,
-                    Thickness=0.05,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_board,
-                    Thickness=0.015,
-                    LayerOrder=3,
-                ),
-            ],
-        )
-
-        facade_r_value_without_fiberglass = (
-            facade.r_value - facade.sorted_layers[2].r_value
-        )
-
-        facade_r_value_delta = self.FacadeRValue - facade_r_value_without_fiberglass
-        required_fiberglass_thickness = (
-            fiberglass_batts.Conductivity * facade_r_value_delta
-        )
-
-        if required_fiberglass_thickness < 0.003:
-            msg = f"Required Facade Fiberglass thickness is less than 3mm because the desired total facade R-value is {self.FacadeRValue} m²K/W but the concrete and gypsum layers already have a total R-value of {facade_r_value_without_fiberglass} m²K/W."
-            raise ValueError(msg)
-
-        facade.sorted_layers[2].Thickness = required_fiberglass_thickness
-
-        roof = ConstructionAssemblyComponent(
-            Name="Roof",
-            Type="FlatRoof",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=xps_board,
-                    Thickness=0.1,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_mc_light,
-                    Thickness=0.15,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_rc_dense,
-                    Thickness=0.2,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_board,
-                    Thickness=0.02,
-                    LayerOrder=3,
-                ),
-            ],
-        )
-
-        roof_r_value_without_xps = roof.r_value - roof.sorted_layers[0].r_value
-        roof_r_value_delta = self.RoofRValue - roof_r_value_without_xps
-        required_xps_thickness = xps_board.Conductivity * roof_r_value_delta
-        if required_xps_thickness < 0.003:
-            msg = f"Required Roof XPS thickness is less than 3mm because the desired total roof R-value is {self.RoofRValue} m²K/W but the concrete layers already have a total R-value of {roof_r_value_without_xps} m²K/W."
-            raise ValueError(msg)
-
-        roof.sorted_layers[0].Thickness = required_xps_thickness
-
-        partition = ConstructionAssemblyComponent(
-            Name="Partition",
-            Type="Partition",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_plaster,
-                    Thickness=0.02,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=softwood_general,
-                    Thickness=0.02,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_plaster,
-                    Thickness=0.02,
-                    LayerOrder=2,
-                ),
-            ],
-        )
-
-        floor_ceiling = ConstructionAssemblyComponent(
-            Name="FloorCeiling",
-            Type="FloorCeiling",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=urethane_carpet,
-                    Thickness=0.02,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=cement_mortar,
-                    Thickness=0.02,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_rc_dense,
-                    Thickness=0.15,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_board,
-                    Thickness=0.02,
-                    LayerOrder=3,
-                ),
-            ],
-        )
-
-        ground_slab_assembly = ConstructionAssemblyComponent(
-            Name="GroundSlabAssembly",
-            Type="GroundSlab",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=xps_board,
-                    Thickness=0.02,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_rc_dense,
-                    Thickness=0.15,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_mc_light,
-                    Thickness=0.04,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=cement_mortar,
-                    Thickness=0.03,
-                    LayerOrder=3,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=ceramic_tile,
-                    Thickness=0.02,
-                    LayerOrder=4,
-                ),
-            ],
-        )
-
-        ground_slab_r_value_without_xps = (
-            ground_slab_assembly.r_value - ground_slab_assembly.sorted_layers[0].r_value
-        )
-        ground_slab_r_value_delta = self.SlabRValue - ground_slab_r_value_without_xps
-        required_xps_thickness = xps_board.Conductivity * ground_slab_r_value_delta
-        if required_xps_thickness < 0.003:
-            msg = f"Required Ground Slab XPS thickness is less than 3mm because the desired total slab R-value is {self.SlabRValue} m²K/W but the concrete layers already have a total R-value of {ground_slab_r_value_without_xps} m²K/W."
-            raise ValueError(msg)
-
-        ground_slab_assembly.sorted_layers[0].Thickness = required_xps_thickness
-
-        assemblies = EnvelopeAssemblyComponent(
-            Name="EnvelopeAssemblies",
-            FacadeAssembly=facade,
-            FlatRoofAssembly=roof,
-            AtticRoofAssembly=roof,
-            PartitionAssembly=partition,
-            FloorCeilingAssembly=floor_ceiling,
-            AtticFloorAssembly=floor_ceiling,
-            BasementCeilingAssembly=floor_ceiling,
-            GroundSlabAssembly=ground_slab_assembly,
-            GroundWallAssembly=ground_slab_assembly,
-            ExternalFloorAssembly=ground_slab_assembly,
+        assemblies = build_envelope_assemblies(
+            facade_wall=self.facade_wall,
+            roof_r_value=self.RoofRValue,
+            slab_r_value=self.SlabRValue,
         )
 
         basement_infiltration = infiltration.model_copy(deep=True)
@@ -2148,7 +1832,12 @@ if __name__ == "__main__":
         Rotation=45,
         WWR=0.3,
         NFloors=2,
-        FacadeRValue=3.0,
+        FacadeStructuralSystem="cmu",
+        FacadeCavityInsulationRValue=1.2,
+        FacadeExteriorInsulationRValue=1.0,
+        FacadeInteriorInsulationRValue=0.0,
+        FacadeInteriorFinish="drywall",
+        FacadeExteriorFinish="brick_veneer",
         RoofRValue=3.0,
         SlabRValue=3.0,
         WindowUValue=3.0,
