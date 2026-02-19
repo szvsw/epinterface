@@ -34,6 +34,14 @@ XPS_BOARD = _material(
     mat_type="Insulation",
 )
 
+POLYISO_BOARD = _material(
+    name="PolyisoBoard",
+    conductivity=0.024,
+    density=32,
+    specific_heat=1400,
+    mat_type="Insulation",
+)
+
 CONCRETE_MC_LIGHT = _material(
     name="ConcreteMC_Light",
     conductivity=1.65,
@@ -153,3 +161,53 @@ FIBER_CEMENT_BOARD = _material(
     specific_heat=840,
     mat_type="Siding",
 )
+
+ROOF_MEMBRANE = _material(
+    name="RoofMembrane",
+    conductivity=0.16,
+    density=1200,
+    specific_heat=900,
+    mat_type="Sealing",
+)
+
+COOL_ROOF_MEMBRANE = _material(
+    name="CoolRoofMembrane",
+    conductivity=0.16,
+    density=1200,
+    specific_heat=900,
+    mat_type="Sealing",
+)
+
+ACOUSTIC_TILE = _material(
+    name="AcousticTile",
+    conductivity=0.06,
+    density=300,
+    specific_heat=840,
+    mat_type="Boards",
+)
+
+MATERIALS_BY_NAME = {
+    mat.Name: mat
+    for mat in (
+        XPS_BOARD,
+        POLYISO_BOARD,
+        CONCRETE_MC_LIGHT,
+        CONCRETE_RC_DENSE,
+        GYPSUM_BOARD,
+        GYPSUM_PLASTER,
+        SOFTWOOD_GENERAL,
+        CLAY_BRICK,
+        CONCRETE_BLOCK_H,
+        FIBERGLASS_BATTS,
+        CEMENT_MORTAR,
+        CERAMIC_TILE,
+        URETHANE_CARPET,
+        STEEL_PANEL,
+        RAMMED_EARTH,
+        SIP_CORE,
+        FIBER_CEMENT_BOARD,
+        ROOF_MEMBRANE,
+        COOL_ROOF_MEMBRANE,
+        ACOUSTIC_TILE,
+    )
+}

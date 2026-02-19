@@ -44,11 +44,31 @@ from epinterface.sbem.components.systems import (
 )
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.flat_constructions import (
+    RoofExteriorFinish as RoofExteriorFinishType,
+)
+from epinterface.sbem.flat_constructions import (
+    RoofInteriorFinish as RoofInteriorFinishType,
+)
+from epinterface.sbem.flat_constructions import (
+    RoofStructuralSystem as RoofStructuralSystemType,
+)
+from epinterface.sbem.flat_constructions import (
+    SemiFlatRoofConstruction,
+    SemiFlatSlabConstruction,
     SemiFlatWallConstruction,
     WallExteriorFinish,
     WallInteriorFinish,
     WallStructuralSystem,
     build_envelope_assemblies,
+)
+from epinterface.sbem.flat_constructions import (
+    SlabExteriorFinish as SlabExteriorFinishType,
+)
+from epinterface.sbem.flat_constructions import (
+    SlabInteriorFinish as SlabInteriorFinishType,
+)
+from epinterface.sbem.flat_constructions import (
+    SlabStructuralSystem as SlabStructuralSystemType,
 )
 from epinterface.weather import WeatherUrl
 
@@ -768,8 +788,20 @@ class FlatModel(BaseModel):
     FacadeInteriorInsulationRValue: float = Field(default=0, ge=0)
     FacadeInteriorFinish: WallInteriorFinish = "drywall"
     FacadeExteriorFinish: WallExteriorFinish = "none"
-    RoofRValue: float
-    SlabRValue: float
+
+    RoofStructuralSystem: RoofStructuralSystemType = "poured_concrete"
+    RoofCavityInsulationRValue: float = Field(default=0, ge=0)
+    RoofExteriorInsulationRValue: float = Field(default=2.5, ge=0)
+    RoofInteriorInsulationRValue: float = Field(default=0, ge=0)
+    RoofInteriorFinish: RoofInteriorFinishType = "gypsum_board"
+    RoofExteriorFinish: RoofExteriorFinishType = "epdm_membrane"
+
+    SlabStructuralSystem: SlabStructuralSystemType = "slab_on_grade"
+    SlabUnderInsulationRValue: float = Field(default=1.5, ge=0)
+    SlabAboveInsulationRValue: float = Field(default=0, ge=0)
+    SlabCavityInsulationRValue: float = Field(default=0, ge=0)
+    SlabInteriorFinish: SlabInteriorFinishType = "tile"
+    SlabExteriorFinish: SlabExteriorFinishType = "none"
 
     WWR: float
     F2FHeight: float
@@ -790,6 +822,30 @@ class FlatModel(BaseModel):
             nominal_interior_insulation_r=self.FacadeInteriorInsulationRValue,
             interior_finish=self.FacadeInteriorFinish,
             exterior_finish=self.FacadeExteriorFinish,
+        )
+
+    @property
+    def roof_construction(self) -> SemiFlatRoofConstruction:
+        """Return the semantic roof specification."""
+        return SemiFlatRoofConstruction(
+            structural_system=self.RoofStructuralSystem,
+            nominal_cavity_insulation_r=self.RoofCavityInsulationRValue,
+            nominal_exterior_insulation_r=self.RoofExteriorInsulationRValue,
+            nominal_interior_insulation_r=self.RoofInteriorInsulationRValue,
+            interior_finish=self.RoofInteriorFinish,
+            exterior_finish=self.RoofExteriorFinish,
+        )
+
+    @property
+    def slab_construction(self) -> SemiFlatSlabConstruction:
+        """Return the semantic slab specification."""
+        return SemiFlatSlabConstruction(
+            structural_system=self.SlabStructuralSystem,
+            nominal_under_slab_insulation_r=self.SlabUnderInsulationRValue,
+            nominal_above_slab_insulation_r=self.SlabAboveInsulationRValue,
+            nominal_cavity_insulation_r=self.SlabCavityInsulationRValue,
+            interior_finish=self.SlabInteriorFinish,
+            exterior_finish=self.SlabExteriorFinish,
         )
 
     def to_zone(self) -> ZoneComponent:
@@ -1746,8 +1802,8 @@ class FlatModel(BaseModel):
 
         assemblies = build_envelope_assemblies(
             facade_wall=self.facade_wall,
-            roof_r_value=self.RoofRValue,
-            slab_r_value=self.SlabRValue,
+            roof=self.roof_construction,
+            slab=self.slab_construction,
         )
 
         basement_infiltration = infiltration.model_copy(deep=True)
@@ -1838,8 +1894,18 @@ if __name__ == "__main__":
         FacadeInteriorInsulationRValue=0.0,
         FacadeInteriorFinish="drywall",
         FacadeExteriorFinish="brick_veneer",
-        RoofRValue=3.0,
-        SlabRValue=3.0,
+        RoofStructuralSystem="poured_concrete",
+        RoofCavityInsulationRValue=0.0,
+        RoofExteriorInsulationRValue=2.5,
+        RoofInteriorInsulationRValue=0.2,
+        RoofInteriorFinish="gypsum_board",
+        RoofExteriorFinish="epdm_membrane",
+        SlabStructuralSystem="slab_on_grade",
+        SlabUnderInsulationRValue=2.2,
+        SlabAboveInsulationRValue=0.0,
+        SlabCavityInsulationRValue=0.0,
+        SlabInteriorFinish="tile",
+        SlabExteriorFinish="none",
         WindowUValue=3.0,
         WindowSHGF=0.7,
         WindowTVis=0.5,
