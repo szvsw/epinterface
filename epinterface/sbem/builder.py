@@ -1,17 +1,22 @@
 """A module for building the energy model using the SBEM template library approach."""
 
 import gc
+import io
 import logging
+import os
 import shutil
+import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, cast, get_args
 from uuid import uuid4
 
 import numpy as np
 import pandas as pd
+import yaml
 from archetypal.idfclass import IDF
 from archetypal.idfclass.sql import Sql
 from ladybug.epw import EPW
@@ -38,6 +43,10 @@ from epinterface.interface import (
     add_default_schedules,
     add_default_sim_controls,
 )
+from epinterface.sbem.components.composer import (
+    construct_composer_model,
+    construct_graph,
+)
 from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     EnvelopeAssemblyComponent,
@@ -46,6 +55,7 @@ from epinterface.sbem.components.envelope import (
 from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
+from epinterface.sbem.prisma.client import PrismaSettings
 from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
@@ -1206,6 +1216,78 @@ class Model(BaseWeather, validate_assignment=True):
         return zone_weights, zone_names
 
 
+def construct_zone_def(
+    component_map_path: Path,
+    db_path: Path,
+    semantic_field_context: dict[str, float | str | int],
+) -> ZoneComponent:
+    """Construct the zone definition from a component map and database.
+
+    Args:
+        component_map_path: Path to the component map YAML file.
+        db_path: Path to the component database file.
+        semantic_field_context: The semantic field values used to compile the zone definition.
+
+    Returns:
+        zone_def: The zone definition for the simulation.
+    """
+    g = construct_graph(ZoneComponent)
+    SelectorModel = construct_composer_model(
+        g,
+        ZoneComponent,
+        use_children=False,
+    )
+
+    with open(component_map_path) as f:
+        component_map_yaml = yaml.safe_load(f)
+    selector = SelectorModel.model_validate(component_map_yaml)
+
+    if db_path.exists():
+        mtime = os.path.getmtime(db_path)
+        mtime_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(
+            f"Loading database: {db_path} "
+            f"(modified: {mtime_str}, size: {db_path.stat().st_size} bytes)"
+        )
+    else:
+        logger.error(f"Database file not found: {db_path}")
+
+    settings = PrismaSettings.New(
+        database_path=db_path, if_exists="ignore", auto_register=False
+    )
+    db = settings.db
+
+    def _stdout_has_fileno() -> bool:
+        """True if sys.stdout has a real OS file descriptor (required by Prisma on Windows in Jupyter)."""
+        try:
+            sys.stdout.fileno()
+        except (AttributeError, io.UnsupportedOperation, OSError, ValueError):
+            return False
+        else:
+            return True
+
+    if not _stdout_has_fileno():
+        with open(os.devnull, "w") as _devnull:
+            _old_stdout, _old_stderr = sys.stdout, sys.stderr
+            sys.stdout = sys.stderr = _devnull
+            try:
+                with db:
+                    zone = cast(
+                        ZoneComponent,
+                        selector.get_component(context=semantic_field_context, db=db),
+                    )
+            finally:
+                sys.stdout, sys.stderr = _old_stdout, _old_stderr
+                _devnull.close()
+    else:
+        with db:
+            zone = cast(
+                ZoneComponent,
+                selector.get_component(context=semantic_field_context, db=db),
+            )
+    return zone
+
+
 @dataclass
 class ModelRunResults:
     """The results of a model run."""
@@ -1219,14 +1301,6 @@ class ModelRunResults:
 
 
 if __name__ == "__main__":
-    import yaml
-
-    from epinterface.sbem.components.composer import (
-        construct_composer_model,
-        construct_graph,
-    )
-    from epinterface.sbem.prisma.client import PrismaSettings
-
     with tempfile.TemporaryDirectory() as temp_dir:
         # database_path = Path("/Users/daryaguettler/globi/data/Brazil/components-lib.db")
         # component_map_path = Path(
