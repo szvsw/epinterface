@@ -69,6 +69,7 @@ class StructuralTemplate:
     cavity_depth_m: float | None
     framing_material_name: str | None = None
     framing_fraction: float | None = None
+    framing_path_r_value: float | None = None
     uninsulated_cavity_r_value: float = 0.17
     cavity_r_correction_factor: float = 1.0
 
@@ -106,10 +107,16 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
     ),
     "steel_joist": StructuralTemplate(
         material_name=STEEL_PANEL.Name,
-        thickness_m=0.006,
+        thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.180,
-        cavity_r_correction_factor=0.62,
+        framing_material_name=STEEL_PANEL.Name,
+        framing_fraction=0.08,
+        # Calibrated to reproduce ~60-65% effective batt R for steel-joist roofs.
+        # References:
+        # - ASHRAE Standard 90.1 Appendix A (metal-framing correction methodology)
+        # - COMcheck steel-framed roof U-factor datasets (effective-R behavior)
+        framing_path_r_value=0.35,
     ),
     "metal_deck": StructuralTemplate(
         material_name=STEEL_PANEL.Name,
@@ -339,6 +346,7 @@ def _make_consolidated_cavity_material(
     cavity_depth_m: float,
     framing_material_name: str,
     framing_fraction: float,
+    framing_path_r_value: float | None,
     nominal_cavity_insulation_r: float,
     uninsulated_cavity_r_value: float,
 ) -> ConstructionMaterialComponent:
@@ -349,7 +357,11 @@ def _make_consolidated_cavity_material(
         if nominal_cavity_insulation_r > 0
         else uninsulated_cavity_r_value
     )
-    framing_r = cavity_depth_m / framing_material.Conductivity
+    framing_r = (
+        framing_path_r_value
+        if framing_path_r_value is not None
+        else cavity_depth_m / framing_material.Conductivity
+    )
     u_eq = framing_fraction / framing_r + (1 - framing_fraction) / fill_r
     r_eq = 1 / u_eq
     conductivity_eq = cavity_depth_m / r_eq
@@ -425,6 +437,7 @@ def build_roof_assembly(
             framing_material_name=template.framing_material_name
             or SOFTWOOD_GENERAL.Name,
             framing_fraction=template.framing_fraction or 0.0,
+            framing_path_r_value=template.framing_path_r_value,
             nominal_cavity_insulation_r=roof.effective_nominal_cavity_insulation_r,
             uninsulated_cavity_r_value=template.uninsulated_cavity_r_value,
         )

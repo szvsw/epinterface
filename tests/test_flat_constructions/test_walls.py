@@ -101,6 +101,33 @@ def test_woodframe_uses_consolidated_cavity_layer() -> None:
     assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
 
 
+def test_light_gauge_steel_uses_effective_framing_path() -> None:
+    """Steel framing should use an effective framing-path R, not solid steel conduction."""
+    wall = SemiFlatWallConstruction(
+        structural_system="light_gauge_steel",
+        nominal_cavity_insulation_r=2.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    assembly = build_facade_assembly(wall)
+    steel_template = STRUCTURAL_TEMPLATES["light_gauge_steel"]
+    cavity_layer = assembly.sorted_layers[0]
+
+    assert cavity_layer.ConstructionMaterial.Name.startswith(
+        "ConsolidatedCavity_light_gauge_steel"
+    )
+    assert steel_template.framing_fraction is not None
+    assert steel_template.framing_path_r_value is not None
+
+    r_eq_expected = 1 / (
+        steel_template.framing_fraction / steel_template.framing_path_r_value
+        + (1 - steel_template.framing_fraction) / 2.0
+    )
+    assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
+
+
 def test_wall_feature_dict_has_fixed_length() -> None:
     """Feature dictionary should remain fixed-length across wall variants."""
     wall = SemiFlatWallConstruction(

@@ -143,6 +143,33 @@ def test_light_wood_truss_uses_consolidated_cavity_layer() -> None:
     assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
 
 
+def test_steel_joist_uses_effective_framing_path() -> None:
+    """Steel joists should use an effective framing-path R-value model."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="steel_joist",
+        nominal_cavity_insulation_r=3.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    assembly = build_roof_assembly(roof)
+    joist_template = ROOF_STRUCTURAL_TEMPLATES["steel_joist"]
+    cavity_layer = assembly.sorted_layers[0]
+
+    assert cavity_layer.ConstructionMaterial.Name.startswith(
+        "ConsolidatedCavity_steel_joist"
+    )
+    assert joist_template.framing_fraction is not None
+    assert joist_template.framing_path_r_value is not None
+
+    r_eq_expected = 1 / (
+        joist_template.framing_fraction / joist_template.framing_path_r_value
+        + (1 - joist_template.framing_fraction) / 3.0
+    )
+    assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
+
+
 def test_build_slab_assembly_from_nominal_r_values() -> None:
     """Slab assembly should reflect nominal slab insulation inputs."""
     slab = SemiFlatSlabConstruction(
