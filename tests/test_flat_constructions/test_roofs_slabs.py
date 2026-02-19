@@ -433,7 +433,7 @@ def test_cement_screed_slab_finish_round_trip() -> None:
         interior_finish="cement_screed",
     )
     assembly = build_slab_assembly(slab)
-    inner_layer = assembly.sorted_layers[0]
+    inner_layer = assembly.sorted_layers[-1]
     assert inner_layer.ConstructionMaterial.Name == "CementMortar"
     assert inner_layer.Thickness == pytest.approx(0.02)
 

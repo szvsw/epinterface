@@ -342,6 +342,7 @@ def build_roof_assembly(
     name: str = "Roof",
 ) -> ConstructionAssemblyComponent:
     """Translate semi-flat roof inputs into a concrete roof assembly."""
+    # EnergyPlus convention: layer 0 is outermost (outside -> inside).
     template = STRUCTURAL_TEMPLATES[roof.structural_system]
     layers: list[ConstructionLayerComponent] = []
     layer_order = 0

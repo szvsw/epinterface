@@ -474,6 +474,7 @@ def build_facade_assembly(
     name: str = "Facade",
 ) -> ConstructionAssemblyComponent:
     """Translate semi-flat wall inputs into a concrete facade assembly."""
+    # EnergyPlus convention: layer 0 is outermost (outside -> inside).
     template = STRUCTURAL_TEMPLATES[wall.structural_system]
     layers: list[ConstructionLayerComponent] = []
     layer_order = 0

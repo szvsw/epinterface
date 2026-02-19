@@ -247,17 +247,17 @@ def build_slab_assembly(
     name: str = "GroundSlabAssembly",
 ) -> ConstructionAssemblyComponent:
     """Translate semi-flat slab inputs into a concrete slab assembly."""
-    # TODO: check the order of layers to make sure external vs internal is in correct order
+    # EnergyPlus convention: layer 0 is outermost (outside -> inside).
     template = STRUCTURAL_TEMPLATES[slab.structural_system]
     layers: list[ConstructionLayerComponent] = []
     layer_order = 0
 
-    interior_finish = INTERIOR_FINISH_TEMPLATES[slab.interior_finish]
-    if interior_finish is not None:
+    exterior_finish = EXTERIOR_FINISH_TEMPLATES[slab.exterior_finish]
+    if exterior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(interior_finish.material_name),
-                Thickness=interior_finish.thickness_m,
+                ConstructionMaterial=resolve_material(exterior_finish.material_name),
+                Thickness=exterior_finish.thickness_m,
                 LayerOrder=layer_order,
             )
         )
@@ -266,7 +266,7 @@ def build_slab_assembly(
     slab_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[slab.insulation_material]
 
     if (
-        slab.effective_insulation_placement == "above_slab"
+        slab.effective_insulation_placement == "under_slab"
         and slab.effective_nominal_insulation_r > 0
     ):
         layers.append(
@@ -288,7 +288,7 @@ def build_slab_assembly(
     layer_order += 1
 
     if (
-        slab.effective_insulation_placement == "under_slab"
+        slab.effective_insulation_placement == "above_slab"
         and slab.effective_nominal_insulation_r > 0
     ):
         layers.append(
@@ -300,12 +300,12 @@ def build_slab_assembly(
         )
         layer_order += 1
 
-    exterior_finish = EXTERIOR_FINISH_TEMPLATES[slab.exterior_finish]
-    if exterior_finish is not None:
+    interior_finish = INTERIOR_FINISH_TEMPLATES[slab.interior_finish]
+    if interior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(exterior_finish.material_name),
-                Thickness=exterior_finish.thickness_m,
+                ConstructionMaterial=resolve_material(interior_finish.material_name),
+                Thickness=interior_finish.thickness_m,
                 LayerOrder=layer_order,
             )
         )
