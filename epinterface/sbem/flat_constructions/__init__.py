@@ -1,6 +1,10 @@
 """Semi-flat construction translators for SBEM flat models."""
 
 from epinterface.sbem.flat_constructions.assemblies import build_envelope_assemblies
+from epinterface.sbem.flat_constructions.audit import (
+    AuditIssue,
+    run_physical_sanity_audit,
+)
 from epinterface.sbem.flat_constructions.roofs import (
     RoofExteriorFinish,
     RoofInteriorFinish,
@@ -11,6 +15,7 @@ from epinterface.sbem.flat_constructions.roofs import (
 from epinterface.sbem.flat_constructions.slabs import (
     SemiFlatSlabConstruction,
     SlabExteriorFinish,
+    SlabInsulationPlacement,
     SlabInteriorFinish,
     SlabStructuralSystem,
     build_slab_assembly,
@@ -24,6 +29,7 @@ from epinterface.sbem.flat_constructions.walls import (
 )
 
 __all__ = [
+    "AuditIssue",
     "RoofExteriorFinish",
     "RoofInteriorFinish",
     "RoofStructuralSystem",
@@ -31,6 +37,7 @@ __all__ = [
     "SemiFlatSlabConstruction",
     "SemiFlatWallConstruction",
     "SlabExteriorFinish",
+    "SlabInsulationPlacement",
     "SlabInteriorFinish",
     "SlabStructuralSystem",
     "WallExteriorFinish",
@@ -40,4 +47,5 @@ __all__ = [
     "build_facade_assembly",
     "build_roof_assembly",
     "build_slab_assembly",
+    "run_physical_sanity_audit",
 ]

@@ -66,6 +66,7 @@ class StructuralTemplate:
     thickness_m: float
     supports_cavity_insulation: bool
     cavity_depth_m: float | None
+    cavity_r_correction_factor: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -85,25 +86,28 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
     ),
     "light_wood_truss": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.140,
+        thickness_m=0.040,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
+        cavity_r_correction_factor=0.82,
     ),
     "deep_wood_truss": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.240,
+        thickness_m=0.060,
         supports_cavity_insulation=True,
         cavity_depth_m=0.240,
+        cavity_r_correction_factor=0.82,
     ),
     "steel_joist": StructuralTemplate(
         material_name=STEEL_PANEL.Name,
-        thickness_m=0.004,
+        thickness_m=0.006,
         supports_cavity_insulation=True,
         cavity_depth_m=0.180,
+        cavity_r_correction_factor=0.62,
     ),
     "metal_deck": StructuralTemplate(
         material_name=STEEL_PANEL.Name,
-        thickness_m=0.008,
+        thickness_m=0.0015,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
@@ -115,7 +119,7 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
     ),
     "precast_concrete": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
-        thickness_m=0.200,
+        thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
@@ -127,7 +131,7 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
     ),
     "reinforced_concrete": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
-        thickness_m=0.220,
+        thickness_m=0.200,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
@@ -350,10 +354,14 @@ def build_roof_assembly(
     layer_order += 1
 
     if roof.effective_nominal_cavity_insulation_r > 0:
+        effective_cavity_r = (
+            roof.effective_nominal_cavity_insulation_r
+            * template.cavity_r_correction_factor
+        )
         layers.append(
             _nominal_r_insulation_layer(
                 material_name=FIBERGLASS_BATTS.Name,
-                nominal_r_value=roof.effective_nominal_cavity_insulation_r,
+                nominal_r_value=effective_cavity_r,
                 layer_order=layer_order,
             )
         )

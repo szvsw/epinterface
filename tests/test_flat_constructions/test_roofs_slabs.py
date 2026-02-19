@@ -3,6 +3,12 @@
 import pytest
 
 from epinterface.sbem.flat_constructions import build_envelope_assemblies
+from epinterface.sbem.flat_constructions.materials import (
+    CERAMIC_TILE,
+    CONCRETE_RC_DENSE,
+    GYPSUM_BOARD,
+    ROOF_MEMBRANE,
+)
 from epinterface.sbem.flat_constructions.roofs import (
     ALL_ROOF_EXTERIOR_FINISHES,
     ALL_ROOF_INTERIOR_FINISHES,
@@ -10,12 +16,19 @@ from epinterface.sbem.flat_constructions.roofs import (
     SemiFlatRoofConstruction,
     build_roof_assembly,
 )
+from epinterface.sbem.flat_constructions.roofs import (
+    STRUCTURAL_TEMPLATES as ROOF_STRUCTURAL_TEMPLATES,
+)
 from epinterface.sbem.flat_constructions.slabs import (
     ALL_SLAB_EXTERIOR_FINISHES,
+    ALL_SLAB_INSULATION_PLACEMENTS,
     ALL_SLAB_INTERIOR_FINISHES,
     ALL_SLAB_STRUCTURAL_SYSTEMS,
     SemiFlatSlabConstruction,
     build_slab_assembly,
+)
+from epinterface.sbem.flat_constructions.slabs import (
+    STRUCTURAL_TEMPLATES as SLAB_STRUCTURAL_TEMPLATES,
 )
 from epinterface.sbem.flat_constructions.walls import SemiFlatWallConstruction
 
@@ -33,7 +46,14 @@ def test_build_roof_assembly_from_nominal_r_values() -> None:
     assembly = build_roof_assembly(roof)
 
     # R_total = membrane + ext_ins + concrete + int_ins + gypsum
-    expected_r = (0.005 / 0.16) + 2.0 + (0.18 / 1.75) + 0.3 + (0.0127 / 0.16)
+    poured_template = ROOF_STRUCTURAL_TEMPLATES["poured_concrete"]
+    expected_r = (
+        (0.005 / ROOF_MEMBRANE.Conductivity)
+        + 2.0
+        + (poured_template.thickness_m / CONCRETE_RC_DENSE.Conductivity)
+        + 0.3
+        + (0.0127 / GYPSUM_BOARD.Conductivity)
+    )
     assert assembly.Type == "FlatRoof"
     assert assembly.r_value == pytest.approx(expected_r, rel=1e-6)
 
@@ -98,16 +118,20 @@ def test_build_slab_assembly_from_nominal_r_values() -> None:
     """Slab assembly should reflect nominal slab insulation inputs."""
     slab = SemiFlatSlabConstruction(
         structural_system="slab_on_grade",
-        nominal_under_slab_insulation_r=1.5,
-        nominal_above_slab_insulation_r=0.5,
-        nominal_cavity_insulation_r=0.0,
+        nominal_insulation_r=1.5,
+        insulation_placement="auto",
         interior_finish="tile",
         exterior_finish="none",
     )
     assembly = build_slab_assembly(slab)
 
-    # R_total = interior tile + above insulation + concrete slab + under insulation
-    expected_r = (0.015 / 0.8) + 0.5 + (0.15 / 1.75) + 1.5
+    slab_template = SLAB_STRUCTURAL_TEMPLATES["slab_on_grade"]
+    # R_total = interior tile + concrete slab + under-slab insulation
+    expected_r = (
+        (0.015 / CERAMIC_TILE.Conductivity)
+        + (slab_template.thickness_m / CONCRETE_RC_DENSE.Conductivity)
+        + 1.5
+    )
     assert assembly.Type == "GroundSlab"
     assert assembly.r_value == pytest.approx(expected_r, rel=1e-6)
 
@@ -116,9 +140,8 @@ def test_non_ground_slab_treats_under_slab_r_as_dead_feature() -> None:
     """Under-slab insulation should become a no-op for suspended slabs."""
     slab = SemiFlatSlabConstruction(
         structural_system="reinforced_concrete_suspended",
-        nominal_under_slab_insulation_r=2.0,
-        nominal_above_slab_insulation_r=0.0,
-        nominal_cavity_insulation_r=0.0,
+        nominal_insulation_r=2.0,
+        insulation_placement="under_slab",
         interior_finish="none",
         exterior_finish="none",
     )
@@ -127,38 +150,36 @@ def test_non_ground_slab_treats_under_slab_r_as_dead_feature() -> None:
         layer.ConstructionMaterial.Name for layer in assembly.sorted_layers
     ]
 
-    assert slab.effective_nominal_under_slab_insulation_r == 0.0
-    assert "nominal_under_slab_insulation_r" in slab.ignored_feature_names
+    assert slab.effective_nominal_insulation_r == 0.0
+    assert "nominal_insulation_r" in slab.ignored_feature_names
     assert "XPSBoard" not in layer_material_names
 
 
-def test_slab_validator_rejects_unrealistic_cavity_r_for_depth() -> None:
-    """Slab cavity insulation R should be limited by assumed cavity depth."""
-    with pytest.raises(
-        ValueError,
-        match="cavity-depth-compatible limit",
-    ):
-        SemiFlatSlabConstruction(
-            structural_system="mass_timber_deck",
-            nominal_cavity_insulation_r=3.3,
-        )
+def test_slab_auto_placement_uses_under_slab_for_ground_supported_system() -> None:
+    """Auto placement should use under-slab insulation when support exists."""
+    slab = SemiFlatSlabConstruction(
+        structural_system="slab_on_grade",
+        nominal_insulation_r=1.0,
+        insulation_placement="auto",
+    )
+    assert slab.effective_insulation_placement == "under_slab"
 
 
 def test_slab_feature_dict_has_fixed_length() -> None:
     """Slab feature dictionary should remain fixed-length across variants."""
     slab = SemiFlatSlabConstruction(
         structural_system="precast_hollow_core",
-        nominal_under_slab_insulation_r=0.0,
-        nominal_above_slab_insulation_r=0.8,
-        nominal_cavity_insulation_r=1.6,
+        nominal_insulation_r=0.8,
+        insulation_placement="above_slab",
         interior_finish="carpet",
         exterior_finish="gypsum_board",
     )
     features = slab.to_feature_dict(prefix="Slab")
 
     expected_length = (
-        5
+        2
         + len(ALL_SLAB_STRUCTURAL_SYSTEMS)
+        + len(ALL_SLAB_INSULATION_PLACEMENTS) * 2
         + len(ALL_SLAB_INTERIOR_FINISHES)
         + len(ALL_SLAB_EXTERIOR_FINISHES)
     )
@@ -189,9 +210,8 @@ def test_build_envelope_assemblies_with_surface_specific_specs() -> None:
         ),
         slab=SemiFlatSlabConstruction(
             structural_system="slab_on_grade",
-            nominal_under_slab_insulation_r=1.4,
-            nominal_above_slab_insulation_r=0.2,
-            nominal_cavity_insulation_r=0.0,
+            nominal_insulation_r=1.4,
+            insulation_placement="auto",
             interior_finish="tile",
             exterior_finish="none",
         ),

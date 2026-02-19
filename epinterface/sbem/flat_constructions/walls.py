@@ -68,6 +68,7 @@ class StructuralTemplate:
     thickness_m: float
     supports_cavity_insulation: bool
     cavity_depth_m: float | None
+    cavity_r_correction_factor: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -93,9 +94,10 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
     ),
     "light_gauge_steel": StructuralTemplate(
         material_name=STEEL_PANEL.Name,
-        thickness_m=0.002,
+        thickness_m=0.004,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
+        cavity_r_correction_factor=0.55,
     ),
     "structural_steel": StructuralTemplate(
         material_name=STEEL_PANEL.Name,
@@ -105,27 +107,31 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
     ),
     "woodframe": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.090,
+        thickness_m=0.030,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
+        cavity_r_correction_factor=0.78,
     ),
     "deep_woodframe": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.140,
+        thickness_m=0.045,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
+        cavity_r_correction_factor=0.78,
     ),
     "woodframe_24oc": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.090,
+        thickness_m=0.024,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
+        cavity_r_correction_factor=0.84,
     ),
     "deep_woodframe_24oc": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
-        thickness_m=0.140,
+        thickness_m=0.036,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
+        cavity_r_correction_factor=0.84,
     ),
     "engineered_timber": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
@@ -135,31 +141,33 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
     ),
     "cmu": StructuralTemplate(
         material_name=CONCRETE_BLOCK_H.Name,
-        thickness_m=0.200,
+        thickness_m=0.190,
         supports_cavity_insulation=True,
         cavity_depth_m=0.090,
+        cavity_r_correction_factor=0.90,
     ),
     "double_layer_cmu": StructuralTemplate(
         material_name=CONCRETE_BLOCK_H.Name,
-        thickness_m=0.300,
+        thickness_m=0.290,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
+        cavity_r_correction_factor=0.92,
     ),
     "precast_concrete": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
-        thickness_m=0.200,
+        thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "poured_concrete": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
-        thickness_m=0.200,
+        thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "masonry": StructuralTemplate(
         material_name=CLAY_BRICK.Name,
-        thickness_m=0.200,
+        thickness_m=0.190,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
@@ -171,7 +179,7 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
     ),
     "reinforced_concrete": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
-        thickness_m=0.250,
+        thickness_m=0.200,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
@@ -391,10 +399,14 @@ def build_facade_assembly(
     layer_order += 1
 
     if wall.effective_nominal_cavity_insulation_r > 0:
+        effective_cavity_r = (
+            wall.effective_nominal_cavity_insulation_r
+            * template.cavity_r_correction_factor
+        )
         layers.append(
             _nominal_r_insulation_layer(
                 material_name=FIBERGLASS_BATTS.Name,
-                nominal_r_value=wall.effective_nominal_cavity_insulation_r,
+                nominal_r_value=effective_cavity_r,
                 layer_order=layer_order,
             )
         )

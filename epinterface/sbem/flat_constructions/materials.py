@@ -44,17 +44,17 @@ POLYISO_BOARD = _material(
 
 CONCRETE_MC_LIGHT = _material(
     name="ConcreteMC_Light",
-    conductivity=1.65,
-    density=2100,
-    specific_heat=1040,
+    conductivity=1.20,
+    density=1700,
+    specific_heat=900,
     mat_type="Concrete",
 )
 
 CONCRETE_RC_DENSE = _material(
     name="ConcreteRC_Dense",
-    conductivity=1.75,
-    density=2400,
-    specific_heat=840,
+    conductivity=1.95,
+    density=2300,
+    specific_heat=900,
     mat_type="Concrete",
 )
 
@@ -76,24 +76,24 @@ GYPSUM_PLASTER = _material(
 
 SOFTWOOD_GENERAL = _material(
     name="SoftwoodGeneral",
-    conductivity=0.13,
-    density=496,
+    conductivity=0.12,
+    density=500,
     specific_heat=1630,
     mat_type="Timber",
 )
 
 CLAY_BRICK = _material(
     name="ClayBrick",
-    conductivity=0.41,
-    density=1000,
-    specific_heat=920,
+    conductivity=0.69,
+    density=1700,
+    specific_heat=840,
     mat_type="Masonry",
 )
 
 CONCRETE_BLOCK_H = _material(
     name="ConcreteBlockH",
-    conductivity=1.25,
-    density=880,
+    conductivity=0.51,
+    density=1100,
     specific_heat=840,
     mat_type="Concrete",
 )
@@ -108,24 +108,24 @@ FIBERGLASS_BATTS = _material(
 
 CEMENT_MORTAR = _material(
     name="CementMortar",
-    conductivity=0.8,
-    density=1900,
+    conductivity=0.72,
+    density=1850,
     specific_heat=840,
     mat_type="Other",
 )
 
 CERAMIC_TILE = _material(
     name="CeramicTile",
-    conductivity=0.8,
-    density=2243,
+    conductivity=1.05,
+    density=2000,
     specific_heat=840,
     mat_type="Finishes",
 )
 
 URETHANE_CARPET = _material(
     name="UrethaneCarpet",
-    conductivity=0.045,
-    density=110,
+    conductivity=0.06,
+    density=160,
     specific_heat=840,
     mat_type="Finishes",
 )
@@ -140,8 +140,8 @@ STEEL_PANEL = _material(
 
 RAMMED_EARTH = _material(
     name="RammedEarth",
-    conductivity=1.30,
-    density=2000,
+    conductivity=1.10,
+    density=1900,
     specific_heat=1000,
     mat_type="Masonry",
 )
@@ -156,15 +156,15 @@ SIP_CORE = _material(
 
 FIBER_CEMENT_BOARD = _material(
     name="FiberCementBoard",
-    conductivity=0.30,
-    density=1300,
+    conductivity=0.35,
+    density=1350,
     specific_heat=840,
     mat_type="Siding",
 )
 
 ROOF_MEMBRANE = _material(
     name="RoofMembrane",
-    conductivity=0.16,
+    conductivity=0.17,
     density=1200,
     specific_heat=900,
     mat_type="Sealing",
@@ -172,7 +172,7 @@ ROOF_MEMBRANE = _material(
 
 COOL_ROOF_MEMBRANE = _material(
     name="CoolRoofMembrane",
-    conductivity=0.16,
+    conductivity=0.17,
     density=1200,
     specific_heat=900,
     mat_type="Sealing",
@@ -180,8 +180,8 @@ COOL_ROOF_MEMBRANE = _material(
 
 ACOUSTIC_TILE = _material(
     name="AcousticTile",
-    conductivity=0.06,
-    density=300,
+    conductivity=0.065,
+    density=280,
     specific_heat=840,
     mat_type="Boards",
 )

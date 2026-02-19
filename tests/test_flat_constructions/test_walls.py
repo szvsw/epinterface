@@ -2,10 +2,16 @@
 
 import pytest
 
+from epinterface.sbem.flat_constructions.materials import (
+    CEMENT_MORTAR,
+    CONCRETE_BLOCK_H,
+    GYPSUM_BOARD,
+)
 from epinterface.sbem.flat_constructions.walls import (
     ALL_WALL_EXTERIOR_FINISHES,
     ALL_WALL_INTERIOR_FINISHES,
     ALL_WALL_STRUCTURAL_SYSTEMS,
+    STRUCTURAL_TEMPLATES,
     SemiFlatWallConstruction,
     build_facade_assembly,
 )
@@ -25,7 +31,15 @@ def test_build_facade_assembly_from_nominal_r_values() -> None:
     assembly = build_facade_assembly(wall)
 
     # R_total = stucco + ext_ins + cmu + cavity + int_ins + drywall
-    expected_r = 0.025 + 2.0 + (0.2 / 1.25) + 1.0 + 0.5 + (0.0127 / 0.16)
+    cmu_template = STRUCTURAL_TEMPLATES["cmu"]
+    expected_r = (
+        0.020 / CEMENT_MORTAR.Conductivity
+        + 2.0
+        + (cmu_template.thickness_m / CONCRETE_BLOCK_H.Conductivity)
+        + (1.0 * cmu_template.cavity_r_correction_factor)
+        + 0.5
+        + (0.0127 / GYPSUM_BOARD.Conductivity)
+    )
     assert assembly.Type == "Facade"
     assert assembly.r_value == pytest.approx(expected_r, rel=1e-6)
 

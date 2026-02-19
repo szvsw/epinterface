@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal, get_args
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
@@ -14,7 +14,6 @@ from epinterface.sbem.flat_constructions.materials import (
     CERAMIC_TILE,
     CONCRETE_MC_LIGHT,
     CONCRETE_RC_DENSE,
-    FIBERGLASS_BATTS,
     GYPSUM_BOARD,
     GYPSUM_PLASTER,
     MATERIALS_BY_NAME,
@@ -33,6 +32,7 @@ SlabStructuralSystem = Literal[
     "mass_timber_deck",
     "sip_floor",
 ]
+SlabInsulationPlacement = Literal["auto", "under_slab", "above_slab"]
 
 SlabInteriorFinish = Literal[
     "none",
@@ -44,6 +44,7 @@ SlabInteriorFinish = Literal[
 SlabExteriorFinish = Literal["none", "gypsum_board", "plaster"]
 
 ALL_SLAB_STRUCTURAL_SYSTEMS = get_args(SlabStructuralSystem)
+ALL_SLAB_INSULATION_PLACEMENTS = get_args(SlabInsulationPlacement)
 ALL_SLAB_INTERIOR_FINISHES = get_args(SlabInteriorFinish)
 ALL_SLAB_EXTERIOR_FINISHES = get_args(SlabExteriorFinish)
 
@@ -55,8 +56,6 @@ class StructuralTemplate:
     material_name: str
     thickness_m: float
     supports_under_insulation: bool
-    supports_cavity_insulation: bool
-    cavity_depth_m: float | None
 
 
 @dataclass(frozen=True)
@@ -72,50 +71,36 @@ STRUCTURAL_TEMPLATES: dict[SlabStructuralSystem, StructuralTemplate] = {
         material_name=CONCRETE_MC_LIGHT.Name,
         thickness_m=0.05,
         supports_under_insulation=False,
-        supports_cavity_insulation=False,
-        cavity_depth_m=None,
     ),
     "slab_on_grade": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
         thickness_m=0.15,
         supports_under_insulation=True,
-        supports_cavity_insulation=False,
-        cavity_depth_m=None,
     ),
     "thickened_edge_slab": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
         thickness_m=0.20,
         supports_under_insulation=True,
-        supports_cavity_insulation=False,
-        cavity_depth_m=None,
     ),
     "reinforced_concrete_suspended": StructuralTemplate(
         material_name=CONCRETE_RC_DENSE.Name,
         thickness_m=0.18,
         supports_under_insulation=False,
-        supports_cavity_insulation=False,
-        cavity_depth_m=None,
     ),
     "precast_hollow_core": StructuralTemplate(
         material_name=CONCRETE_MC_LIGHT.Name,
         thickness_m=0.20,
         supports_under_insulation=False,
-        supports_cavity_insulation=True,
-        cavity_depth_m=0.08,
     ),
     "mass_timber_deck": StructuralTemplate(
         material_name=SOFTWOOD_GENERAL.Name,
         thickness_m=0.18,
         supports_under_insulation=False,
-        supports_cavity_insulation=True,
-        cavity_depth_m=0.12,
     ),
     "sip_floor": StructuralTemplate(
         material_name=SIP_CORE.Name,
         thickness_m=0.18,
         supports_under_insulation=False,
-        supports_cavity_insulation=False,
-        cavity_depth_m=None,
     ),
 }
 
@@ -159,20 +144,14 @@ class SemiFlatSlabConstruction(BaseModel):
         default="slab_on_grade",
         title="Slab structural system for mass assumptions",
     )
-    nominal_under_slab_insulation_r: float = Field(
+    nominal_insulation_r: float = Field(
         default=0.0,
         ge=0,
-        title="Nominal under-slab insulation R-value [m²K/W]",
+        title="Nominal slab insulation R-value [m²K/W]",
     )
-    nominal_above_slab_insulation_r: float = Field(
-        default=0.0,
-        ge=0,
-        title="Nominal above-slab insulation R-value [m²K/W]",
-    )
-    nominal_cavity_insulation_r: float = Field(
-        default=0.0,
-        ge=0,
-        title="Nominal slab cavity insulation R-value [m²K/W]",
+    insulation_placement: SlabInsulationPlacement = Field(
+        default="auto",
+        title="Slab insulation placement",
     )
     interior_finish: SlabInteriorFinish = Field(
         default="tile",
@@ -184,20 +163,25 @@ class SemiFlatSlabConstruction(BaseModel):
     )
 
     @property
-    def effective_nominal_under_slab_insulation_r(self) -> float:
-        """Return under-slab insulation R-value after compatibility defaults."""
+    def effective_insulation_placement(self) -> SlabInsulationPlacement:
+        """Return insulation placement after applying compatibility defaults."""
+        if self.insulation_placement != "auto":
+            return self.insulation_placement
         template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if not template.supports_under_insulation:
-            return 0.0
-        return self.nominal_under_slab_insulation_r
+        return "under_slab" if template.supports_under_insulation else "above_slab"
 
     @property
-    def effective_nominal_cavity_insulation_r(self) -> float:
-        """Return cavity insulation R-value after compatibility defaults."""
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if not template.supports_cavity_insulation:
+    def effective_nominal_insulation_r(self) -> float:
+        """Return insulation R-value after applying compatibility defaults."""
+        if self.nominal_insulation_r == 0:
             return 0.0
-        return self.nominal_cavity_insulation_r
+        template = STRUCTURAL_TEMPLATES[self.structural_system]
+        if (
+            self.effective_insulation_placement == "under_slab"
+            and not template.supports_under_insulation
+        ):
+            return 0.0
+        return self.nominal_insulation_r
 
     @property
     def ignored_feature_names(self) -> tuple[str, ...]:
@@ -205,60 +189,32 @@ class SemiFlatSlabConstruction(BaseModel):
         ignored: list[str] = []
         template = STRUCTURAL_TEMPLATES[self.structural_system]
         if (
-            not template.supports_under_insulation
-            and self.nominal_under_slab_insulation_r > 0
+            self.insulation_placement == "under_slab"
+            and not template.supports_under_insulation
+            and self.nominal_insulation_r > 0
         ):
-            ignored.append("nominal_under_slab_insulation_r")
-        if (
-            not template.supports_cavity_insulation
-            and self.nominal_cavity_insulation_r > 0
-        ):
-            ignored.append("nominal_cavity_insulation_r")
+            ignored.append("nominal_insulation_r")
+            ignored.append("insulation_placement")
         return tuple(ignored)
-
-    @model_validator(mode="after")
-    def validate_cavity_r_against_assumed_depth(self):
-        """Guard impossible cavity R-values for cavity-compatible systems."""
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if (
-            not template.supports_cavity_insulation
-            or template.cavity_depth_m is None
-            or self.nominal_cavity_insulation_r == 0
-        ):
-            return self
-
-        assumed_cavity_insulation_conductivity = FIBERGLASS_BATTS.Conductivity
-        max_nominal_r = template.cavity_depth_m / assumed_cavity_insulation_conductivity
-        tolerance_r = 0.2
-        if self.nominal_cavity_insulation_r > max_nominal_r + tolerance_r:
-            msg = (
-                f"Nominal cavity insulation R-value ({self.nominal_cavity_insulation_r:.2f} "
-                f"m²K/W) exceeds the assumed cavity-depth-compatible limit for "
-                f"{self.structural_system} ({max_nominal_r:.2f} m²K/W)."
-            )
-            raise ValueError(msg)
-        return self
 
     def to_feature_dict(self, prefix: str = "Slab") -> dict[str, float]:
         """Return a fixed-length numeric feature dictionary for ML workflows."""
         features: dict[str, float] = {
-            f"{prefix}NominalUnderSlabInsulationRValue": (
-                self.nominal_under_slab_insulation_r
-            ),
-            f"{prefix}NominalAboveSlabInsulationRValue": (
-                self.nominal_above_slab_insulation_r
-            ),
-            f"{prefix}NominalCavityInsulationRValue": self.nominal_cavity_insulation_r,
-            f"{prefix}EffectiveNominalUnderSlabInsulationRValue": (
-                self.effective_nominal_under_slab_insulation_r
-            ),
-            f"{prefix}EffectiveNominalCavityInsulationRValue": (
-                self.effective_nominal_cavity_insulation_r
+            f"{prefix}NominalInsulationRValue": self.nominal_insulation_r,
+            f"{prefix}EffectiveNominalInsulationRValue": (
+                self.effective_nominal_insulation_r
             ),
         }
         for structural_system in ALL_SLAB_STRUCTURAL_SYSTEMS:
             features[f"{prefix}StructuralSystem__{structural_system}"] = float(
                 self.structural_system == structural_system
+            )
+        for placement in ALL_SLAB_INSULATION_PLACEMENTS:
+            features[f"{prefix}InsulationPlacement__{placement}"] = float(
+                self.insulation_placement == placement
+            )
+            features[f"{prefix}EffectiveInsulationPlacement__{placement}"] = float(
+                self.effective_insulation_placement == placement
             )
         for interior_finish in ALL_SLAB_INTERIOR_FINISHES:
             features[f"{prefix}InteriorFinish__{interior_finish}"] = float(
@@ -322,11 +278,14 @@ def build_slab_assembly(
         )
         layer_order += 1
 
-    if slab.nominal_above_slab_insulation_r > 0:
+    if (
+        slab.effective_insulation_placement == "above_slab"
+        and slab.effective_nominal_insulation_r > 0
+    ):
         layers.append(
             _nominal_r_insulation_layer(
                 material_name=XPS_BOARD.Name,
-                nominal_r_value=slab.nominal_above_slab_insulation_r,
+                nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )
         )
@@ -341,21 +300,14 @@ def build_slab_assembly(
     )
     layer_order += 1
 
-    if slab.effective_nominal_cavity_insulation_r > 0:
-        layers.append(
-            _nominal_r_insulation_layer(
-                material_name=FIBERGLASS_BATTS.Name,
-                nominal_r_value=slab.effective_nominal_cavity_insulation_r,
-                layer_order=layer_order,
-            )
-        )
-        layer_order += 1
-
-    if slab.effective_nominal_under_slab_insulation_r > 0:
+    if (
+        slab.effective_insulation_placement == "under_slab"
+        and slab.effective_nominal_insulation_r > 0
+    ):
         layers.append(
             _nominal_r_insulation_layer(
                 material_name=XPS_BOARD.Name,
-                nominal_r_value=slab.effective_nominal_under_slab_insulation_r,
+                nominal_r_value=slab.effective_nominal_insulation_r,
                 layer_order=layer_order,
             )
         )

@@ -65,6 +65,9 @@ from epinterface.sbem.flat_constructions import (
     SlabExteriorFinish as SlabExteriorFinishType,
 )
 from epinterface.sbem.flat_constructions import (
+    SlabInsulationPlacement as SlabInsulationPlacementType,
+)
+from epinterface.sbem.flat_constructions import (
     SlabInteriorFinish as SlabInteriorFinishType,
 )
 from epinterface.sbem.flat_constructions import (
@@ -797,9 +800,8 @@ class FlatModel(BaseModel):
     RoofExteriorFinish: RoofExteriorFinishType = "epdm_membrane"
 
     SlabStructuralSystem: SlabStructuralSystemType = "slab_on_grade"
-    SlabUnderInsulationRValue: float = Field(default=1.5, ge=0)
-    SlabAboveInsulationRValue: float = Field(default=0, ge=0)
-    SlabCavityInsulationRValue: float = Field(default=0, ge=0)
+    SlabInsulationRValue: float = Field(default=1.5, ge=0)
+    SlabInsulationPlacement: SlabInsulationPlacementType = "auto"
     SlabInteriorFinish: SlabInteriorFinishType = "tile"
     SlabExteriorFinish: SlabExteriorFinishType = "none"
 
@@ -841,9 +843,8 @@ class FlatModel(BaseModel):
         """Return the semantic slab specification."""
         return SemiFlatSlabConstruction(
             structural_system=self.SlabStructuralSystem,
-            nominal_under_slab_insulation_r=self.SlabUnderInsulationRValue,
-            nominal_above_slab_insulation_r=self.SlabAboveInsulationRValue,
-            nominal_cavity_insulation_r=self.SlabCavityInsulationRValue,
+            nominal_insulation_r=self.SlabInsulationRValue,
+            insulation_placement=self.SlabInsulationPlacement,
             interior_finish=self.SlabInteriorFinish,
             exterior_finish=self.SlabExteriorFinish,
         )
@@ -1901,9 +1902,8 @@ if __name__ == "__main__":
         RoofInteriorFinish="gypsum_board",
         RoofExteriorFinish="epdm_membrane",
         SlabStructuralSystem="slab_on_grade",
-        SlabUnderInsulationRValue=2.2,
-        SlabAboveInsulationRValue=0.0,
-        SlabCavityInsulationRValue=0.0,
+        SlabInsulationRValue=2.2,
+        SlabInsulationPlacement="auto",
         SlabInteriorFinish="tile",
         SlabExteriorFinish="none",
         WindowUValue=3.0,
