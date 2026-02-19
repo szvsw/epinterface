@@ -1,0 +1,104 @@
+fields:
+- name: income
+  field_type: numeric
+  description: Annual household income in USD. Correlates loosely with ability to
+    invest in energy upgrades.
+  data_quality_description: Self-reported on utility assistance applications. About
+    30% of rows are missing.
+  categories: null
+  min_value: 0.0
+  max_value: 500000.0
+  unit: USD/year
+- name: year_built
+  field_type: numeric
+  description: Year the building was originally constructed.
+  data_quality_description: From assessor records; generally reliable, though some
+    entries are approximate decades (e.g. 1900 for anything pre-1910).
+  categories: null
+  min_value: 1700.0
+  max_value: 2025.0
+  unit: year
+- name: building_typology
+  field_type: categorical
+  description: Building typology classification from assessor data.
+  data_quality_description: Assessor-derived, reliable.
+  categories:
+  - single_family_detached
+  - single_family_attached
+  - small_multifamily_2_4
+  - medium_multifamily_5_20
+  - large_multifamily_20_plus
+  min_value: null
+  max_value: null
+  unit: null
+- name: weatherization_status
+  field_type: categorical
+  description: Whether the building has been through a weatherization assistance program.
+  data_quality_description: From state WAP records. Only captures state-funded programs;
+    private weatherization is not tracked. About 60% of rows are missing (unknown
+    status).
+  categories:
+  - weatherized
+  - not_weatherized
+  - unknown
+  min_value: null
+  max_value: null
+  unit: null
+- name: last_renovation
+  field_type: categorical
+  description: Approximate timeframe of last known major renovation or retrofit.
+  data_quality_description: From permit records where available. Very sparse -- roughly
+    70% missing.
+  categories:
+  - never
+  - before_1980
+  - '1980_2000'
+  - '2000_2010'
+  - 2010_present
+  min_value: null
+  max_value: null
+  unit: null
+context_description: We are building energy models for a portfolio of ~5,000 residential
+  buildings in Massachusetts for a utility-funded energy efficiency program. The goal
+  is to estimate building energy use and identify retrofit opportunities. Data is
+  sparse and of mixed quality.
+region_description: Massachusetts, USA. IECC Climate Zone 5A. Cold winters, warm humid
+  summers. Heating-dominated climate with ~5,500 HDD65 and ~700 CDD65. State energy
+  code is based on IECC 2021 for new construction.
+building_stock_description: Predominantly older housing stock. Roughly 60% of buildings
+  were built before 1960. Mix of wood-frame (most common for single-family), triple-decker
+  multi-family (very common in urban MA), and some masonry construction in older urban
+  cores. Natural gas heating dominates (~65%), followed by oil (~20%), and electric/heat
+  pump (~15%). Many older buildings have minimal insulation, especially in walls.
+supplementary_context:
+- title: Heating System Distribution by Building Age
+  content: "{\n  \"pre_1940\": {\n    \"gas_furnace\": 0.45,\n    \"oil_boiler\":\
+    \ 0.35,\n    \"steam\": 0.1,\n    \"electric_resistance\": 0.05,\n    \"heat_pump\"\
+    : 0.05\n  },\n  \"1940_1970\": {\n    \"gas_furnace\": 0.55,\n    \"oil_boiler\"\
+    : 0.25,\n    \"electric_resistance\": 0.1,\n    \"heat_pump\": 0.1\n  },\n  \"\
+    1970_2000\": {\n    \"gas_furnace\": 0.6,\n    \"oil_boiler\": 0.15,\n    \"electric_resistance\"\
+    : 0.1,\n    \"heat_pump\": 0.15\n  },\n  \"post_2000\": {\n    \"gas_furnace\"\
+    : 0.4,\n    \"oil_boiler\": 0.05,\n    \"electric_resistance\": 0.05,\n    \"\
+    heat_pump\": 0.5\n  }\n}"
+  format_hint: json
+- title: Typical Wall Construction by Era
+  content: 'Pre-1940: Double-wythe brick or balloon-frame wood with no insulation,
+    plaster interior. Infiltration is very high (often 1.0+ ACH).
+
+    1940-1970: Platform-frame wood, often with minimal batt insulation (R-7 to R-11
+    cavities), some with aluminum siding over original clapboard. Infiltration moderate
+    (0.5-0.8 ACH).
+
+    1970-2000: Wood frame with R-11 to R-19 cavity insulation, vinyl or wood siding,
+    some continuous insulation in later builds. Infiltration moderate (0.3-0.6 ACH).
+
+    Post-2000: Wood frame with R-19+ cavity, often R-5 to R-10 continuous exterior
+    insulation, air sealing. Infiltration low (0.15-0.35 ACH).'
+  format_hint: plaintext
+- title: Massachusetts Weatherization Program Notes
+  content: 'The MA WAP program typically performs: air sealing (blower-door guided),
+    attic insulation to R-38 minimum, wall insulation (dense-pack cellulose) where
+    feasible, and sometimes basement/crawlspace insulation. Weatherized homes see
+    roughly a 20-30% reduction in infiltration and improved wall/attic R-values compared
+    to un-weatherized homes of the same era.'
+  format_hint: plaintext

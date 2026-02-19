@@ -1,0 +1,628 @@
+{
+  "description": "Decision DAG for Massachusetts (IECC 5A) residential buildings. Organized into independent subgraphs for schedules, thermostats, envelope (era-based with weatherization refinement), windows, HVAC & DHW, and space use/ventilation. Missing data is handled with sensible defaults (e.g., unknown weatherization treated as not weatherized unless recent renovation 2010_present). All required FlatModel parameters are assigned on every execution path via base components and refinements.",
+  "components": [
+    {
+      "id": "residential_schedule_single_family",
+      "name": "Residential Schedule - Single Family",
+      "description": "Typical MA single-family occupancy patterns with strong evening peaks and moderate weekend activity.",
+      "assignments": {
+        "EquipmentBase": 0.3,
+        "EquipmentAMInterp": 0.6,
+        "EquipmentLunchInterp": 0.5,
+        "EquipmentPMInterp": 0.9,
+        "EquipmentWeekendPeakInterp": 0.8,
+        "EquipmentSummerPeakInterp": 0.95,
+        "LightingBase": 0.2,
+        "LightingAMInterp": 0.5,
+        "LightingLunchInterp": 0.4,
+        "LightingPMInterp": 0.95,
+        "LightingWeekendPeakInterp": 0.85,
+        "LightingSummerPeakInterp": 0.9,
+        "OccupancyBase": 0.8,
+        "OccupancyAMInterp": 0.6,
+        "OccupancyLunchInterp": 0.7,
+        "OccupancyPMInterp": 0.95,
+        "OccupancyWeekendPeakInterp": 0.95,
+        "OccupancySummerPeakInterp": 1.0
+      }
+    },
+    {
+      "id": "residential_schedule_multifamily",
+      "name": "Residential Schedule - Multifamily",
+      "description": "Multifamily schedules with slightly higher daytime occupancy.",
+      "assignments": {
+        "EquipmentBase": 0.35,
+        "EquipmentAMInterp": 0.6,
+        "EquipmentLunchInterp": 0.55,
+        "EquipmentPMInterp": 0.9,
+        "EquipmentWeekendPeakInterp": 0.85,
+        "EquipmentSummerPeakInterp": 0.95,
+        "LightingBase": 0.25,
+        "LightingAMInterp": 0.5,
+        "LightingLunchInterp": 0.45,
+        "LightingPMInterp": 0.95,
+        "LightingWeekendPeakInterp": 0.9,
+        "LightingSummerPeakInterp": 0.9,
+        "OccupancyBase": 0.85,
+        "OccupancyAMInterp": 0.65,
+        "OccupancyLunchInterp": 0.75,
+        "OccupancyPMInterp": 0.95,
+        "OccupancyWeekendPeakInterp": 0.98,
+        "OccupancySummerPeakInterp": 1.0
+      }
+    },
+    {
+      "id": "thermostat_constant",
+      "name": "Constant Setpoint Thermostat",
+      "description": "No smart thermostat; constant setpoints.",
+      "assignments": {
+        "HeatingSetpointBase": 21.0,
+        "SetpointDeadband": 3.0,
+        "HeatingSetpointSetback": 0.0,
+        "CoolingSetpointSetback": 0.0,
+        "NightSetback": 0.0,
+        "WeekendSetback": 0.0,
+        "SummerSetback": 0.0
+      }
+    },
+    {
+      "id": "thermostat_smart",
+      "name": "Smart Thermostat",
+      "description": "Smart thermostat with moderate setbacks.",
+      "assignments": {
+        "HeatingSetpointBase": 21.0,
+        "SetpointDeadband": 3.0,
+        "HeatingSetpointSetback": 3.0,
+        "CoolingSetpointSetback": 2.0,
+        "NightSetback": 0.8,
+        "WeekendSetback": 0.9,
+        "SummerSetback": 0.9
+      }
+    },
+    {
+      "id": "envelope_pre1940_base",
+      "name": "Pre-1940 Uninsulated Envelope",
+      "description": "Balloon-frame/masonry, high infiltration.",
+      "assignments": {
+        "FacadeStructuralSystem": "woodframe",
+        "FacadeCavityInsulationRValue": 0.5,
+        "FacadeExteriorInsulationRValue": 0.0,
+        "FacadeInteriorInsulationRValue": 0.0,
+        "FacadeInteriorFinish": "plaster",
+        "FacadeExteriorFinish": "wood_siding",
+        "RoofStructuralSystem": "light_wood_truss",
+        "RoofCavityInsulationRValue": 2.0,
+        "RoofExteriorInsulationRValue": 0.0,
+        "RoofInteriorInsulationRValue": 0.0,
+        "RoofInteriorFinish": "gypsum_board",
+        "RoofExteriorFinish": "asphalt_shingle",
+        "SlabStructuralSystem": "slab_on_grade",
+        "SlabInsulationRValue": 0.5,
+        "SlabInsulationPlacement": "under_slab",
+        "SlabInteriorFinish": "wood_floor",
+        "SlabExteriorFinish": "none",
+        "InfiltrationACH": 1.0
+      }
+    },
+    {
+      "id": "envelope_1940_1970_base",
+      "name": "1940-1970 Minimal Insulation",
+      "description": "Low cavity insulation, moderate infiltration.",
+      "assignments": {
+        "FacadeStructuralSystem": "woodframe",
+        "FacadeCavityInsulationRValue": 1.8,
+        "FacadeExteriorInsulationRValue": 0.0,
+        "FacadeInteriorInsulationRValue": 0.0,
+        "FacadeInteriorFinish": "drywall",
+        "FacadeExteriorFinish": "vinyl_siding",
+        "RoofStructuralSystem": "light_wood_truss",
+        "RoofCavityInsulationRValue": 3.5,
+        "RoofExteriorInsulationRValue": 0.0,
+        "RoofInteriorInsulationRValue": 0.0,
+        "RoofInteriorFinish": "gypsum_board",
+        "RoofExteriorFinish": "asphalt_shingle",
+        "SlabStructuralSystem": "slab_on_grade",
+        "SlabInsulationRValue": 1.0,
+        "SlabInsulationPlacement": "under_slab",
+        "SlabInteriorFinish": "wood_floor",
+        "SlabExteriorFinish": "none",
+        "InfiltrationACH": 0.65
+      }
+    },
+    {
+      "id": "envelope_1970_2000_base",
+      "name": "1970-2000 Moderate Insulation",
+      "description": "Improved insulation and air sealing.",
+      "assignments": {
+        "FacadeStructuralSystem": "woodframe",
+        "FacadeCavityInsulationRValue": 3.0,
+        "FacadeExteriorInsulationRValue": 0.5,
+        "FacadeInteriorInsulationRValue": 0.0,
+        "FacadeInteriorFinish": "drywall",
+        "FacadeExteriorFinish": "vinyl_siding",
+        "RoofStructuralSystem": "light_wood_truss",
+        "RoofCavityInsulationRValue": 5.0,
+        "RoofExteriorInsulationRValue": 0.0,
+        "RoofInteriorInsulationRValue": 0.0,
+        "RoofInteriorFinish": "gypsum_board",
+        "RoofExteriorFinish": "asphalt_shingle",
+        "SlabStructuralSystem": "slab_on_grade",
+        "SlabInsulationRValue": 1.5,
+        "SlabInsulationPlacement": "under_slab",
+        "SlabInteriorFinish": "wood_floor",
+        "SlabExteriorFinish": "none",
+        "InfiltrationACH": 0.45
+      }
+    },
+    {
+      "id": "envelope_post2000_base",
+      "name": "Post-2000 Code Envelope",
+      "description": "IECC-era construction.",
+      "assignments": {
+        "FacadeStructuralSystem": "woodframe",
+        "FacadeCavityInsulationRValue": 3.5,
+        "FacadeExteriorInsulationRValue": 1.0,
+        "FacadeInteriorInsulationRValue": 0.0,
+        "FacadeInteriorFinish": "drywall",
+        "FacadeExteriorFinish": "vinyl_siding",
+        "RoofStructuralSystem": "light_wood_truss",
+        "RoofCavityInsulationRValue": 8.0,
+        "RoofExteriorInsulationRValue": 0.5,
+        "RoofInteriorInsulationRValue": 0.0,
+        "RoofInteriorFinish": "gypsum_board",
+        "RoofExteriorFinish": "asphalt_shingle",
+        "SlabStructuralSystem": "slab_on_grade",
+        "SlabInsulationRValue": 2.0,
+        "SlabInsulationPlacement": "under_slab",
+        "SlabInteriorFinish": "wood_floor",
+        "SlabExteriorFinish": "none",
+        "InfiltrationACH": 0.25
+      }
+    },
+    {
+      "id": "weatherization_upgrade",
+      "name": "Weatherization Upgrade",
+      "description": "WAP improvements.",
+      "assignments": {
+        "FacadeCavityInsulationRValue": 4.0,
+        "RoofCavityInsulationRValue": 10.0,
+        "SlabInsulationRValue": 2.0,
+        "InfiltrationACH": 0.5
+      }
+    },
+    {
+      "id": "windows_pre2000",
+      "name": "Pre-2000 Windows",
+      "description": "Older double-pane.",
+      "assignments": {
+        "WindowUValue": 2.8,
+        "WindowSHGF": 0.6,
+        "WindowTVis": 0.6
+      }
+    },
+    {
+      "id": "windows_post2000",
+      "name": "Post-2000 Windows",
+      "description": "Low-e double-pane.",
+      "assignments": {
+        "WindowUValue": 1.9,
+        "WindowSHGF": 0.4,
+        "WindowTVis": 0.55
+      }
+    },
+    {
+      "id": "hvac_gas_furnace",
+      "name": "Gas Furnace + AC",
+      "description": "Typical MA gas system.",
+      "assignments": {
+        "HeatingFuel": "NaturalGas",
+        "CoolingFuel": "Electricity",
+        "HeatingSystemCOP": 0.85,
+        "CoolingSystemCOP": 3.0,
+        "HeatingDistributionCOP": 0.85,
+        "CoolingDistributionCOP": 0.9
+      }
+    },
+    {
+      "id": "hvac_oil_boiler",
+      "name": "Oil Boiler",
+      "description": "Oil heat, limited AC.",
+      "assignments": {
+        "HeatingFuel": "FuelOil",
+        "CoolingFuel": "Electricity",
+        "HeatingSystemCOP": 0.82,
+        "CoolingSystemCOP": 2.5,
+        "HeatingDistributionCOP": 0.8,
+        "CoolingDistributionCOP": 0.8
+      }
+    },
+    {
+      "id": "hvac_heat_pump",
+      "name": "Cold Climate Heat Pump",
+      "description": "Modern heat pump.",
+      "assignments": {
+        "HeatingFuel": "Electricity",
+        "CoolingFuel": "Electricity",
+        "HeatingSystemCOP": 3.0,
+        "CoolingSystemCOP": 3.5,
+        "HeatingDistributionCOP": 0.95,
+        "CoolingDistributionCOP": 0.95
+      }
+    },
+    {
+      "id": "dhw_gas",
+      "name": "Gas DHW",
+      "description": "Gas storage water heater.",
+      "assignments": {
+        "DHWFuel": "NaturalGas",
+        "DHWSystemCOP": 0.65,
+        "DHWDistributionCOP": 0.8
+      }
+    },
+    {
+      "id": "dhw_oil",
+      "name": "Oil DHW",
+      "description": "Oil water heater.",
+      "assignments": {
+        "DHWFuel": "FuelOil",
+        "DHWSystemCOP": 0.6,
+        "DHWDistributionCOP": 0.75
+      }
+    },
+    {
+      "id": "dhw_electric",
+      "name": "Electric DHW",
+      "description": "Electric resistance water heater.",
+      "assignments": {
+        "DHWFuel": "Electricity",
+        "DHWSystemCOP": 0.95,
+        "DHWDistributionCOP": 0.9
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "node_type": "condition",
+      "id": "schedule_by_typology",
+      "description": "Schedules by typology.",
+      "branches": [
+        {
+          "condition": {
+            "field": "building_typology",
+            "operator": "in",
+            "value": [
+              "single_family_detached",
+              "single_family_attached"
+            ]
+          },
+          "target_node_id": "apply_schedule_sf"
+        },
+        {
+          "condition": {
+            "field": "building_typology",
+            "operator": "in",
+            "value": [
+              "small_multifamily_2_4",
+              "medium_multifamily_5_20",
+              "large_multifamily_20_plus"
+            ]
+          },
+          "target_node_id": "apply_schedule_mf"
+        }
+      ],
+      "default_target_id": "apply_schedule_sf"
+    },
+    {
+      "node_type": "component_ref",
+      "id": "apply_schedule_sf",
+      "description": "SF schedule.",
+      "component_id": "residential_schedule_single_family",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "component_ref",
+      "id": "apply_schedule_mf",
+      "description": "MF schedule.",
+      "component_id": "residential_schedule_multifamily",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "condition",
+      "id": "thermostat_node",
+      "description": "Thermostat behavior.",
+      "branches": [
+        {
+          "condition": {
+            "field": "has_smart_thermostat",
+            "operator": "eq",
+            "value": "yes"
+          },
+          "target_node_id": "apply_thermostat_smart"
+        },
+        {
+          "condition": {
+            "field": "has_smart_thermostat",
+            "operator": "eq",
+            "value": "no"
+          },
+          "target_node_id": "apply_thermostat_constant"
+        }
+      ],
+      "default_target_id": "apply_thermostat_constant"
+    },
+    {
+      "node_type": "component_ref",
+      "id": "apply_thermostat_smart",
+      "description": "Smart thermostat.",
+      "component_id": "thermostat_smart",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "component_ref",
+      "id": "apply_thermostat_constant",
+      "description": "Constant thermostat.",
+      "component_id": "thermostat_constant",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "condition",
+      "id": "envelope_by_era",
+      "description": "Envelope by year built.",
+      "branches": [
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "lt",
+            "value": 1940
+          },
+          "target_node_id": "env_pre1940"
+        },
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "lt",
+            "value": 1970
+          },
+          "target_node_id": "env_1940_1970"
+        },
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "lt",
+            "value": 2000
+          },
+          "target_node_id": "env_1970_2000"
+        },
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "gte",
+            "value": 2000
+          },
+          "target_node_id": "env_post2000"
+        }
+      ],
+      "default_target_id": "env_1940_1970"
+    },
+    {
+      "node_type": "component_ref",
+      "id": "env_pre1940",
+      "description": "Pre-1940 envelope.",
+      "component_id": "envelope_pre1940_base",
+      "next_node_ids": [
+        "weatherization_check"
+      ]
+    },
+    {
+      "node_type": "component_ref",
+      "id": "env_1940_1970",
+      "description": "1940-1970 envelope.",
+      "component_id": "envelope_1940_1970_base",
+      "next_node_ids": [
+        "weatherization_check"
+      ]
+    },
+    {
+      "node_type": "component_ref",
+      "id": "env_1970_2000",
+      "description": "1970-2000 envelope.",
+      "component_id": "envelope_1970_2000_base",
+      "next_node_ids": [
+        "weatherization_check"
+      ]
+    },
+    {
+      "node_type": "component_ref",
+      "id": "env_post2000",
+      "description": "Post-2000 envelope.",
+      "component_id": "envelope_post2000_base",
+      "next_node_ids": [
+        "weatherization_check"
+      ]
+    },
+    {
+      "node_type": "condition",
+      "id": "weatherization_check",
+      "description": "Weatherization or recent renovation.",
+      "branches": [
+        {
+          "condition": {
+            "field": "weatherization_status",
+            "operator": "eq",
+            "value": "weatherized"
+          },
+          "target_node_id": "apply_weatherization"
+        },
+        {
+          "condition": {
+            "field": "last_renovation",
+            "operator": "eq",
+            "value": "2010_present"
+          },
+          "target_node_id": "apply_weatherization"
+        }
+      ],
+      "default_target_id": "windows_by_era"
+    },
+    {
+      "node_type": "component_ref",
+      "id": "apply_weatherization",
+      "description": "Apply WAP.",
+      "component_id": "weatherization_upgrade",
+      "next_node_ids": [
+        "windows_by_era"
+      ]
+    },
+    {
+      "node_type": "condition",
+      "id": "windows_by_era",
+      "description": "Windows by era.",
+      "branches": [
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "gte",
+            "value": 2000
+          },
+          "target_node_id": "win_post2000"
+        }
+      ],
+      "default_target_id": "win_pre2000"
+    },
+    {
+      "node_type": "component_ref",
+      "id": "win_pre2000",
+      "description": "Older windows.",
+      "component_id": "windows_pre2000",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "component_ref",
+      "id": "win_post2000",
+      "description": "Newer windows.",
+      "component_id": "windows_post2000",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "condition",
+      "id": "hvac_by_era",
+      "description": "HVAC selection.",
+      "branches": [
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "gte",
+            "value": 2010
+          },
+          "target_node_id": "hvac_hp"
+        },
+        {
+          "condition": {
+            "field": "last_renovation",
+            "operator": "eq",
+            "value": "2010_present"
+          },
+          "target_node_id": "hvac_hp"
+        },
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "lt",
+            "value": 1970
+          },
+          "target_node_id": "hvac_oil"
+        }
+      ],
+      "default_target_id": "hvac_gas"
+    },
+    {
+      "node_type": "component_ref",
+      "id": "hvac_gas",
+      "description": "Gas system.",
+      "component_id": "hvac_gas_furnace",
+      "next_node_ids": [
+        "dhw_by_heating"
+      ]
+    },
+    {
+      "node_type": "component_ref",
+      "id": "hvac_oil",
+      "description": "Oil system.",
+      "component_id": "hvac_oil_boiler",
+      "next_node_ids": [
+        "dhw_by_heating"
+      ]
+    },
+    {
+      "node_type": "component_ref",
+      "id": "hvac_hp",
+      "description": "Heat pump.",
+      "component_id": "hvac_heat_pump",
+      "next_node_ids": [
+        "dhw_electric_node"
+      ]
+    },
+    {
+      "node_type": "condition",
+      "id": "dhw_by_heating",
+      "description": "DHW fuel by era proxy.",
+      "branches": [
+        {
+          "condition": {
+            "field": "year_built",
+            "operator": "lt",
+            "value": 1970
+          },
+          "target_node_id": "apply_dhw_oil"
+        }
+      ],
+      "default_target_id": "apply_dhw_gas"
+    },
+    {
+      "node_type": "component_ref",
+      "id": "apply_dhw_gas",
+      "description": "Gas DHW.",
+      "component_id": "dhw_gas",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "component_ref",
+      "id": "apply_dhw_oil",
+      "description": "Oil DHW.",
+      "component_id": "dhw_oil",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "component_ref",
+      "id": "dhw_electric_node",
+      "description": "Electric DHW.",
+      "component_id": "dhw_electric",
+      "next_node_ids": []
+    },
+    {
+      "node_type": "assignment",
+      "id": "space_use_defaults",
+      "description": "Internal loads and ventilation defaults.",
+      "assignments": {
+        "EquipmentPowerDensity": 8.0,
+        "LightingPowerDensity": 6.0,
+        "OccupantDensity": 0.04,
+        "VentFlowRatePerPerson": 0.004,
+        "VentFlowRatePerArea": 0.0003,
+        "VentProvider": "Natural",
+        "VentHRV": "NoHRV",
+        "VentEconomizer": "NoEconomizer",
+        "VentDCV": "NoDCV",
+        "DHWFlowRatePerPerson": 0.00002
+      },
+      "next_node_ids": []
+    }
+  ],
+  "entry_node_ids": [
+    "schedule_by_typology",
+    "thermostat_node",
+    "envelope_by_era",
+    "hvac_by_era",
+    "space_use_defaults"
+  ]
+}

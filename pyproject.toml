@@ -8,10 +8,10 @@ authors = [
 ]
 requires-python =">=3.10,<3.13"
 dependencies = [
-    "archetypal==2.18.10",
+    "archetypal>=2.18.10",
     "click==8.1.7",
     "geopandas~=1.0.1",
-    "httpx~=0.27.2",
+    "httpx>=0.27.2",
     "ladybug-core>=0.44.30",
     "openpyxl~=3.1.5",
     "pandas>=2.2,<2.3",
@@ -27,6 +27,9 @@ epi = "epinterface.cli:cli"
 
 # for extras
 [project.optional-dependencies]
+llm = [
+    "pydantic-ai>=1.62",
+]
 
 [dependency-groups]
 dev = [
@@ -50,6 +53,7 @@ docs = [
 
 [tool.uv.sources]
 # archetypal = { git = "https://github.com/samuelduchesne/archetypal", branch = "main" }
+archetypal = { path = "archetypal" }
 
 [build-system]
 requires = ["hatchling"]

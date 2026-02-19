@@ -1,0 +1,92 @@
+## Project Context
+
+We are building energy models for a portfolio of ~5,000 residential buildings in Massachusetts for a utility-funded energy efficiency program. The goal is to estimate building energy use and identify retrofit opportunities. Data is sparse and of mixed quality.
+
+## Region & Climate
+
+Massachusetts, USA. IECC Climate Zone 5A. Cold winters, warm humid summers. Heating-dominated climate with ~5,500 HDD65 and ~700 CDD65. State energy code is based on IECC 2021 for new construction.
+
+## Building Stock
+
+Predominantly older housing stock. Roughly 60% of buildings were built before 1960. Mix of wood-frame (most common for single-family), triple-decker multi-family (very common in urban MA), and some masonry construction in older urban cores. Natural gas heating dominates (~65%), followed by oil (~20%), and electric/heat pump (~15%). Many older buildings have minimal insulation, especially in walls.
+
+## Available Data Fields
+
+
+### income
+- Type: numeric
+- Description: Annual household income in USD. Correlates loosely with ability to invest in energy upgrades.
+- Data quality: Self-reported on utility assistance applications. About 30% of rows are missing.
+- Range: 0.0 to 500000.0 USD/year
+
+### year_built
+- Type: numeric
+- Description: Year the building was originally constructed.
+- Data quality: From assessor records; generally reliable, though some entries are approximate decades (e.g. 1900 for anything pre-1910).
+- Range: 1700.0 to 2025.0 year
+
+### building_typology
+- Type: categorical
+- Description: Building typology classification from assessor data.
+- Data quality: Assessor-derived, reliable.
+- Categories: ['single_family_detached', 'single_family_attached', 'small_multifamily_2_4', 'medium_multifamily_5_20', 'large_multifamily_20_plus']
+
+### weatherization_status
+- Type: categorical
+- Description: Whether the building has been through a weatherization assistance program.
+- Data quality: From state WAP records. Only captures state-funded programs; private weatherization is not tracked. About 60% of rows are missing (unknown status).
+- Categories: ['weatherized', 'not_weatherized', 'unknown']
+
+### last_renovation
+- Type: categorical
+- Description: Approximate timeframe of last known major renovation or retrofit.
+- Data quality: From permit records where available. Very sparse -- roughly 70% missing.
+- Categories: ['never', 'before_1980', '1980_2000', '2000_2010', '2010_present']
+
+## Supplementary Context
+
+
+### Heating System Distribution by Building Age (format: json)
+
+{
+  "pre_1940": {
+    "gas_furnace": 0.45,
+    "oil_boiler": 0.35,
+    "steam": 0.1,
+    "electric_resistance": 0.05,
+    "heat_pump": 0.05
+  },
+  "1940_1970": {
+    "gas_furnace": 0.55,
+    "oil_boiler": 0.25,
+    "electric_resistance": 0.1,
+    "heat_pump": 0.1
+  },
+  "1970_2000": {
+    "gas_furnace": 0.6,
+    "oil_boiler": 0.15,
+    "electric_resistance": 0.1,
+    "heat_pump": 0.15
+  },
+  "post_2000": {
+    "gas_furnace": 0.4,
+    "oil_boiler": 0.05,
+    "electric_resistance": 0.05,
+    "heat_pump": 0.5
+  }
+}
+
+### Typical Wall Construction by Era (format: plaintext)
+
+Pre-1940: Double-wythe brick or balloon-frame wood with no insulation, plaster interior. Infiltration is very high (often 1.0+ ACH).
+1940-1970: Platform-frame wood, often with minimal batt insulation (R-7 to R-11 cavities), some with aluminum siding over original clapboard. Infiltration moderate (0.5-0.8 ACH).
+1970-2000: Wood frame with R-11 to R-19 cavity insulation, vinyl or wood siding, some continuous insulation in later builds. Infiltration moderate (0.3-0.6 ACH).
+Post-2000: Wood frame with R-19+ cavity, often R-5 to R-10 continuous exterior insulation, air sealing. Infiltration low (0.15-0.35 ACH).
+
+### Massachusetts Weatherization Program Notes (format: plaintext)
+
+The MA WAP program typically performs: air sealing (blower-door guided), attic insulation to R-38 minimum, wall insulation (dense-pack cellulose) where feasible, and sometimes basement/crawlspace insulation. Weatherized homes see roughly a 20-30% reduction in infiltration and improved wall/attic R-values compared to un-weatherized homes of the same era.
+
+## Task
+
+Based on the above field definitions, context, and supplementary information, create a DecisionDAG that maps these user data fields to all required FlatModel parameters. Use intermediate components for common parameter bundles, handle missing data gracefully, and apply regionally appropriate defaults.
