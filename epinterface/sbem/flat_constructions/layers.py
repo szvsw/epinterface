@@ -1,39 +1,14 @@
 """Shared layer and equivalent-material helpers for flat constructions."""
 
-from typing import Literal
-
 from epinterface.sbem.components.envelope import ConstructionLayerComponent
 from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.flat_constructions.materials import (
     FIBERGLASS_BATTS,
     MATERIALS_BY_NAME,
+    MaterialName,
 )
 
-MaterialName = Literal[
-    "XPSBoard",
-    "PolyisoBoard",
-    "ConcreteMC_Light",
-    "ConcreteRC_Dense",
-    "GypsumBoard",
-    "GypsumPlaster",
-    "SoftwoodGeneral",
-    "ClayBrick",
-    "ConcreteBlockH",
-    "FiberglassBatt",
-    "CementMortar",
-    "CeramicTile",
-    "UrethaneCarpet",
-    "SteelPanel",
-    "RammedEarth",
-    "SIPCore",
-    "FiberCementBoard",
-    "RoofMembrane",
-    "CoolRoofMembrane",
-    "AcousticTile",
-]
-# Keep `str` in the union so callers with broader string types remain ergonomic,
-# while still documenting preferred known names via `MaterialName`.
-type MaterialRef = ConstructionMaterialComponent | MaterialName | str
+type MaterialRef = ConstructionMaterialComponent | MaterialName
 
 
 def resolve_material(material: MaterialRef) -> ConstructionMaterialComponent:

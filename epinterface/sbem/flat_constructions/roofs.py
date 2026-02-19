@@ -9,10 +9,10 @@ from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
 )
+from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.flat_constructions.layers import (
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
-    resolve_material,
 )
 from epinterface.sbem.flat_constructions.materials import (
     ACOUSTIC_TILE,
@@ -66,11 +66,11 @@ ALL_ROOF_EXTERIOR_FINISHES = get_args(RoofExteriorFinish)
 class StructuralTemplate:
     """Default structural roof assumptions for a structural system."""
 
-    material_name: str
+    material_name: ConstructionMaterialComponent
     thickness_m: float
     supports_cavity_insulation: bool
     cavity_depth_m: float | None
-    framing_material_name: str | None = None
+    framing_material_name: ConstructionMaterialComponent | None = None
     framing_fraction: float | None = None
     framing_path_r_value: float | None = None
     uninsulated_cavity_r_value: float = 0.17
@@ -81,39 +81,39 @@ class StructuralTemplate:
 class FinishTemplate:
     """Default roof finish material and thickness assumptions."""
 
-    material_name: str
+    material_name: ConstructionMaterialComponent
     thickness_m: float
 
 
 STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
     "none": StructuralTemplate(
-        material_name=GYPSUM_BOARD.Name,
+        material_name=GYPSUM_BOARD,
         thickness_m=0.005,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "light_wood_truss": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL.Name,
+        material_name=SOFTWOOD_GENERAL,
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.140,
-        framing_material_name=SOFTWOOD_GENERAL.Name,
+        framing_material_name=SOFTWOOD_GENERAL,
         framing_fraction=0.14,
     ),
     "deep_wood_truss": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL.Name,
+        material_name=SOFTWOOD_GENERAL,
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.240,
-        framing_material_name=SOFTWOOD_GENERAL.Name,
+        framing_material_name=SOFTWOOD_GENERAL,
         framing_fraction=0.12,
     ),
     "steel_joist": StructuralTemplate(
-        material_name=STEEL_PANEL.Name,
+        material_name=STEEL_PANEL,
         thickness_m=0.0,
         supports_cavity_insulation=True,
         cavity_depth_m=0.180,
-        framing_material_name=STEEL_PANEL.Name,
+        framing_material_name=STEEL_PANEL,
         framing_fraction=0.08,
         # Calibrated to reproduce ~60-65% effective batt R for steel-joist roofs.
         # References:
@@ -122,37 +122,37 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
         framing_path_r_value=0.35,
     ),
     "metal_deck": StructuralTemplate(
-        material_name=STEEL_PANEL.Name,
+        material_name=STEEL_PANEL,
         thickness_m=0.0015,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "mass_timber": StructuralTemplate(
-        material_name=SOFTWOOD_GENERAL.Name,
+        material_name=SOFTWOOD_GENERAL,
         thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "precast_concrete": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE.Name,
+        material_name=CONCRETE_RC_DENSE,
         thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "poured_concrete": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE.Name,
+        material_name=CONCRETE_RC_DENSE,
         thickness_m=0.180,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "reinforced_concrete": StructuralTemplate(
-        material_name=CONCRETE_RC_DENSE.Name,
+        material_name=CONCRETE_RC_DENSE,
         thickness_m=0.200,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
     "sip": StructuralTemplate(
-        material_name=SIP_CORE.Name,
+        material_name=SIP_CORE,
         thickness_m=0.160,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
@@ -162,15 +162,15 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
 INTERIOR_FINISH_TEMPLATES: dict[RoofInteriorFinish, FinishTemplate | None] = {
     "none": None,
     "gypsum_board": FinishTemplate(
-        material_name=GYPSUM_BOARD.Name,
+        material_name=GYPSUM_BOARD,
         thickness_m=0.0127,
     ),
     "acoustic_tile": FinishTemplate(
-        material_name=ACOUSTIC_TILE.Name,
+        material_name=ACOUSTIC_TILE,
         thickness_m=0.019,
     ),
     "wood_panel": FinishTemplate(
-        material_name=SOFTWOOD_GENERAL.Name,
+        material_name=SOFTWOOD_GENERAL,
         thickness_m=0.012,
     ),
 }
@@ -178,23 +178,23 @@ INTERIOR_FINISH_TEMPLATES: dict[RoofInteriorFinish, FinishTemplate | None] = {
 EXTERIOR_FINISH_TEMPLATES: dict[RoofExteriorFinish, FinishTemplate | None] = {
     "none": None,
     "epdm_membrane": FinishTemplate(
-        material_name=ROOF_MEMBRANE.Name,
+        material_name=ROOF_MEMBRANE,
         thickness_m=0.005,
     ),
     "cool_membrane": FinishTemplate(
-        material_name=COOL_ROOF_MEMBRANE.Name,
+        material_name=COOL_ROOF_MEMBRANE,
         thickness_m=0.005,
     ),
     "built_up_roof": FinishTemplate(
-        material_name=CEMENT_MORTAR.Name,
+        material_name=CEMENT_MORTAR,
         thickness_m=0.02,
     ),
     "metal_roof": FinishTemplate(
-        material_name=STEEL_PANEL.Name,
+        material_name=STEEL_PANEL,
         thickness_m=0.001,
     ),
     "tile_roof": FinishTemplate(
-        material_name=CERAMIC_TILE.Name,
+        material_name=CERAMIC_TILE,
         thickness_m=0.02,
     ),
 }
@@ -313,7 +313,7 @@ def build_roof_assembly(
     if exterior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(exterior_finish.material_name),
+                ConstructionMaterial=exterior_finish.material_name,
                 Thickness=exterior_finish.thickness_m,
                 LayerOrder=layer_order,
             )
@@ -323,7 +323,7 @@ def build_roof_assembly(
     if roof.nominal_exterior_insulation_r > 0:
         layers.append(
             layer_from_nominal_r(
-                material=POLYISO_BOARD.Name,
+                material=POLYISO_BOARD,
                 nominal_r_value=roof.nominal_exterior_insulation_r,
                 layer_order=layer_order,
             )
@@ -341,7 +341,7 @@ def build_roof_assembly(
         consolidated_cavity_material = equivalent_framed_cavity_material(
             structural_system=roof.structural_system,
             cavity_depth_m=template.cavity_depth_m or 0.0,
-            framing_material=template.framing_material_name or SOFTWOOD_GENERAL.Name,
+            framing_material=template.framing_material_name or SOFTWOOD_GENERAL,
             framing_fraction=template.framing_fraction or 0.0,
             framing_path_r_value=template.framing_path_r_value,
             nominal_cavity_insulation_r=roof.effective_nominal_cavity_insulation_r,
@@ -359,7 +359,7 @@ def build_roof_assembly(
         if template.thickness_m > 0:
             layers.append(
                 ConstructionLayerComponent(
-                    ConstructionMaterial=resolve_material(template.material_name),
+                    ConstructionMaterial=template.material_name,
                     Thickness=template.thickness_m,
                     LayerOrder=layer_order,
                 )
@@ -373,7 +373,7 @@ def build_roof_assembly(
             )
             layers.append(
                 layer_from_nominal_r(
-                    material=FIBERGLASS_BATTS.Name,
+                    material=FIBERGLASS_BATTS,
                     nominal_r_value=effective_cavity_r,
                     layer_order=layer_order,
                 )
@@ -383,7 +383,7 @@ def build_roof_assembly(
     if roof.nominal_interior_insulation_r > 0:
         layers.append(
             layer_from_nominal_r(
-                material=FIBERGLASS_BATTS.Name,
+                material=FIBERGLASS_BATTS,
                 nominal_r_value=roof.nominal_interior_insulation_r,
                 layer_order=layer_order,
             )
@@ -394,7 +394,7 @@ def build_roof_assembly(
     if interior_finish is not None:
         layers.append(
             ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(interior_finish.material_name),
+                ConstructionMaterial=interior_finish.material_name,
                 Thickness=interior_finish.thickness_m,
                 LayerOrder=layer_order,
             )

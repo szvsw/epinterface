@@ -1,6 +1,33 @@
 """Shared opaque materials used by semi-flat construction builders."""
 
+from typing import Literal, cast, get_args
+
 from epinterface.sbem.components.materials import ConstructionMaterialComponent
+
+MaterialName = Literal[
+    "XPSBoard",
+    "PolyisoBoard",
+    "ConcreteMC_Light",
+    "ConcreteRC_Dense",
+    "GypsumBoard",
+    "GypsumPlaster",
+    "SoftwoodGeneral",
+    "ClayBrick",
+    "ConcreteBlockH",
+    "FiberglassBatt",
+    "CementMortar",
+    "CeramicTile",
+    "UrethaneCarpet",
+    "SteelPanel",
+    "RammedEarth",
+    "SIPCore",
+    "FiberCementBoard",
+    "RoofMembrane",
+    "CoolRoofMembrane",
+    "AcousticTile",
+]
+
+MATERIAL_NAME_VALUES: tuple[MaterialName, ...] = get_args(MaterialName)
 
 
 def _material(
@@ -186,28 +213,39 @@ ACOUSTIC_TILE = _material(
     mat_type="Boards",
 )
 
-MATERIALS_BY_NAME = {
-    mat.Name: mat
-    for mat in (
-        XPS_BOARD,
-        POLYISO_BOARD,
-        CONCRETE_MC_LIGHT,
-        CONCRETE_RC_DENSE,
-        GYPSUM_BOARD,
-        GYPSUM_PLASTER,
-        SOFTWOOD_GENERAL,
-        CLAY_BRICK,
-        CONCRETE_BLOCK_H,
-        FIBERGLASS_BATTS,
-        CEMENT_MORTAR,
-        CERAMIC_TILE,
-        URETHANE_CARPET,
-        STEEL_PANEL,
-        RAMMED_EARTH,
-        SIP_CORE,
-        FIBER_CEMENT_BOARD,
-        ROOF_MEMBRANE,
-        COOL_ROOF_MEMBRANE,
-        ACOUSTIC_TILE,
-    )
+_ALL_MATERIALS = (
+    XPS_BOARD,
+    POLYISO_BOARD,
+    CONCRETE_MC_LIGHT,
+    CONCRETE_RC_DENSE,
+    GYPSUM_BOARD,
+    GYPSUM_PLASTER,
+    SOFTWOOD_GENERAL,
+    CLAY_BRICK,
+    CONCRETE_BLOCK_H,
+    FIBERGLASS_BATTS,
+    CEMENT_MORTAR,
+    CERAMIC_TILE,
+    URETHANE_CARPET,
+    STEEL_PANEL,
+    RAMMED_EARTH,
+    SIP_CORE,
+    FIBER_CEMENT_BOARD,
+    ROOF_MEMBRANE,
+    COOL_ROOF_MEMBRANE,
+    ACOUSTIC_TILE,
+)
+
+MATERIALS_BY_NAME: dict[MaterialName, ConstructionMaterialComponent] = {
+    cast(MaterialName, mat.Name): mat for mat in _ALL_MATERIALS
 }
+
+_names_in_map = set(MATERIALS_BY_NAME.keys())
+_expected_names = set(MATERIAL_NAME_VALUES)
+if _names_in_map != _expected_names:
+    missing = sorted(_expected_names - _names_in_map)
+    extra = sorted(_names_in_map - _expected_names)
+    msg = (
+        f"Material name definitions are out of sync. Missing={missing}, Extra={extra}."
+    )
+    raise ValueError(msg)
