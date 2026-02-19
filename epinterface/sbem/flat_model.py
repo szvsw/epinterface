@@ -762,12 +762,12 @@ class FlatModel(BaseModel):
     WindowSHGF: float
     WindowTVis: float
 
-    FacadeStructuralSystem: WallStructuralSystem
-    FacadeCavityInsulationRValue: float = Field(ge=0)
-    FacadeExteriorInsulationRValue: float = Field(ge=0)
-    FacadeInteriorInsulationRValue: float = Field(ge=0)
-    FacadeInteriorFinish: WallInteriorFinish
-    FacadeExteriorFinish: WallExteriorFinish
+    FacadeStructuralSystem: WallStructuralSystem = "cmu"
+    FacadeCavityInsulationRValue: float = Field(default=0, ge=0)
+    FacadeExteriorInsulationRValue: float = Field(default=0, ge=0)
+    FacadeInteriorInsulationRValue: float = Field(default=0, ge=0)
+    FacadeInteriorFinish: WallInteriorFinish = "drywall"
+    FacadeExteriorFinish: WallExteriorFinish = "none"
     RoofRValue: float
     SlabRValue: float
 
