@@ -78,6 +78,7 @@ ConstructionMaterialType = Literal[
     "Finishes",
     "Siding",
     "Sealing",
+    "Bio",
 ]
 
 MaterialRoughness = Literal[
