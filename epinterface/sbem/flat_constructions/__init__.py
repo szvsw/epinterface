@@ -6,6 +6,9 @@ from epinterface.sbem.flat_constructions.audit import (
     run_physical_sanity_audit,
 )
 from epinterface.sbem.flat_constructions.layers import (
+    CavityInsulationMaterial,
+    ContinuousInsulationMaterial,
+    ExteriorCavityType,
     MaterialRef,
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
@@ -41,6 +44,9 @@ from epinterface.sbem.flat_constructions.walls import (
 __all__ = [
     "MATERIAL_NAME_VALUES",
     "AuditIssue",
+    "CavityInsulationMaterial",
+    "ContinuousInsulationMaterial",
+    "ExteriorCavityType",
     "MaterialName",
     "MaterialRef",
     "RoofExteriorFinish",

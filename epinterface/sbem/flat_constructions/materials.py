@@ -36,6 +36,14 @@ MaterialName = Literal[
     "StabilizedSoilBlock",
     "WattleDaub",
     "ThatchReed",
+    "AdobeBlock",
+    "CompressedEarthBlock",
+    "CobEarth",
+    "BambooComposite",
+    "CelluloseBatt",
+    "MineralWoolBatt",
+    "ConfinedMasonryEffective",
+    "RCFrameInfillEffective",
 ]
 
 MATERIAL_NAME_VALUES: tuple[MaterialName, ...] = get_args(MaterialName)
@@ -373,6 +381,110 @@ THATCH_REED = _material(
     roughness="Rough",
 )
 
+ADOBE_BLOCK = _material(
+    name="AdobeBlock",
+    conductivity=0.60,
+    density=1500,
+    specific_heat=900,
+    mat_type="Masonry",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
+)
+
+COMPRESSED_EARTH_BLOCK = _material(
+    name="CompressedEarthBlock",
+    conductivity=0.80,
+    density=1800,
+    specific_heat=900,
+    mat_type="Masonry",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
+)
+
+COB_EARTH = _material(
+    name="CobEarth",
+    conductivity=0.80,
+    density=1550,
+    specific_heat=1000,
+    mat_type="Bio",
+    solar_absorptance=0.70,
+    visible_absorptance=0.70,
+)
+
+BAMBOO_COMPOSITE = _material(
+    name="BambooComposite",
+    conductivity=0.17,
+    density=700,
+    specific_heat=1200,
+    mat_type="Bio",
+    solar_absorptance=0.65,
+    visible_absorptance=0.65,
+)
+
+CELLULOSE_BATT = _material(
+    name="CelluloseBatt",
+    conductivity=0.040,
+    density=50,
+    specific_heat=1380,
+    mat_type="Insulation",
+)
+
+MINERAL_WOOL_BATT = _material(
+    name="MineralWoolBatt",
+    conductivity=0.038,
+    density=30,
+    specific_heat=840,
+    mat_type="Insulation",
+)
+
+
+def _blended_material(
+    *,
+    name: str,
+    mat_a: ConstructionMaterialComponent,
+    mat_b: ConstructionMaterialComponent,
+    fraction_a: float,
+    mat_type: str,
+) -> ConstructionMaterialComponent:
+    """Create an area-weighted blended material from two side-by-side constituents.
+
+    Uses parallel-path (arithmetic mean) for conductivity, matching the
+    physics of `equivalent_framed_cavity_material` where heat flows through
+    whichever material it encounters at a given point on the wall face.
+    """
+    fb = 1.0 - fraction_a
+    k_eq = fraction_a * mat_a.Conductivity + fb * mat_b.Conductivity
+    return _material(
+        name=name,
+        conductivity=k_eq,
+        density=fraction_a * mat_a.Density + fb * mat_b.Density,
+        specific_heat=fraction_a * mat_a.SpecificHeat + fb * mat_b.SpecificHeat,
+        mat_type=mat_type,
+        solar_absorptance=(
+            fraction_a * mat_a.SolarAbsorptance + fb * mat_b.SolarAbsorptance
+        ),
+        visible_absorptance=(
+            fraction_a * mat_a.VisibleAbsorptance + fb * mat_b.VisibleAbsorptance
+        ),
+    )
+
+
+CONFINED_MASONRY_EFFECTIVE = _blended_material(
+    name="ConfinedMasonryEffective",
+    mat_a=CLAY_BRICK,
+    mat_b=CONCRETE_RC_DENSE,
+    fraction_a=0.85,
+    mat_type="Masonry",
+)
+
+RC_FRAME_INFILL_EFFECTIVE = _blended_material(
+    name="RCFrameInfillEffective",
+    mat_a=CLAY_BRICK,
+    mat_b=CONCRETE_RC_DENSE,
+    fraction_a=0.75,
+    mat_type="Masonry",
+)
+
 _ALL_MATERIALS = (
     XPS_BOARD,
     POLYISO_BOARD,
@@ -405,6 +517,14 @@ _ALL_MATERIALS = (
     STABILIZED_SOIL_BLOCK,
     WATTLE_DAUB,
     THATCH_REED,
+    ADOBE_BLOCK,
+    COMPRESSED_EARTH_BLOCK,
+    COB_EARTH,
+    BAMBOO_COMPOSITE,
+    CELLULOSE_BATT,
+    MINERAL_WOOL_BATT,
+    CONFINED_MASONRY_EFFECTIVE,
+    RC_FRAME_INFILL_EFFECTIVE,
 )
 
 MATERIALS_BY_NAME: dict[MaterialName, ConstructionMaterialComponent] = {

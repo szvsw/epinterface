@@ -12,16 +12,19 @@ from epinterface.sbem.components.envelope import (
 from epinterface.sbem.flat_constructions.layers import (
     _AIR_GAP_THICKNESS_M,
     AIR_GAP_WALL,
+    ALL_CAVITY_INSULATION_MATERIALS,
     ALL_CONTINUOUS_INSULATION_MATERIALS,
     ALL_EXTERIOR_CAVITY_TYPES,
+    CAVITY_INSULATION_MATERIAL_MAP,
     CONTINUOUS_INSULATION_MATERIAL_MAP,
+    CavityInsulationMaterial,
     ContinuousInsulationMaterial,
     ExteriorCavityType,
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
     resolve_material,
 )
-from epinterface.sbem.flat_constructions.materials import FIBERGLASS_BATTS, MaterialName
+from epinterface.sbem.flat_constructions.materials import MaterialName
 
 WallStructuralSystem = Literal[
     "none",
@@ -53,6 +56,16 @@ WallStructuralSystem = Literal[
     "thick_sandcrete_block",
     "stabilized_soil_block",
     "wattle_and_daub",
+    "adobe_block",
+    "compressed_earth_block",
+    "cob",
+    "laterite_stone",
+    "stone_wall",
+    "confined_masonry",
+    "rc_frame_masonry_infill",
+    "corrugated_metal_sheet",
+    "insulated_metal_panel",
+    "bamboo_frame",
 ]
 
 WallInteriorFinish = Literal[
@@ -117,7 +130,9 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
         cavity_depth_m=0.090,
         framing_material_name="SteelPanel",
         framing_fraction=0.12,
-        # Calibrated to reproduce ~55% effective batt R for 3.5in steel-stud walls.
+        # Calibrated to reproduce ~55% effective batt R for 3.5in (89mm) steel-stud
+        # walls at 16" o.c. spacing. Not directly applicable to EU lightweight steel
+        # framing, which uses different stud profiles and spacing conventions.
         # References:
         # - ASHRAE Standard 90.1 Appendix A (metal-framing correction methodology)
         # - COMcheck steel-framed wall U-factor datasets (effective-R behavior)
@@ -229,6 +244,10 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
+    # UK/EU two-leaf cavity wall: inner leaf (block) + cavity + outer leaf (brick
+    # veneer via exterior finish). The template represents the inner leaf; the
+    # cavity supports injected or partial-fill insulation. Outer leaf is applied
+    # via the exterior_finish field (e.g. "brick_veneer").
     "cavity_masonry": StructuralTemplate(
         material_name="ConcreteBlockH",
         thickness_m=0.100,
@@ -287,6 +306,70 @@ STRUCTURAL_TEMPLATES: dict[WallStructuralSystem, StructuralTemplate] = {
     "wattle_and_daub": StructuralTemplate(
         material_name="WattleDaub",
         thickness_m=0.150,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "adobe_block": StructuralTemplate(
+        material_name="AdobeBlock",
+        thickness_m=0.300,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "compressed_earth_block": StructuralTemplate(
+        material_name="CompressedEarthBlock",
+        thickness_m=0.200,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "cob": StructuralTemplate(
+        material_name="CobEarth",
+        thickness_m=0.400,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "laterite_stone": StructuralTemplate(
+        material_name="NaturalStone",
+        thickness_m=0.300,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "stone_wall": StructuralTemplate(
+        material_name="NaturalStone",
+        thickness_m=0.450,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    # Confined masonry: masonry panels confined by RC tie-columns/beams.
+    # Area-weighted blend of ~85% clay brick + ~15% RC concrete.
+    "confined_masonry": StructuralTemplate(
+        material_name="ConfinedMasonryEffective",
+        thickness_m=0.150,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    # RC frame with masonry infill: ~75% masonry + ~25% RC frame members.
+    "rc_frame_masonry_infill": StructuralTemplate(
+        material_name="RCFrameInfillEffective",
+        thickness_m=0.200,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "corrugated_metal_sheet": StructuralTemplate(
+        material_name="SteelPanel",
+        thickness_m=0.0005,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    # IMP: foam core only; builder emits outer/inner steel skins separately.
+    "insulated_metal_panel": StructuralTemplate(
+        material_name="SIPCore",
+        thickness_m=0.075,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "bamboo_frame": StructuralTemplate(
+        material_name="BambooComposite",
+        thickness_m=0.050,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
@@ -375,6 +458,10 @@ class SemiFlatWallConstruction(BaseModel):
         default="xps",
         title="Interior continuous insulation material",
     )
+    cavity_insulation_material: CavityInsulationMaterial = Field(
+        default="fiberglass",
+        title="Cavity insulation material for framed/cavity systems",
+    )
     interior_finish: WallInteriorFinish = Field(
         default="drywall",
         title="Interior finish selection",
@@ -419,8 +506,11 @@ class SemiFlatWallConstruction(BaseModel):
         ):
             return self
 
-        assumed_cavity_insulation_conductivity = FIBERGLASS_BATTS.Conductivity
-        max_nominal_r = template.cavity_depth_m / assumed_cavity_insulation_conductivity
+        cavity_mat_name = CAVITY_INSULATION_MATERIAL_MAP[
+            self.cavity_insulation_material
+        ]
+        cavity_mat = resolve_material(cavity_mat_name)
+        max_nominal_r = template.cavity_depth_m / cavity_mat.Conductivity
         tolerance_r = 0.2
         if self.nominal_cavity_insulation_r > max_nominal_r + tolerance_r:
             msg = (
@@ -461,6 +551,10 @@ class SemiFlatWallConstruction(BaseModel):
             features[f"{prefix}InteriorInsulationMaterial__{ins_mat}"] = float(
                 self.interior_insulation_material == ins_mat
             )
+        for cav_ins_mat in ALL_CAVITY_INSULATION_MATERIALS:
+            features[f"{prefix}CavityInsulationMaterial__{cav_ins_mat}"] = float(
+                self.cavity_insulation_material == cav_ins_mat
+            )
         for cavity_type in ALL_EXTERIOR_CAVITY_TYPES:
             features[f"{prefix}ExteriorCavityType__{cavity_type}"] = float(
                 self.exterior_cavity_type == cavity_type
@@ -468,7 +562,7 @@ class SemiFlatWallConstruction(BaseModel):
         return features
 
 
-def build_facade_assembly(
+def build_facade_assembly(  # noqa: C901
     wall: SemiFlatWallConstruction,
     *,
     name: str = "Facade",
@@ -527,6 +621,10 @@ def build_facade_assembly(
         and template.framing_fraction is not None
     )
 
+    cavity_ins_mat_name = CAVITY_INSULATION_MATERIAL_MAP[
+        wall.cavity_insulation_material
+    ]
+
     if uses_framed_cavity_consolidation:
         consolidated_cavity_material = equivalent_framed_cavity_material(
             structural_system=wall.structural_system,
@@ -536,6 +634,7 @@ def build_facade_assembly(
             framing_path_r_value=template.framing_path_r_value,
             nominal_cavity_insulation_r=wall.effective_nominal_cavity_insulation_r,
             uninsulated_cavity_r_value=template.uninsulated_cavity_r_value,
+            cavity_insulation_material=cavity_ins_mat_name,
         )
         layers.append(
             ConstructionLayerComponent(
@@ -546,11 +645,33 @@ def build_facade_assembly(
         )
         layer_order += 1
     else:
+        is_imp = wall.structural_system == "insulated_metal_panel"
+        _IMP_SKIN_THICKNESS = 0.0005
+        if is_imp:
+            layers.append(
+                ConstructionLayerComponent(
+                    ConstructionMaterial=resolve_material("SteelPanel"),
+                    Thickness=_IMP_SKIN_THICKNESS,
+                    LayerOrder=layer_order,
+                )
+            )
+            layer_order += 1
+
         if template.thickness_m > 0:
             layers.append(
                 ConstructionLayerComponent(
                     ConstructionMaterial=resolve_material(template.material_name),
                     Thickness=template.thickness_m,
+                    LayerOrder=layer_order,
+                )
+            )
+            layer_order += 1
+
+        if is_imp:
+            layers.append(
+                ConstructionLayerComponent(
+                    ConstructionMaterial=resolve_material("SteelPanel"),
+                    Thickness=_IMP_SKIN_THICKNESS,
                     LayerOrder=layer_order,
                 )
             )
@@ -566,9 +687,7 @@ def build_facade_assembly(
             )
             layers.append(
                 layer_from_nominal_r(
-                    # TODO: make this configurable with a CavityInsulationMaterial field
-                    # e.g. blown cellulose, fiberglass, etc.
-                    material="FiberglassBatt",
+                    material=cavity_ins_mat_name,
                     nominal_r_value=effective_cavity_r,
                     layer_order=layer_order,
                 )

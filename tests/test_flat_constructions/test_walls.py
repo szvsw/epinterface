@@ -3,6 +3,7 @@
 import pytest
 
 from epinterface.sbem.flat_constructions.layers import (
+    ALL_CAVITY_INSULATION_MATERIALS,
     ALL_CONTINUOUS_INSULATION_MATERIALS,
     ALL_EXTERIOR_CAVITY_TYPES,
 )
@@ -153,6 +154,7 @@ def test_wall_feature_dict_has_fixed_length() -> None:
         + len(ALL_WALL_INTERIOR_FINISHES)
         + len(ALL_WALL_EXTERIOR_FINISHES)
         + len(ALL_CONTINUOUS_INSULATION_MATERIALS) * 2
+        + len(ALL_CAVITY_INSULATION_MATERIALS)
         + len(ALL_EXTERIOR_CAVITY_TYPES)
     )
     assert len(features) == expected_length

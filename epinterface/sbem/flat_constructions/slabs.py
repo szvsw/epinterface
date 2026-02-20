@@ -27,6 +27,7 @@ SlabStructuralSystem = Literal[
     "mass_timber_deck",
     "sip_floor",
     "compacted_earth_floor",
+    "suspended_timber_floor",
 ]
 SlabInsulationPlacement = Literal["auto", "under_slab", "above_slab"]
 
@@ -103,6 +104,11 @@ STRUCTURAL_TEMPLATES: dict[SlabStructuralSystem, StructuralTemplate] = {
         material_name="RammedEarth",
         thickness_m=0.10,
         supports_under_insulation=False,
+    ),
+    "suspended_timber_floor": StructuralTemplate(
+        material_name="SoftwoodGeneral",
+        thickness_m=0.022,
+        supports_under_insulation=True,
     ),
 }
 

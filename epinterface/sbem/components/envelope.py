@@ -1,5 +1,6 @@
 """Envelope components for the SBEM library."""
 
+import warnings
 from typing import Literal
 
 from archetypal.idfclass import IDF
@@ -177,14 +178,34 @@ class ConstructionLayerComponent(BaseModel, extra="forbid"):
         # return f"{self.LayerOrder}_{self.ConstructionMaterial.Name}_{self.Thickness}m"
         return f"{self.ConstructionMaterial.Name}_{self.Thickness}m"
 
+    _MIN_EP_THICKNESS = 0.003
+
     @property
     def ep_material(self):
-        """Return the EP material for the layer."""
+        """Return the EP material for the layer.
+
+        EnergyPlus Material objects require a minimum thickness of 3mm.
+        For thinner layers, thickness is clamped to 3mm and density is
+        adjusted to preserve thermal mass per unit area.
+        """
+        thickness = self.Thickness
+        density = self.ConstructionMaterial.Density
+
+        if thickness < self._MIN_EP_THICKNESS and thickness > 0:
+            warnings.warn(
+                f"Layer '{self.ConstructionMaterial.Name}' thickness "
+                f"{thickness * 1000:.1f}mm is below the EnergyPlus 3mm minimum. "
+                f"Clamping to 3mm with adjusted density to preserve thermal mass.",
+                stacklevel=2,
+            )
+            density = density * thickness / self._MIN_EP_THICKNESS
+            thickness = self._MIN_EP_THICKNESS
+
         return Material(
             Name=self.name,
-            Thickness=self.Thickness,
+            Thickness=thickness,
             Conductivity=self.ConstructionMaterial.Conductivity,
-            Density=self.ConstructionMaterial.Density,
+            Density=density,
             Specific_Heat=self.ConstructionMaterial.SpecificHeat,
             Thermal_Absorptance=self.ConstructionMaterial.ThermalAbsorptance,
             Solar_Absorptance=self.ConstructionMaterial.SolarAbsorptance,

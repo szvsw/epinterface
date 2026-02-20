@@ -12,16 +12,19 @@ from epinterface.sbem.components.envelope import (
 from epinterface.sbem.flat_constructions.layers import (
     _AIR_GAP_THICKNESS_M,
     AIR_GAP_ROOF,
+    ALL_CAVITY_INSULATION_MATERIALS,
     ALL_CONTINUOUS_INSULATION_MATERIALS,
     ALL_EXTERIOR_CAVITY_TYPES,
+    CAVITY_INSULATION_MATERIAL_MAP,
     CONTINUOUS_INSULATION_MATERIAL_MAP,
+    CavityInsulationMaterial,
     ContinuousInsulationMaterial,
     ExteriorCavityType,
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
     resolve_material,
 )
-from epinterface.sbem.flat_constructions.materials import FIBERGLASS_BATTS, MaterialName
+from epinterface.sbem.flat_constructions.materials import MaterialName
 
 RoofStructuralSystem = Literal[
     "none",
@@ -34,6 +37,7 @@ RoofStructuralSystem = Literal[
     "poured_concrete",
     "reinforced_concrete",
     "sip",
+    "corrugated_metal",
 ]
 
 RoofInteriorFinish = Literal[
@@ -113,7 +117,9 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
         cavity_depth_m=0.180,
         framing_material_name="SteelPanel",
         framing_fraction=0.08,
-        # Calibrated to reproduce ~60-65% effective batt R for steel-joist roofs.
+        # Calibrated to reproduce ~60-65% effective batt R for steel-joist roofs
+        # with 7in (180mm) joist depth at typical spacing. Not directly applicable
+        # to EU lightweight steel roof framing conventions.
         # References:
         # - ASHRAE Standard 90.1 Appendix A (metal-framing correction methodology)
         # - COMcheck steel-framed roof U-factor datasets (effective-R behavior)
@@ -152,6 +158,12 @@ STRUCTURAL_TEMPLATES: dict[RoofStructuralSystem, StructuralTemplate] = {
     "sip": StructuralTemplate(
         material_name="SIPCore",
         thickness_m=0.160,
+        supports_cavity_insulation=False,
+        cavity_depth_m=None,
+    ),
+    "corrugated_metal": StructuralTemplate(
+        material_name="SteelPanel",
+        thickness_m=0.0005,
         supports_cavity_insulation=False,
         cavity_depth_m=None,
     ),
@@ -244,6 +256,10 @@ class SemiFlatRoofConstruction(BaseModel):
         default="polyiso",
         title="Interior continuous roof insulation material",
     )
+    cavity_insulation_material: CavityInsulationMaterial = Field(
+        default="fiberglass",
+        title="Cavity insulation material for framed roof systems",
+    )
     interior_finish: RoofInteriorFinish = Field(
         default="gypsum_board",
         title="Interior roof finish selection",
@@ -288,8 +304,11 @@ class SemiFlatRoofConstruction(BaseModel):
         ):
             return self
 
-        assumed_cavity_insulation_conductivity = FIBERGLASS_BATTS.Conductivity
-        max_nominal_r = template.cavity_depth_m / assumed_cavity_insulation_conductivity
+        cavity_mat_name = CAVITY_INSULATION_MATERIAL_MAP[
+            self.cavity_insulation_material
+        ]
+        cavity_mat = resolve_material(cavity_mat_name)
+        max_nominal_r = template.cavity_depth_m / cavity_mat.Conductivity
         tolerance_r = 0.2
         if self.nominal_cavity_insulation_r > max_nominal_r + tolerance_r:
             msg = (
@@ -328,6 +347,10 @@ class SemiFlatRoofConstruction(BaseModel):
             )
             features[f"{prefix}InteriorInsulationMaterial__{ins_mat}"] = float(
                 self.interior_insulation_material == ins_mat
+            )
+        for cav_ins_mat in ALL_CAVITY_INSULATION_MATERIALS:
+            features[f"{prefix}CavityInsulationMaterial__{cav_ins_mat}"] = float(
+                self.cavity_insulation_material == cav_ins_mat
             )
         for cavity_type in ALL_EXTERIOR_CAVITY_TYPES:
             features[f"{prefix}ExteriorCavityType__{cavity_type}"] = float(
@@ -394,6 +417,10 @@ def build_roof_assembly(
         and template.framing_fraction is not None
     )
 
+    cavity_ins_mat_name = CAVITY_INSULATION_MATERIAL_MAP[
+        roof.cavity_insulation_material
+    ]
+
     if uses_framed_cavity_consolidation:
         consolidated_cavity_material = equivalent_framed_cavity_material(
             structural_system=roof.structural_system,
@@ -403,6 +430,7 @@ def build_roof_assembly(
             framing_path_r_value=template.framing_path_r_value,
             nominal_cavity_insulation_r=roof.effective_nominal_cavity_insulation_r,
             uninsulated_cavity_r_value=template.uninsulated_cavity_r_value,
+            cavity_insulation_material=cavity_ins_mat_name,
         )
         layers.append(
             ConstructionLayerComponent(
@@ -433,9 +461,7 @@ def build_roof_assembly(
             )
             layers.append(
                 layer_from_nominal_r(
-                    # TODO: make this configurable with a CavityInsulationMaterial field
-                    # e.g. blown cellulose, fiberglass, etc.
-                    material="FiberglassBatt",
+                    material=cavity_ins_mat_name,
                     nominal_r_value=effective_cavity_r,
                     layer_order=layer_order,
                 )

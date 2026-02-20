@@ -44,15 +44,9 @@ from epinterface.sbem.components.systems import (
 )
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.flat_constructions import (
-    RoofExteriorFinish as RoofExteriorFinishType,
-)
-from epinterface.sbem.flat_constructions import (
-    RoofInteriorFinish as RoofInteriorFinishType,
-)
-from epinterface.sbem.flat_constructions import (
-    RoofStructuralSystem as RoofStructuralSystemType,
-)
-from epinterface.sbem.flat_constructions import (
+    CavityInsulationMaterial,
+    ContinuousInsulationMaterial,
+    ExteriorCavityType,
     SemiFlatRoofConstruction,
     SemiFlatSlabConstruction,
     SemiFlatWallConstruction,
@@ -60,6 +54,15 @@ from epinterface.sbem.flat_constructions import (
     WallInteriorFinish,
     WallStructuralSystem,
     build_envelope_assemblies,
+)
+from epinterface.sbem.flat_constructions import (
+    RoofExteriorFinish as RoofExteriorFinishType,
+)
+from epinterface.sbem.flat_constructions import (
+    RoofInteriorFinish as RoofInteriorFinishType,
+)
+from epinterface.sbem.flat_constructions import (
+    RoofStructuralSystem as RoofStructuralSystemType,
 )
 from epinterface.sbem.flat_constructions import (
     SlabExteriorFinish as SlabExteriorFinishType,
@@ -789,6 +792,10 @@ class FlatModel(BaseModel):
     FacadeCavityInsulationRValue: float = Field(default=0, ge=0)
     FacadeExteriorInsulationRValue: float = Field(default=0, ge=0)
     FacadeInteriorInsulationRValue: float = Field(default=0, ge=0)
+    FacadeExteriorInsulationMaterial: ContinuousInsulationMaterial = "xps"
+    FacadeInteriorInsulationMaterial: ContinuousInsulationMaterial = "xps"
+    FacadeCavityInsulationMaterial: CavityInsulationMaterial = "fiberglass"
+    FacadeExteriorCavityType: ExteriorCavityType = "none"
     FacadeInteriorFinish: WallInteriorFinish = "drywall"
     FacadeExteriorFinish: WallExteriorFinish = "none"
 
@@ -796,11 +803,16 @@ class FlatModel(BaseModel):
     RoofCavityInsulationRValue: float = Field(default=0, ge=0)
     RoofExteriorInsulationRValue: float = Field(default=2.5, ge=0)
     RoofInteriorInsulationRValue: float = Field(default=0, ge=0)
+    RoofExteriorInsulationMaterial: ContinuousInsulationMaterial = "polyiso"
+    RoofInteriorInsulationMaterial: ContinuousInsulationMaterial = "polyiso"
+    RoofCavityInsulationMaterial: CavityInsulationMaterial = "fiberglass"
+    RoofExteriorCavityType: ExteriorCavityType = "none"
     RoofInteriorFinish: RoofInteriorFinishType = "gypsum_board"
     RoofExteriorFinish: RoofExteriorFinishType = "epdm_membrane"
 
     SlabStructuralSystem: SlabStructuralSystemType = "slab_on_grade"
     SlabInsulationRValue: float = Field(default=1.5, ge=0)
+    SlabInsulationMaterial: ContinuousInsulationMaterial = "xps"
     SlabInsulationPlacement: SlabInsulationPlacementType = "auto"
     SlabInteriorFinish: SlabInteriorFinishType = "tile"
     SlabExteriorFinish: SlabExteriorFinishType = "none"
@@ -822,6 +834,10 @@ class FlatModel(BaseModel):
             nominal_cavity_insulation_r=self.FacadeCavityInsulationRValue,
             nominal_exterior_insulation_r=self.FacadeExteriorInsulationRValue,
             nominal_interior_insulation_r=self.FacadeInteriorInsulationRValue,
+            exterior_insulation_material=self.FacadeExteriorInsulationMaterial,
+            interior_insulation_material=self.FacadeInteriorInsulationMaterial,
+            cavity_insulation_material=self.FacadeCavityInsulationMaterial,
+            exterior_cavity_type=self.FacadeExteriorCavityType,
             interior_finish=self.FacadeInteriorFinish,
             exterior_finish=self.FacadeExteriorFinish,
         )
@@ -834,6 +850,10 @@ class FlatModel(BaseModel):
             nominal_cavity_insulation_r=self.RoofCavityInsulationRValue,
             nominal_exterior_insulation_r=self.RoofExteriorInsulationRValue,
             nominal_interior_insulation_r=self.RoofInteriorInsulationRValue,
+            exterior_insulation_material=self.RoofExteriorInsulationMaterial,
+            interior_insulation_material=self.RoofInteriorInsulationMaterial,
+            cavity_insulation_material=self.RoofCavityInsulationMaterial,
+            exterior_cavity_type=self.RoofExteriorCavityType,
             interior_finish=self.RoofInteriorFinish,
             exterior_finish=self.RoofExteriorFinish,
         )
@@ -844,6 +864,7 @@ class FlatModel(BaseModel):
         return SemiFlatSlabConstruction(
             structural_system=self.SlabStructuralSystem,
             nominal_insulation_r=self.SlabInsulationRValue,
+            insulation_material=self.SlabInsulationMaterial,
             insulation_placement=self.SlabInsulationPlacement,
             interior_finish=self.SlabInteriorFinish,
             exterior_finish=self.SlabExteriorFinish,

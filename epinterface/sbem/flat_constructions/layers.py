@@ -15,7 +15,6 @@ type MaterialRef = ConstructionMaterialComponent | MaterialName
 ContinuousInsulationMaterial = Literal["xps", "polyiso", "eps", "mineral_wool"]
 ALL_CONTINUOUS_INSULATION_MATERIALS = get_args(ContinuousInsulationMaterial)
 
-# TODO: do we really need this map?
 CONTINUOUS_INSULATION_MATERIAL_MAP: dict[ContinuousInsulationMaterial, MaterialName] = {
     "xps": "XPSBoard",
     "polyiso": "PolyisoBoard",
@@ -23,18 +22,28 @@ CONTINUOUS_INSULATION_MATERIAL_MAP: dict[ContinuousInsulationMaterial, MaterialN
     "mineral_wool": "MineralWoolBoard",
 }
 
+CavityInsulationMaterial = Literal["fiberglass", "mineral_wool", "cellulose"]
+ALL_CAVITY_INSULATION_MATERIALS = get_args(CavityInsulationMaterial)
+
+CAVITY_INSULATION_MATERIAL_MAP: dict[CavityInsulationMaterial, MaterialName] = {
+    "fiberglass": "FiberglassBatt",
+    "mineral_wool": "MineralWoolBatt",
+    "cellulose": "CelluloseBatt",
+}
+
 ExteriorCavityType = Literal["none", "unventilated", "well_ventilated"]
 ALL_EXTERIOR_CAVITY_TYPES = get_args(ExteriorCavityType)
 
-# ISO 6946:2017 Table 2 -- thermal resistance of unventilated air layers.
-# Vertical (walls): ~0.18 m2K/W for 25mm gap.
-# Horizontal heat-flow-up (roofs): ~0.16 m2K/W for 25mm gap.
-UNVENTILATED_AIR_R_WALL = 0.18
-UNVENTILATED_AIR_R_ROOF = 0.16
+# ISO 6946:2017 Section 6.2, Table 2 -- thermal resistance of unventilated
+# air layers. Values are for sealed cavities with high-emissivity surfaces.
+# For well-ventilated cavities, ISO 6946:2017 Section 6.9 specifies that
+# the cladding and air-layer R are disregarded entirely (handled by the
+# builder omitting the finish layer in that case).
+UNVENTILATED_AIR_R_WALL = 0.18  # vertical, 25mm gap
+UNVENTILATED_AIR_R_ROOF = 0.16  # horizontal (heat-flow-up), 25mm gap
 _AIR_GAP_THICKNESS_M = 0.025
 
 
-# TODO: should this be a NoMass or AirGap Material instead? Also, make sure it is not on the outside!
 def _make_air_gap_material(r_value: float) -> ConstructionMaterialComponent:
     """Create a virtual material representing an unventilated air gap."""
     effective_conductivity = _AIR_GAP_THICKNESS_M / r_value
@@ -86,6 +95,7 @@ def equivalent_framed_cavity_material(
     nominal_cavity_insulation_r: float,
     uninsulated_cavity_r_value: float,
     framing_path_r_value: float | None = None,
+    cavity_insulation_material: MaterialRef = FIBERGLASS_BATTS,
 ) -> ConstructionMaterialComponent:
     """Create an equivalent material for a framed cavity layer.
 
@@ -94,6 +104,7 @@ def equivalent_framed_cavity_material(
     where R_fill is nominal cavity insulation R (or an uninsulated fallback).
     """
     resolved_framing_material = resolve_material(framing_material)
+    resolved_cavity_insulation = resolve_material(cavity_insulation_material)
     fill_r = (
         nominal_cavity_insulation_r
         if nominal_cavity_insulation_r > 0
@@ -104,17 +115,18 @@ def equivalent_framed_cavity_material(
         if framing_path_r_value is not None
         else cavity_depth_m / resolved_framing_material.Conductivity
     )
+    # TODO: Not currently dealing with AirGap when thicknesses are implicitly unequal.
     u_eq = framing_fraction / framing_r + (1 - framing_fraction) / fill_r
     r_eq = 1 / u_eq
     conductivity_eq = cavity_depth_m / r_eq
 
     density_eq = (
         framing_fraction * resolved_framing_material.Density
-        + (1 - framing_fraction) * FIBERGLASS_BATTS.Density
+        + (1 - framing_fraction) * resolved_cavity_insulation.Density
     )
     specific_heat_eq = (
         framing_fraction * resolved_framing_material.SpecificHeat
-        + (1 - framing_fraction) * FIBERGLASS_BATTS.SpecificHeat
+        + (1 - framing_fraction) * resolved_cavity_insulation.SpecificHeat
     )
 
     return ConstructionMaterialComponent(
