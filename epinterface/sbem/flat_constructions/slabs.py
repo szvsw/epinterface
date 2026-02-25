@@ -10,7 +10,6 @@ from epinterface.sbem.components.envelope import (
     ConstructionLayerComponent,
 )
 from epinterface.sbem.flat_constructions.layers import (
-    ALL_CONTINUOUS_INSULATION_MATERIALS,
     CONTINUOUS_INSULATION_MATERIAL_MAP,
     ContinuousInsulationMaterial,
     layer_from_nominal_r,
@@ -198,53 +197,6 @@ class SemiFlatSlabConstruction(BaseModel):
         ):
             return 0.0
         return self.nominal_insulation_r
-
-    @property
-    def ignored_feature_names(self) -> tuple[str, ...]:
-        """Return feature names that are semantic no-ops for this slab."""
-        ignored: list[str] = []
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if (
-            self.insulation_placement == "under_slab"
-            and not template.supports_under_insulation
-            and self.nominal_insulation_r > 0
-        ):
-            ignored.append("nominal_insulation_r")
-            ignored.append("insulation_placement")
-        return tuple(ignored)
-
-    def to_feature_dict(self, prefix: str = "Slab") -> dict[str, float]:
-        """Return a fixed-length numeric feature dictionary for ML workflows."""
-        features: dict[str, float] = {
-            f"{prefix}NominalInsulationRValue": self.nominal_insulation_r,
-            f"{prefix}EffectiveNominalInsulationRValue": (
-                self.effective_nominal_insulation_r
-            ),
-        }
-        for structural_system in ALL_SLAB_STRUCTURAL_SYSTEMS:
-            features[f"{prefix}StructuralSystem__{structural_system}"] = float(
-                self.structural_system == structural_system
-            )
-        for placement in ALL_SLAB_INSULATION_PLACEMENTS:
-            features[f"{prefix}InsulationPlacement__{placement}"] = float(
-                self.insulation_placement == placement
-            )
-            features[f"{prefix}EffectiveInsulationPlacement__{placement}"] = float(
-                self.effective_insulation_placement == placement
-            )
-        for interior_finish in ALL_SLAB_INTERIOR_FINISHES:
-            features[f"{prefix}InteriorFinish__{interior_finish}"] = float(
-                self.interior_finish == interior_finish
-            )
-        for exterior_finish in ALL_SLAB_EXTERIOR_FINISHES:
-            features[f"{prefix}ExteriorFinish__{exterior_finish}"] = float(
-                self.exterior_finish == exterior_finish
-            )
-        for ins_mat in ALL_CONTINUOUS_INSULATION_MATERIALS:
-            features[f"{prefix}InsulationMaterial__{ins_mat}"] = float(
-                self.insulation_material == ins_mat
-            )
-        return features
 
 
 def build_slab_assembly(

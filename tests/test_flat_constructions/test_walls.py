@@ -2,11 +2,6 @@
 
 import pytest
 
-from epinterface.sbem.flat_constructions.layers import (
-    ALL_CAVITY_INSULATION_MATERIALS,
-    ALL_CONTINUOUS_INSULATION_MATERIALS,
-    ALL_EXTERIOR_CAVITY_TYPES,
-)
 from epinterface.sbem.flat_constructions.materials import (
     CEMENT_MORTAR,
     CONCRETE_BLOCK_H,
@@ -18,9 +13,6 @@ from epinterface.sbem.flat_constructions.materials import (
     MaterialName,
 )
 from epinterface.sbem.flat_constructions.walls import (
-    ALL_WALL_EXTERIOR_FINISHES,
-    ALL_WALL_INTERIOR_FINISHES,
-    ALL_WALL_STRUCTURAL_SYSTEMS,
     STRUCTURAL_TEMPLATES,
     SemiFlatWallConstruction,
     WallExteriorFinish,
@@ -180,33 +172,6 @@ def test_light_gauge_steel_uses_effective_framing_path() -> None:
         + (1 - steel_template.framing_fraction) / 2.0
     )
     assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
-
-
-def test_wall_feature_dict_has_fixed_length() -> None:
-    """Feature dictionary should remain fixed-length across wall variants."""
-    wall = SemiFlatWallConstruction(
-        structural_system="deep_woodframe_24oc",
-        nominal_cavity_insulation_r=2.8,
-        nominal_exterior_insulation_r=0.5,
-        nominal_interior_insulation_r=0.0,
-        interior_finish="plaster",
-        exterior_finish="fiber_cement",
-    )
-    features = wall.to_feature_dict(prefix="Facade")
-
-    expected_length = (
-        4
-        + len(ALL_WALL_STRUCTURAL_SYSTEMS)
-        + len(ALL_WALL_INTERIOR_FINISHES)
-        + len(ALL_WALL_EXTERIOR_FINISHES)
-        + len(ALL_CONTINUOUS_INSULATION_MATERIALS) * 2
-        + len(ALL_CAVITY_INSULATION_MATERIALS)
-        + len(ALL_EXTERIOR_CAVITY_TYPES)
-    )
-    assert len(features) == expected_length
-    assert features["FacadeStructuralSystem__deep_woodframe_24oc"] == 1.0
-    assert features["FacadeInteriorFinish__plaster"] == 1.0
-    assert features["FacadeExteriorFinish__fiber_cement"] == 1.0
 
 
 def test_vinyl_siding_exterior_finish_round_trip() -> None:

@@ -13,9 +13,6 @@ from epinterface.sbem.components.envelope import (
 from epinterface.sbem.flat_constructions.layers import (
     _AIR_GAP_THICKNESS_M,
     AIR_GAP_WALL,
-    ALL_CAVITY_INSULATION_MATERIALS,
-    ALL_CONTINUOUS_INSULATION_MATERIALS,
-    ALL_EXTERIOR_CAVITY_TYPES,
     CAVITY_INSULATION_MATERIAL_MAP,
     CONTINUOUS_INSULATION_MATERIAL_MAP,
     CavityInsulationMaterial,
@@ -523,46 +520,6 @@ class SemiFlatWallConstruction(BaseModel):
             )
             self.nominal_cavity_insulation_r = max_nominal_r
         return self
-
-    def to_feature_dict(self, prefix: str = "Facade") -> dict[str, float]:
-        """Return a fixed-length numeric feature dictionary for ML workflows."""
-        features: dict[str, float] = {
-            f"{prefix}NominalCavityInsulationRValue": self.nominal_cavity_insulation_r,
-            f"{prefix}NominalExteriorInsulationRValue": self.nominal_exterior_insulation_r,
-            f"{prefix}NominalInteriorInsulationRValue": self.nominal_interior_insulation_r,
-            f"{prefix}EffectiveNominalCavityInsulationRValue": (
-                self.effective_nominal_cavity_insulation_r
-            ),
-        }
-
-        for structural_system in ALL_WALL_STRUCTURAL_SYSTEMS:
-            features[f"{prefix}StructuralSystem__{structural_system}"] = float(
-                self.structural_system == structural_system
-            )
-        for interior_finish in ALL_WALL_INTERIOR_FINISHES:
-            features[f"{prefix}InteriorFinish__{interior_finish}"] = float(
-                self.interior_finish == interior_finish
-            )
-        for exterior_finish in ALL_WALL_EXTERIOR_FINISHES:
-            features[f"{prefix}ExteriorFinish__{exterior_finish}"] = float(
-                self.exterior_finish == exterior_finish
-            )
-        for ins_mat in ALL_CONTINUOUS_INSULATION_MATERIALS:
-            features[f"{prefix}ExteriorInsulationMaterial__{ins_mat}"] = float(
-                self.exterior_insulation_material == ins_mat
-            )
-            features[f"{prefix}InteriorInsulationMaterial__{ins_mat}"] = float(
-                self.interior_insulation_material == ins_mat
-            )
-        for cav_ins_mat in ALL_CAVITY_INSULATION_MATERIALS:
-            features[f"{prefix}CavityInsulationMaterial__{cav_ins_mat}"] = float(
-                self.cavity_insulation_material == cav_ins_mat
-            )
-        for cavity_type in ALL_EXTERIOR_CAVITY_TYPES:
-            features[f"{prefix}ExteriorCavityType__{cavity_type}"] = float(
-                self.exterior_cavity_type == cavity_type
-            )
-        return features
 
 
 def build_facade_assembly(  # noqa: C901
