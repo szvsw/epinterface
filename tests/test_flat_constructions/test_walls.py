@@ -11,7 +11,9 @@ from epinterface.sbem.flat_constructions.materials import (
     CEMENT_MORTAR,
     CONCRETE_BLOCK_H,
     CONCRETE_RC_DENSE,
+    FIBERGLASS_BATTS,
     GYPSUM_BOARD,
+    MINERAL_WOOL_BATT,
     SOFTWOOD_GENERAL,
     MaterialName,
 )
@@ -53,16 +55,60 @@ def test_build_facade_assembly_from_nominal_r_values() -> None:
     assert assembly.r_value == pytest.approx(expected_r, rel=1e-6)
 
 
-def test_validator_rejects_unrealistic_cavity_r_for_depth() -> None:
-    """Cavity insulation R should be limited by assumed cavity depth."""
-    with pytest.raises(
-        ValueError,
-        match="cavity-depth-compatible limit",
-    ):
-        SemiFlatWallConstruction(
+def test_validator_overrides_excessive_cavity_r_to_max() -> None:
+    """Cavity insulation R exceeding depth limit should be capped with a warning."""
+    with pytest.warns(UserWarning, match="cavity-depth-compatible limit"):
+        wall = SemiFlatWallConstruction(
             structural_system="woodframe",
             nominal_cavity_insulation_r=3.0,
         )
+
+    woodframe_template = STRUCTURAL_TEMPLATES["woodframe"]
+    max_nominal_r = (
+        woodframe_template.cavity_depth_m or 0.1
+    ) / FIBERGLASS_BATTS.Conductivity
+    assert wall.nominal_cavity_insulation_r == pytest.approx(max_nominal_r)
+    assert wall.effective_nominal_cavity_insulation_r == pytest.approx(max_nominal_r)
+
+    # Assembly should use the capped value, not the original excessive input
+    assembly = build_facade_assembly(wall)
+    assert assembly.r_value > 0
+    assert assembly.Type == "Facade"
+
+
+def test_wall_cavity_r_within_limit_not_overridden() -> None:
+    """Cavity R within depth limit should pass through unchanged."""
+    wall = SemiFlatWallConstruction(
+        structural_system="woodframe",
+        nominal_cavity_insulation_r=2.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    woodframe_template = STRUCTURAL_TEMPLATES["woodframe"]
+    max_nominal_r = (
+        woodframe_template.cavity_depth_m or 0.1
+    ) / FIBERGLASS_BATTS.Conductivity
+    assert wall.nominal_cavity_insulation_r == 2.0
+    assert wall.nominal_cavity_insulation_r <= max_nominal_r + 0.2
+
+
+def test_wall_cavity_r_override_uses_material_specific_max() -> None:
+    """Override max should depend on cavity insulation material conductivity."""
+    # Mineral wool has lower conductivity than fiberglass, so higher max R
+    with pytest.warns(UserWarning, match="cavity-depth-compatible limit"):
+        wall = SemiFlatWallConstruction(
+            structural_system="woodframe",
+            nominal_cavity_insulation_r=3.0,
+            cavity_insulation_material="mineral_wool",
+        )
+
+    woodframe_template = STRUCTURAL_TEMPLATES["woodframe"]
+    max_nominal_r = (
+        woodframe_template.cavity_depth_m or 0.1
+    ) / MINERAL_WOOL_BATT.Conductivity
+    assert wall.nominal_cavity_insulation_r == pytest.approx(max_nominal_r)
 
 
 def test_non_cavity_structural_system_treats_cavity_r_as_dead_feature() -> None:

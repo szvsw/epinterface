@@ -11,6 +11,7 @@ from epinterface.sbem.flat_constructions.layers import (
 from epinterface.sbem.flat_constructions.materials import (
     CERAMIC_TILE,
     CONCRETE_RC_DENSE,
+    FIBERGLASS_BATTS,
     GYPSUM_BOARD,
     ROOF_MEMBRANE,
     SOFTWOOD_GENERAL,
@@ -67,16 +68,43 @@ def test_build_roof_assembly_from_nominal_r_values() -> None:
     assert assembly.r_value == pytest.approx(expected_r, rel=1e-6)
 
 
-def test_roof_validator_rejects_unrealistic_cavity_r_for_depth() -> None:
-    """Roof cavity insulation R should be limited by assumed cavity depth."""
-    with pytest.raises(
-        ValueError,
-        match="cavity-depth-compatible limit",
-    ):
-        SemiFlatRoofConstruction(
+def test_roof_validator_overrides_excessive_cavity_r_to_max() -> None:
+    """Roof cavity insulation R exceeding depth limit should be capped with a warning."""
+    with pytest.warns(UserWarning, match="cavity-depth-compatible limit"):
+        roof = SemiFlatRoofConstruction(
             structural_system="deep_wood_truss",
             nominal_cavity_insulation_r=6.0,
         )
+
+    truss_template = ROOF_STRUCTURAL_TEMPLATES["deep_wood_truss"]
+    max_nominal_r = (
+        truss_template.cavity_depth_m or 0.1
+    ) / FIBERGLASS_BATTS.Conductivity
+    assert roof.nominal_cavity_insulation_r == pytest.approx(max_nominal_r)
+    assert roof.effective_nominal_cavity_insulation_r == pytest.approx(max_nominal_r)
+
+    # Assembly should use the capped value, not the original excessive input
+    assembly = build_roof_assembly(roof)
+    assert assembly.r_value > 0
+    assert assembly.Type == "FlatRoof"
+
+
+def test_roof_cavity_r_within_limit_not_overridden() -> None:
+    """Cavity R within depth limit should pass through unchanged."""
+    roof = SemiFlatRoofConstruction(
+        structural_system="light_wood_truss",
+        nominal_cavity_insulation_r=3.0,
+        nominal_exterior_insulation_r=0.0,
+        nominal_interior_insulation_r=0.0,
+        interior_finish="none",
+        exterior_finish="none",
+    )
+    truss_template = ROOF_STRUCTURAL_TEMPLATES["light_wood_truss"]
+    max_nominal_r = (
+        truss_template.cavity_depth_m or 0.1
+    ) / FIBERGLASS_BATTS.Conductivity
+    assert roof.nominal_cavity_insulation_r == 3.0
+    assert roof.nominal_cavity_insulation_r < max_nominal_r + 0.2
 
 
 def test_non_cavity_roof_treats_cavity_r_as_dead_feature() -> None:

@@ -1,5 +1,6 @@
 """Semi-flat roof schema and translators for SBEM assemblies."""
 
+import warnings
 from dataclasses import dataclass
 from typing import Literal, get_args
 
@@ -311,12 +312,14 @@ class SemiFlatRoofConstruction(BaseModel):
         max_nominal_r = template.cavity_depth_m / cavity_mat.Conductivity
         tolerance_r = 0.2
         if self.nominal_cavity_insulation_r > max_nominal_r + tolerance_r:
-            msg = (
+            warnings.warn(
                 f"Nominal cavity insulation R-value ({self.nominal_cavity_insulation_r:.2f} "
                 f"m²K/W) exceeds the assumed cavity-depth-compatible limit for "
-                f"{self.structural_system} ({max_nominal_r:.2f} m²K/W)."
+                f"{self.structural_system} ({max_nominal_r:.2f} m²K/W). "
+                f"Overriding with the maximum possible value ({max_nominal_r:.2f} m²K/W).",
+                stacklevel=2,
             )
-            raise ValueError(msg)
+            self.nominal_cavity_insulation_r = max_nominal_r
         return self
 
     def to_feature_dict(self, prefix: str = "Roof") -> dict[str, float]:
