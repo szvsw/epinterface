@@ -1872,6 +1872,7 @@ class FlatModel(BaseModel):
             Model(
                 geometry=geometry,
                 Zone=zone,
+                # TODO: make attic/basement configurable
                 Attic=AtticAssumptions(
                     UseFraction=None,
                     Conditioned=False,
