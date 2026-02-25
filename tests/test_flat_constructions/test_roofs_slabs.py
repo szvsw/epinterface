@@ -147,9 +147,10 @@ def test_light_wood_truss_uses_consolidated_cavity_layer() -> None:
     assert truss_template.framing_fraction is not None
 
     framing_r = truss_template.cavity_depth_m / SOFTWOOD_GENERAL.Conductivity
+    fill_r = 3.0 + truss_template.uninsulated_cavity_r_value
     r_eq_expected = 1 / (
         truss_template.framing_fraction / framing_r
-        + (1 - truss_template.framing_fraction) / 3.0
+        + (1 - truss_template.framing_fraction) / fill_r
     )
     assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
 
@@ -174,9 +175,10 @@ def test_steel_joist_uses_effective_framing_path() -> None:
     assert joist_template.framing_fraction is not None
     assert joist_template.framing_path_r_value is not None
 
+    fill_r = 3.0 + joist_template.uninsulated_cavity_r_value
     r_eq_expected = 1 / (
         joist_template.framing_fraction / joist_template.framing_path_r_value
-        + (1 - joist_template.framing_fraction) / 3.0
+        + (1 - joist_template.framing_fraction) / fill_r
     )
     assert assembly.r_value == pytest.approx(r_eq_expected, rel=1e-6)
 

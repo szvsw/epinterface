@@ -43,6 +43,11 @@ UNVENTILATED_AIR_R_WALL = 0.18  # vertical, 25mm gap
 UNVENTILATED_AIR_R_ROOF = 0.16  # horizontal (heat-flow-up), 25mm gap
 _AIR_GAP_THICKNESS_M = 0.025
 
+# Minimum residual gap (between insulation face and sheathing) before we add
+# a sealed-air-layer R to the fill path.  Gaps narrower than this are treated
+# as negligible (batt compression / manufacturing tolerance).
+_MIN_RESIDUAL_GAP_M = 0.010
+
 
 def _make_air_gap_material(r_value: float) -> ConstructionMaterialComponent:
     """Create a virtual material representing an unventilated air gap."""
@@ -102,20 +107,36 @@ def equivalent_framed_cavity_material(
     Uses a parallel-path estimate:
       U_eq = f_frame / R_frame + (1-f_frame) / R_fill
     where R_fill is nominal cavity insulation R (or an uninsulated fallback).
+
+    When the insulation batt is thinner than the cavity depth, a residual
+    sealed air gap exists between the batt face and the adjacent layer.  Its
+    thermal resistance (per ISO 6946:2017 Table 2) is added in series on the
+    fill path so that the parallel-path calculation remains accurate for
+    partial-fill scenarios.
     """
     resolved_framing_material = resolve_material(framing_material)
     resolved_cavity_insulation = resolve_material(cavity_insulation_material)
-    fill_r = (
-        nominal_cavity_insulation_r
-        if nominal_cavity_insulation_r > 0
-        else uninsulated_cavity_r_value
-    )
+    if nominal_cavity_insulation_r > 0:
+        insulation_thickness_m = (
+            nominal_cavity_insulation_r * resolved_cavity_insulation.Conductivity
+        )
+        gap_m = cavity_depth_m - insulation_thickness_m
+        # ISO 6946:2017 Table 2 -- sealed air-layer R is roughly constant for
+        # gaps >= 25 mm; using `uninsulated_cavity_r_value` (template-supplied,
+        # orientation-aware) is a reasonable approximation for any gap above the
+        # minimum threshold.
+        residual_air_r = (
+            uninsulated_cavity_r_value if gap_m >= _MIN_RESIDUAL_GAP_M else 0.0
+        )
+        fill_r = nominal_cavity_insulation_r + residual_air_r
+    else:
+        fill_r = uninsulated_cavity_r_value
+
     framing_r = (
         framing_path_r_value
         if framing_path_r_value is not None
         else cavity_depth_m / resolved_framing_material.Conductivity
     )
-    # TODO: Not currently dealing with AirGap when thicknesses are implicitly unequal.
     u_eq = framing_fraction / framing_r + (1 - framing_fraction) / fill_r
     r_eq = 1 / u_eq
     conductivity_eq = cavity_depth_m / r_eq
@@ -137,6 +158,7 @@ def equivalent_framed_cavity_material(
         Conductivity=conductivity_eq,
         Density=density_eq,
         SpecificHeat=specific_heat_eq,
+        # Absorptance values are generally irrelevant since this is an interior layer.
         ThermalAbsorptance=0.9,
         SolarAbsorptance=0.6,
         VisibleAbsorptance=0.6,
