@@ -1,6 +1,7 @@
 """Semi-flat roof schema and translators for SBEM assemblies."""
 
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Literal, get_args
 
 from pydantic import BaseModel, Field, model_validator
@@ -20,6 +21,7 @@ from epinterface.sbem.flat_constructions.layers import (
     CavityInsulationMaterial,
     ContinuousInsulationMaterial,
     ExteriorCavityType,
+    MaterialRef,
     equivalent_framed_cavity_material,
     layer_from_nominal_r,
     resolve_material,
@@ -226,6 +228,338 @@ EXTERIOR_FINISH_TEMPLATES: dict[RoofExteriorFinish, FinishTemplate | None] = {
 }
 
 
+@dataclass
+class _RoofLayerAccumulator:
+    """Track roof layers while keeping layer-order assignments consistent."""
+
+    layers: list[ConstructionLayerComponent] = field(default_factory=list)
+    next_layer_order: int = 0
+
+    def add_material_layer(self, *, material: MaterialRef, thickness_m: float) -> None:
+        """Append a layer with an explicit material and thickness."""
+        self.layers.append(
+            ConstructionLayerComponent(
+                ConstructionMaterial=resolve_material(material),
+                Thickness=thickness_m,
+                LayerOrder=self.next_layer_order,
+            )
+        )
+        self.next_layer_order += 1
+
+    def add_nominal_r_layer(
+        self,
+        *,
+        material: MaterialRef,
+        nominal_r_value: float,
+    ) -> None:
+        """Append a layer by back-solving thickness from nominal R."""
+        self.layers.append(
+            layer_from_nominal_r(
+                material=material,
+                nominal_r_value=nominal_r_value,
+                layer_order=self.next_layer_order,
+            )
+        )
+        self.next_layer_order += 1
+
+
+class _RoofAssemblyBuilder(ABC):
+    """Abstract roof assembly strategy."""
+
+    def __init__(
+        self,
+        *,
+        structural_system: RoofStructuralSystem,
+        template: StructuralTemplate,
+    ) -> None:
+        self.structural_system = structural_system
+        self.template = template
+
+    def effective_nominal_cavity_insulation_r(
+        self,
+        nominal_cavity_insulation_r: float,
+    ) -> float:
+        """Return cavity R after structural-system compatibility rules."""
+        if not self.template.supports_cavity_insulation:
+            return 0.0
+        return nominal_cavity_insulation_r
+
+    def ignored_feature_names(
+        self,
+        nominal_cavity_insulation_r: float,
+    ) -> tuple[str, ...]:
+        """Return input names that are semantic no-ops for this builder."""
+        if (
+            not self.template.supports_cavity_insulation
+            and nominal_cavity_insulation_r > 0
+        ):
+            return ("nominal_cavity_insulation_r",)
+        return ()
+
+    def validate_nominal_cavity_insulation_r(
+        self,
+        *,
+        nominal_cavity_insulation_r: float,
+        cavity_insulation_material: CavityInsulationMaterial,
+    ) -> None:
+        """Raise if the requested cavity R exceeds cavity-depth assumptions."""
+        if (
+            not self.template.supports_cavity_insulation
+            or self.template.cavity_depth_m is None
+            or nominal_cavity_insulation_r == 0
+        ):
+            return
+
+        cavity_mat_name = CAVITY_INSULATION_MATERIAL_MAP[cavity_insulation_material]
+        cavity_mat = resolve_material(cavity_mat_name)
+        max_nominal_r = self.template.cavity_depth_m / cavity_mat.Conductivity
+        tolerance_r = 0.2
+        if nominal_cavity_insulation_r > max_nominal_r + tolerance_r:
+            msg = (
+                f"Nominal cavity insulation R-value ({nominal_cavity_insulation_r:.2f} "
+                f"m²K/W) exceeds the assumed cavity-depth-compatible limit for "
+                f"{self.structural_system} ({max_nominal_r:.2f} m²K/W)."
+            )
+            raise ValueError(msg)
+
+    @abstractmethod
+    def build_layers(
+        self,
+        *,
+        nominal_cavity_insulation_r: float,
+        nominal_exterior_insulation_r: float,
+        nominal_interior_insulation_r: float,
+        exterior_insulation_material: ContinuousInsulationMaterial,
+        interior_insulation_material: ContinuousInsulationMaterial,
+        cavity_insulation_material: CavityInsulationMaterial,
+        interior_finish: RoofInteriorFinish,
+        exterior_finish: RoofExteriorFinish,
+        exterior_cavity_type: ExteriorCavityType,
+    ) -> list[ConstructionLayerComponent]:
+        """Build roof layers from high-level assembly inputs."""
+
+
+class _ComposedRoofAssemblyBuilder(_RoofAssemblyBuilder, ABC):
+    """Shared roof-builder flow with subclassed structural logic."""
+
+    def build_layers(
+        self,
+        *,
+        nominal_cavity_insulation_r: float,
+        nominal_exterior_insulation_r: float,
+        nominal_interior_insulation_r: float,
+        exterior_insulation_material: ContinuousInsulationMaterial,
+        interior_insulation_material: ContinuousInsulationMaterial,
+        cavity_insulation_material: CavityInsulationMaterial,
+        interior_finish: RoofInteriorFinish,
+        exterior_finish: RoofExteriorFinish,
+        exterior_cavity_type: ExteriorCavityType,
+    ) -> list[ConstructionLayerComponent]:
+        """Build roof layers outside-in while delegating structural core logic."""
+        layers = _RoofLayerAccumulator()
+
+        self._append_exterior_layers(
+            layers=layers,
+            exterior_finish=exterior_finish,
+            exterior_cavity_type=exterior_cavity_type,
+        )
+
+        if nominal_exterior_insulation_r > 0:
+            ext_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
+                exterior_insulation_material
+            ]
+            layers.add_nominal_r_layer(
+                material=ext_ins_material,
+                nominal_r_value=nominal_exterior_insulation_r,
+            )
+
+        self._append_structural_layers(
+            layers=layers,
+            effective_nominal_cavity_insulation_r=(
+                self.effective_nominal_cavity_insulation_r(
+                    nominal_cavity_insulation_r=nominal_cavity_insulation_r
+                )
+            ),
+            cavity_insulation_material=cavity_insulation_material,
+        )
+
+        if nominal_interior_insulation_r > 0:
+            int_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
+                interior_insulation_material
+            ]
+            layers.add_nominal_r_layer(
+                material=int_ins_material,
+                nominal_r_value=nominal_interior_insulation_r,
+            )
+
+        self._append_interior_finish(
+            layers=layers,
+            interior_finish=interior_finish,
+        )
+        return layers.layers
+
+    def _append_exterior_layers(
+        self,
+        *,
+        layers: _RoofLayerAccumulator,
+        exterior_finish: RoofExteriorFinish,
+        exterior_cavity_type: ExteriorCavityType,
+    ) -> None:
+        exterior_finish_template = EXTERIOR_FINISH_TEMPLATES[exterior_finish]
+
+        # ISO 6946:2017 Section 6.9 -- for well-ventilated cavities, cladding and
+        # air-layer resistance are disregarded.
+        if (
+            exterior_finish_template is not None
+            and exterior_cavity_type != "well_ventilated"
+        ):
+            layers.add_material_layer(
+                material=exterior_finish_template.material_name,
+                thickness_m=exterior_finish_template.thickness_m,
+            )
+
+        # ISO 6946:2017 Section 6.9 -- for unventilated cavities, include a still
+        # air-gap thermal resistance layer.
+        if (
+            exterior_cavity_type == "unventilated"
+            and exterior_finish_template is not None
+        ):
+            layers.add_material_layer(
+                material=AIR_GAP_ROOF,
+                thickness_m=_AIR_GAP_THICKNESS_M,
+            )
+
+    def _append_interior_finish(
+        self,
+        *,
+        layers: _RoofLayerAccumulator,
+        interior_finish: RoofInteriorFinish,
+    ) -> None:
+        interior_finish_template = INTERIOR_FINISH_TEMPLATES[interior_finish]
+        if interior_finish_template is None:
+            return
+        layers.add_material_layer(
+            material=interior_finish_template.material_name,
+            thickness_m=interior_finish_template.thickness_m,
+        )
+
+    @abstractmethod
+    def _append_structural_layers(
+        self,
+        *,
+        layers: _RoofLayerAccumulator,
+        effective_nominal_cavity_insulation_r: float,
+        cavity_insulation_material: CavityInsulationMaterial,
+    ) -> None:
+        """Append system-specific structural layers."""
+
+
+class _LayeredRoofAssemblyBuilder(_ComposedRoofAssemblyBuilder):
+    """Roof strategy for monolithic/solid assemblies with optional cavity layer."""
+
+    def _append_structural_layers(
+        self,
+        *,
+        layers: _RoofLayerAccumulator,
+        effective_nominal_cavity_insulation_r: float,
+        cavity_insulation_material: CavityInsulationMaterial,
+    ) -> None:
+        if self.template.thickness_m > 0:
+            layers.add_material_layer(
+                material=self.template.material_name,
+                thickness_m=self.template.thickness_m,
+            )
+
+        if (
+            effective_nominal_cavity_insulation_r > 0
+            and self.template.supports_cavity_insulation
+        ):
+            cavity_ins_material = CAVITY_INSULATION_MATERIAL_MAP[
+                cavity_insulation_material
+            ]
+            effective_cavity_r = (
+                effective_nominal_cavity_insulation_r
+                * self.template.cavity_r_correction_factor
+            )
+            layers.add_nominal_r_layer(
+                material=cavity_ins_material,
+                nominal_r_value=effective_cavity_r,
+            )
+
+
+class _FramedCavityRoofAssemblyBuilder(_ComposedRoofAssemblyBuilder):
+    """Roof strategy for framed systems using consolidated cavity materials."""
+
+    def _append_structural_layers(
+        self,
+        *,
+        layers: _RoofLayerAccumulator,
+        effective_nominal_cavity_insulation_r: float,
+        cavity_insulation_material: CavityInsulationMaterial,
+    ) -> None:
+        if (
+            self.template.cavity_depth_m is None
+            or self.template.framing_material_name is None
+            or self.template.framing_fraction is None
+        ):
+            msg = (
+                f"Framed roof builder for '{self.structural_system}' is missing "
+                "framing metadata."
+            )
+            raise ValueError(msg)
+
+        cavity_ins_mat_name = CAVITY_INSULATION_MATERIAL_MAP[cavity_insulation_material]
+        consolidated_cavity_material = equivalent_framed_cavity_material(
+            structural_system=self.structural_system,
+            cavity_depth_m=self.template.cavity_depth_m,
+            framing_material=self.template.framing_material_name,
+            framing_fraction=self.template.framing_fraction,
+            framing_path_r_value=self.template.framing_path_r_value,
+            nominal_cavity_insulation_r=effective_nominal_cavity_insulation_r,
+            uninsulated_cavity_r_value=self.template.uninsulated_cavity_r_value,
+            cavity_insulation_material=cavity_ins_mat_name,
+        )
+        layers.add_material_layer(
+            material=consolidated_cavity_material,
+            thickness_m=self.template.cavity_depth_m,
+        )
+
+
+def _make_roof_assembly_builder(
+    structural_system: RoofStructuralSystem,
+    template: StructuralTemplate,
+) -> _RoofAssemblyBuilder:
+    """Return the roof builder strategy for a structural system."""
+    uses_framed_cavity_consolidation = (
+        template.supports_cavity_insulation
+        and template.cavity_depth_m is not None
+        and template.framing_material_name is not None
+        and template.framing_fraction is not None
+    )
+    if uses_framed_cavity_consolidation:
+        return _FramedCavityRoofAssemblyBuilder(
+            structural_system=structural_system,
+            template=template,
+        )
+
+    return _LayeredRoofAssemblyBuilder(
+        structural_system=structural_system,
+        template=template,
+    )
+
+
+STRUCTURAL_BUILDERS: dict[RoofStructuralSystem, _RoofAssemblyBuilder] = {
+    structural_system: _make_roof_assembly_builder(structural_system, template)
+    for structural_system, template in STRUCTURAL_TEMPLATES.items()
+}
+_missing_builder_systems = set(ALL_ROOF_STRUCTURAL_SYSTEMS) - set(STRUCTURAL_BUILDERS)
+if _missing_builder_systems:
+    msg = "Roof builder registry does not cover all structural systems: " + ", ".join(
+        sorted(_missing_builder_systems)
+    )
+    raise ValueError(msg)
+
+
 class SemiFlatRoofConstruction(BaseModel):
     """Semantic roof representation for fixed-length flat model vectors."""
 
@@ -276,47 +610,25 @@ class SemiFlatRoofConstruction(BaseModel):
     @property
     def effective_nominal_cavity_insulation_r(self) -> float:
         """Return cavity insulation R-value after applying compatibility defaults."""
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if not template.supports_cavity_insulation:
-            return 0.0
-        return self.nominal_cavity_insulation_r
+        builder = STRUCTURAL_BUILDERS[self.structural_system]
+        return builder.effective_nominal_cavity_insulation_r(
+            self.nominal_cavity_insulation_r
+        )
 
     @property
     def ignored_feature_names(self) -> tuple[str, ...]:
         """Return feature names that are semantic no-ops for this roof."""
-        ignored: list[str] = []
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if (
-            not template.supports_cavity_insulation
-            and self.nominal_cavity_insulation_r > 0
-        ):
-            ignored.append("nominal_cavity_insulation_r")
-        return tuple(ignored)
+        builder = STRUCTURAL_BUILDERS[self.structural_system]
+        return builder.ignored_feature_names(self.nominal_cavity_insulation_r)
 
     @model_validator(mode="after")
     def validate_cavity_r_against_assumed_depth(self):
         """Guard impossible cavity R-values for cavity-compatible systems."""
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if (
-            not template.supports_cavity_insulation
-            or template.cavity_depth_m is None
-            or self.nominal_cavity_insulation_r == 0
-        ):
-            return self
-
-        cavity_mat_name = CAVITY_INSULATION_MATERIAL_MAP[
-            self.cavity_insulation_material
-        ]
-        cavity_mat = resolve_material(cavity_mat_name)
-        max_nominal_r = template.cavity_depth_m / cavity_mat.Conductivity
-        tolerance_r = 0.2
-        if self.nominal_cavity_insulation_r > max_nominal_r + tolerance_r:
-            msg = (
-                f"Nominal cavity insulation R-value ({self.nominal_cavity_insulation_r:.2f} "
-                f"m²K/W) exceeds the assumed cavity-depth-compatible limit for "
-                f"{self.structural_system} ({max_nominal_r:.2f} m²K/W)."
-            )
-            raise ValueError(msg)
+        builder = STRUCTURAL_BUILDERS[self.structural_system]
+        builder.validate_nominal_cavity_insulation_r(
+            nominal_cavity_insulation_r=self.nominal_cavity_insulation_r,
+            cavity_insulation_material=self.cavity_insulation_material,
+        )
         return self
 
     def to_feature_dict(self, prefix: str = "Roof") -> dict[str, float]:
@@ -365,132 +677,18 @@ def build_roof_assembly(
     name: str = "Roof",
 ) -> ConstructionAssemblyComponent:
     """Translate semi-flat roof inputs into a concrete roof assembly."""
-    # EnergyPlus convention: layer 0 is outermost (outside -> inside).
-    template = STRUCTURAL_TEMPLATES[roof.structural_system]
-    layers: list[ConstructionLayerComponent] = []
-    layer_order = 0
-
-    exterior_finish = EXTERIOR_FINISH_TEMPLATES[roof.exterior_finish]
-
-    # ISO 6946:2017 Section 6.9 -- well-ventilated cavities: disregard cladding
-    # and air layer R. Omit the finish layer; EnergyPlus applies its own
-    # exterior surface coefficient to the next layer inward.
-    if exterior_finish is not None and roof.exterior_cavity_type != "well_ventilated":
-        layers.append(
-            ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(exterior_finish.material_name),
-                Thickness=exterior_finish.thickness_m,
-                LayerOrder=layer_order,
-            )
-        )
-        layer_order += 1
-
-    # ISO 6946:2017 Section 6.9 -- unventilated cavities: add equivalent
-    # still-air thermal resistance (~0.16 m2K/W for 25mm horizontal gap).
-    if roof.exterior_cavity_type == "unventilated" and exterior_finish is not None:
-        layers.append(
-            ConstructionLayerComponent(
-                ConstructionMaterial=AIR_GAP_ROOF,
-                Thickness=_AIR_GAP_THICKNESS_M,
-                LayerOrder=layer_order,
-            )
-        )
-        layer_order += 1
-
-    if roof.nominal_exterior_insulation_r > 0:
-        ext_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
-            roof.exterior_insulation_material
-        ]
-        layers.append(
-            layer_from_nominal_r(
-                material=ext_ins_material,
-                nominal_r_value=roof.nominal_exterior_insulation_r,
-                layer_order=layer_order,
-            )
-        )
-        layer_order += 1
-
-    uses_framed_cavity_consolidation = (
-        template.supports_cavity_insulation
-        and template.cavity_depth_m is not None
-        and template.framing_material_name is not None
-        and template.framing_fraction is not None
+    builder = STRUCTURAL_BUILDERS[roof.structural_system]
+    layers = builder.build_layers(
+        nominal_cavity_insulation_r=roof.nominal_cavity_insulation_r,
+        nominal_exterior_insulation_r=roof.nominal_exterior_insulation_r,
+        nominal_interior_insulation_r=roof.nominal_interior_insulation_r,
+        exterior_insulation_material=roof.exterior_insulation_material,
+        interior_insulation_material=roof.interior_insulation_material,
+        cavity_insulation_material=roof.cavity_insulation_material,
+        interior_finish=roof.interior_finish,
+        exterior_finish=roof.exterior_finish,
+        exterior_cavity_type=roof.exterior_cavity_type,
     )
-
-    cavity_ins_mat_name = CAVITY_INSULATION_MATERIAL_MAP[
-        roof.cavity_insulation_material
-    ]
-
-    if uses_framed_cavity_consolidation:
-        consolidated_cavity_material = equivalent_framed_cavity_material(
-            structural_system=roof.structural_system,
-            cavity_depth_m=template.cavity_depth_m or 0.0,
-            framing_material=template.framing_material_name or "SoftwoodGeneral",
-            framing_fraction=template.framing_fraction or 0.0,
-            framing_path_r_value=template.framing_path_r_value,
-            nominal_cavity_insulation_r=roof.effective_nominal_cavity_insulation_r,
-            uninsulated_cavity_r_value=template.uninsulated_cavity_r_value,
-            cavity_insulation_material=cavity_ins_mat_name,
-        )
-        layers.append(
-            ConstructionLayerComponent(
-                ConstructionMaterial=consolidated_cavity_material,
-                Thickness=template.cavity_depth_m or 0.0,
-                LayerOrder=layer_order,
-            )
-        )
-        layer_order += 1
-    else:
-        if template.thickness_m > 0:
-            layers.append(
-                ConstructionLayerComponent(
-                    ConstructionMaterial=resolve_material(template.material_name),
-                    Thickness=template.thickness_m,
-                    LayerOrder=layer_order,
-                )
-            )
-            layer_order += 1
-
-        if (
-            roof.effective_nominal_cavity_insulation_r > 0
-            and template.supports_cavity_insulation
-        ):
-            effective_cavity_r = (
-                roof.effective_nominal_cavity_insulation_r
-                * template.cavity_r_correction_factor
-            )
-            layers.append(
-                layer_from_nominal_r(
-                    material=cavity_ins_mat_name,
-                    nominal_r_value=effective_cavity_r,
-                    layer_order=layer_order,
-                )
-            )
-            layer_order += 1
-
-    if roof.nominal_interior_insulation_r > 0:
-        int_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[
-            roof.interior_insulation_material
-        ]
-        layers.append(
-            layer_from_nominal_r(
-                material=int_ins_material,
-                nominal_r_value=roof.nominal_interior_insulation_r,
-                layer_order=layer_order,
-            )
-        )
-        layer_order += 1
-
-    interior_finish = INTERIOR_FINISH_TEMPLATES[roof.interior_finish]
-    if interior_finish is not None:
-        layers.append(
-            ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(interior_finish.material_name),
-                Thickness=interior_finish.thickness_m,
-                LayerOrder=layer_order,
-            )
-        )
-
     return ConstructionAssemblyComponent(
         Name=name,
         Type="FlatRoof",
