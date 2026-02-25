@@ -1,6 +1,7 @@
 """Semi-flat slab schema and translators for SBEM assemblies."""
 
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Literal, get_args
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from epinterface.sbem.flat_constructions.layers import (
     ALL_CONTINUOUS_INSULATION_MATERIALS,
     CONTINUOUS_INSULATION_MATERIAL_MAP,
     ContinuousInsulationMaterial,
+    MaterialRef,
     layer_from_nominal_r,
     resolve_material,
 )
@@ -149,6 +151,211 @@ EXTERIOR_FINISH_TEMPLATES: dict[SlabExteriorFinish, FinishTemplate | None] = {
 }
 
 
+@dataclass
+class _SlabLayerAccumulator:
+    """Track slab layers while keeping layer-order assignments consistent."""
+
+    layers: list[ConstructionLayerComponent] = field(default_factory=list)
+    next_layer_order: int = 0
+
+    def add_material_layer(self, *, material: MaterialRef, thickness_m: float) -> None:
+        """Append a layer with an explicit material and thickness."""
+        self.layers.append(
+            ConstructionLayerComponent(
+                ConstructionMaterial=resolve_material(material),
+                Thickness=thickness_m,
+                LayerOrder=self.next_layer_order,
+            )
+        )
+        self.next_layer_order += 1
+
+    def add_nominal_r_layer(
+        self,
+        *,
+        material: MaterialRef,
+        nominal_r_value: float,
+    ) -> None:
+        """Append a layer by back-solving thickness from nominal R."""
+        self.layers.append(
+            layer_from_nominal_r(
+                material=material,
+                nominal_r_value=nominal_r_value,
+                layer_order=self.next_layer_order,
+            )
+        )
+        self.next_layer_order += 1
+
+
+class _SlabAssemblyBuilder(ABC):
+    """Abstract slab assembly strategy."""
+
+    def __init__(
+        self,
+        *,
+        structural_system: SlabStructuralSystem,
+        template: StructuralTemplate,
+    ) -> None:
+        self.structural_system = structural_system
+        self.template = template
+
+    @property
+    @abstractmethod
+    def default_auto_insulation_placement(self) -> SlabInsulationPlacement:
+        """Return the placement resolved from `auto` for this strategy."""
+
+    def effective_insulation_placement(
+        self,
+        insulation_placement: SlabInsulationPlacement,
+    ) -> SlabInsulationPlacement:
+        """Resolve user-selected insulation placement under strategy rules."""
+        if insulation_placement != "auto":
+            return insulation_placement
+        return self.default_auto_insulation_placement
+
+    def effective_nominal_insulation_r(
+        self,
+        *,
+        nominal_insulation_r: float,
+        insulation_placement: SlabInsulationPlacement,
+    ) -> float:
+        """Return effective nominal slab insulation after compatibility defaults."""
+        if nominal_insulation_r == 0:
+            return 0.0
+        effective_placement = self.effective_insulation_placement(insulation_placement)
+        if (
+            effective_placement == "under_slab"
+            and not self.template.supports_under_insulation
+        ):
+            return 0.0
+        return nominal_insulation_r
+
+    def ignored_feature_names(
+        self,
+        *,
+        nominal_insulation_r: float,
+        insulation_placement: SlabInsulationPlacement,
+    ) -> tuple[str, ...]:
+        """Return input names that are semantic no-ops for this builder."""
+        if (
+            insulation_placement == "under_slab"
+            and not self.template.supports_under_insulation
+            and nominal_insulation_r > 0
+        ):
+            return ("nominal_insulation_r", "insulation_placement")
+        return ()
+
+    @abstractmethod
+    def build_layers(
+        self,
+        *,
+        nominal_insulation_r: float,
+        insulation_material: ContinuousInsulationMaterial,
+        insulation_placement: SlabInsulationPlacement,
+        interior_finish: SlabInteriorFinish,
+        exterior_finish: SlabExteriorFinish,
+    ) -> list[ConstructionLayerComponent]:
+        """Build slab layers from high-level assembly inputs."""
+
+
+class _SingleCoreSlabAssemblyBuilder(_SlabAssemblyBuilder):
+    """Slab strategy for single-core assemblies with optional insulation layers."""
+
+    def build_layers(
+        self,
+        *,
+        nominal_insulation_r: float,
+        insulation_material: ContinuousInsulationMaterial,
+        insulation_placement: SlabInsulationPlacement,
+        interior_finish: SlabInteriorFinish,
+        exterior_finish: SlabExteriorFinish,
+    ) -> list[ConstructionLayerComponent]:
+        """Build slab layers outside-in while applying placement logic."""
+        layers = _SlabLayerAccumulator()
+        exterior_finish_template = EXTERIOR_FINISH_TEMPLATES[exterior_finish]
+        if exterior_finish_template is not None:
+            layers.add_material_layer(
+                material=exterior_finish_template.material_name,
+                thickness_m=exterior_finish_template.thickness_m,
+            )
+
+        slab_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[insulation_material]
+        effective_placement = self.effective_insulation_placement(insulation_placement)
+        effective_nominal_r = self.effective_nominal_insulation_r(
+            nominal_insulation_r=nominal_insulation_r,
+            insulation_placement=insulation_placement,
+        )
+        if effective_placement == "under_slab" and effective_nominal_r > 0:
+            layers.add_nominal_r_layer(
+                material=slab_ins_material,
+                nominal_r_value=effective_nominal_r,
+            )
+
+        layers.add_material_layer(
+            material=self.template.material_name,
+            thickness_m=self.template.thickness_m,
+        )
+
+        if effective_placement == "above_slab" and effective_nominal_r > 0:
+            layers.add_nominal_r_layer(
+                material=slab_ins_material,
+                nominal_r_value=effective_nominal_r,
+            )
+
+        interior_finish_template = INTERIOR_FINISH_TEMPLATES[interior_finish]
+        if interior_finish_template is not None:
+            layers.add_material_layer(
+                material=interior_finish_template.material_name,
+                thickness_m=interior_finish_template.thickness_m,
+            )
+        return layers.layers
+
+
+class _GroundSupportedSlabAssemblyBuilder(_SingleCoreSlabAssemblyBuilder):
+    """Slab strategy whose default auto placement is under-slab."""
+
+    @property
+    def default_auto_insulation_placement(self) -> SlabInsulationPlacement:
+        """Resolve auto placement for ground-supported slabs."""
+        return "under_slab"
+
+
+class _SuspendedSlabAssemblyBuilder(_SingleCoreSlabAssemblyBuilder):
+    """Slab strategy whose default auto placement is above-slab."""
+
+    @property
+    def default_auto_insulation_placement(self) -> SlabInsulationPlacement:
+        """Resolve auto placement for suspended slabs."""
+        return "above_slab"
+
+
+def _make_slab_assembly_builder(
+    structural_system: SlabStructuralSystem,
+    template: StructuralTemplate,
+) -> _SlabAssemblyBuilder:
+    """Return the slab builder strategy for a structural system."""
+    if template.supports_under_insulation:
+        return _GroundSupportedSlabAssemblyBuilder(
+            structural_system=structural_system,
+            template=template,
+        )
+    return _SuspendedSlabAssemblyBuilder(
+        structural_system=structural_system,
+        template=template,
+    )
+
+
+STRUCTURAL_BUILDERS: dict[SlabStructuralSystem, _SlabAssemblyBuilder] = {
+    structural_system: _make_slab_assembly_builder(structural_system, template)
+    for structural_system, template in STRUCTURAL_TEMPLATES.items()
+}
+_missing_builder_systems = set(ALL_SLAB_STRUCTURAL_SYSTEMS) - set(STRUCTURAL_BUILDERS)
+if _missing_builder_systems:
+    msg = "Slab builder registry does not cover all structural systems: " + ", ".join(
+        sorted(_missing_builder_systems)
+    )
+    raise ValueError(msg)
+
+
 class SemiFlatSlabConstruction(BaseModel):
     """Semantic slab representation for fixed-length flat model vectors."""
 
@@ -181,37 +388,26 @@ class SemiFlatSlabConstruction(BaseModel):
     @property
     def effective_insulation_placement(self) -> SlabInsulationPlacement:
         """Return insulation placement after applying compatibility defaults."""
-        if self.insulation_placement != "auto":
-            return self.insulation_placement
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        return "under_slab" if template.supports_under_insulation else "above_slab"
+        builder = STRUCTURAL_BUILDERS[self.structural_system]
+        return builder.effective_insulation_placement(self.insulation_placement)
 
     @property
     def effective_nominal_insulation_r(self) -> float:
         """Return insulation R-value after applying compatibility defaults."""
-        if self.nominal_insulation_r == 0:
-            return 0.0
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if (
-            self.effective_insulation_placement == "under_slab"
-            and not template.supports_under_insulation
-        ):
-            return 0.0
-        return self.nominal_insulation_r
+        builder = STRUCTURAL_BUILDERS[self.structural_system]
+        return builder.effective_nominal_insulation_r(
+            nominal_insulation_r=self.nominal_insulation_r,
+            insulation_placement=self.insulation_placement,
+        )
 
     @property
     def ignored_feature_names(self) -> tuple[str, ...]:
         """Return feature names that are semantic no-ops for this slab."""
-        ignored: list[str] = []
-        template = STRUCTURAL_TEMPLATES[self.structural_system]
-        if (
-            self.insulation_placement == "under_slab"
-            and not template.supports_under_insulation
-            and self.nominal_insulation_r > 0
-        ):
-            ignored.append("nominal_insulation_r")
-            ignored.append("insulation_placement")
-        return tuple(ignored)
+        builder = STRUCTURAL_BUILDERS[self.structural_system]
+        return builder.ignored_feature_names(
+            nominal_insulation_r=self.nominal_insulation_r,
+            insulation_placement=self.insulation_placement,
+        )
 
     def to_feature_dict(self, prefix: str = "Slab") -> dict[str, float]:
         """Return a fixed-length numeric feature dictionary for ML workflows."""
@@ -253,69 +449,14 @@ def build_slab_assembly(
     name: str = "GroundSlabAssembly",
 ) -> ConstructionAssemblyComponent:
     """Translate semi-flat slab inputs into a concrete slab assembly."""
-    # EnergyPlus convention: layer 0 is outermost (outside -> inside).
-    template = STRUCTURAL_TEMPLATES[slab.structural_system]
-    layers: list[ConstructionLayerComponent] = []
-    layer_order = 0
-
-    exterior_finish = EXTERIOR_FINISH_TEMPLATES[slab.exterior_finish]
-    if exterior_finish is not None:
-        layers.append(
-            ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(exterior_finish.material_name),
-                Thickness=exterior_finish.thickness_m,
-                LayerOrder=layer_order,
-            )
-        )
-        layer_order += 1
-
-    slab_ins_material = CONTINUOUS_INSULATION_MATERIAL_MAP[slab.insulation_material]
-
-    if (
-        slab.effective_insulation_placement == "under_slab"
-        and slab.effective_nominal_insulation_r > 0
-    ):
-        layers.append(
-            layer_from_nominal_r(
-                material=slab_ins_material,
-                nominal_r_value=slab.effective_nominal_insulation_r,
-                layer_order=layer_order,
-            )
-        )
-        layer_order += 1
-
-    layers.append(
-        ConstructionLayerComponent(
-            ConstructionMaterial=resolve_material(template.material_name),
-            Thickness=template.thickness_m,
-            LayerOrder=layer_order,
-        )
+    builder = STRUCTURAL_BUILDERS[slab.structural_system]
+    layers = builder.build_layers(
+        nominal_insulation_r=slab.nominal_insulation_r,
+        insulation_material=slab.insulation_material,
+        insulation_placement=slab.insulation_placement,
+        interior_finish=slab.interior_finish,
+        exterior_finish=slab.exterior_finish,
     )
-    layer_order += 1
-
-    if (
-        slab.effective_insulation_placement == "above_slab"
-        and slab.effective_nominal_insulation_r > 0
-    ):
-        layers.append(
-            layer_from_nominal_r(
-                material=slab_ins_material,
-                nominal_r_value=slab.effective_nominal_insulation_r,
-                layer_order=layer_order,
-            )
-        )
-        layer_order += 1
-
-    interior_finish = INTERIOR_FINISH_TEMPLATES[slab.interior_finish]
-    if interior_finish is not None:
-        layers.append(
-            ConstructionLayerComponent(
-                ConstructionMaterial=resolve_material(interior_finish.material_name),
-                Thickness=interior_finish.thickness_m,
-                LayerOrder=layer_order,
-            )
-        )
-
     return ConstructionAssemblyComponent(
         Name=name,
         Type="GroundSlab",
