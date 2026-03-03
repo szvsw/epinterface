@@ -11,18 +11,6 @@ from prisma import Prisma
 from prisma.types import EnvelopeAssemblyCreateInput, EnvelopeCreateInput
 
 from epinterface.interface import PROTECTED_SCHEDULE_NAMES
-from epinterface.sbem.climatestudio.mapper import (
-    convert_fresh_air_rate,
-    map_glazing_type,
-    map_roughness,
-    map_year_schedule_category,
-)
-from epinterface.sbem.climatestudio.parser import (
-    get_library,
-    get_settings,
-    get_zones,
-    load_climatestudio_template,
-)
 from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     EnvelopeAssemblyComponent,
@@ -51,6 +39,18 @@ from epinterface.sbem.components.systems import (
     ThermalSystemComponent,
     VentilationComponent,
     ZoneHVACComponent,
+)
+from epinterface.sbem.ingestion.mapper import (
+    convert_fresh_air_rate,
+    map_glazing_type,
+    map_roughness,
+    map_year_schedule_category,
+)
+from epinterface.sbem.ingestion.parser import (
+    get_library,
+    get_settings,
+    get_zones,
+    load_climatestudio_template,
 )
 from epinterface.sbem.prisma.client import (
     CONDITIONING_SYSTEMS_INCLUDE,

@@ -208,7 +208,7 @@ def convert(excel_path: Path, db_path: Path):
 )
 def convert_cs(cs_path: Path, db_path: Path):
     """Convert a ClimateStudio template JSON file to a database file."""
-    from epinterface.sbem.climatestudio import add_climatestudio_to_db
+    from epinterface.sbem.ingestion import add_climatestudio_to_db
     from epinterface.sbem.prisma.client import PrismaSettings
 
     if db_path.suffix != ".db":
