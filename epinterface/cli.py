@@ -182,6 +182,53 @@ def convert(excel_path: Path, db_path: Path):
     click.echo(f"Database available at {db_path}.")
 
 
+@db.command(
+    help="Convert a ClimateStudio template JSON file to a database file. "
+    "Creates the database with the SBEM schema and populates it from the JSON.",
+)
+@click.option(
+    "--cs-path",
+    type=click.Path(
+        exists=True,
+        path_type=Path,
+    ),
+    default="template.json",
+    prompt="Enter the path to the ClimateStudio template JSON file.",
+    help="Path to the ClimateStudio template JSON (e.g. exported from ClimateStudio).",
+)
+@click.option(
+    "--db-path",
+    type=click.Path(
+        exists=False,
+        path_type=Path,
+    ),
+    default="components.db",
+    prompt="Enter the path to the database file to create (should have a .db suffix).",
+    help="The database file will be created at the given path. If the file already exists, an error will be raised.",
+)
+def convert_cs(cs_path: Path, db_path: Path):
+    """Convert a ClimateStudio template JSON file to a database file."""
+    from epinterface.sbem.climatestudio import add_climatestudio_to_db
+    from epinterface.sbem.prisma.client import PrismaSettings
+
+    if db_path.suffix != ".db":
+        msg = "Error: The database file should have a .db suffix."
+        click.echo(msg, err=True)
+        sys.exit(1)
+
+    settings = PrismaSettings.New(
+        database_path=db_path, if_exists="raise", auto_register=True
+    )
+    try:
+        with settings.db:
+            add_climatestudio_to_db(cs_path, settings.db, erase_db=True)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(f"Database available at {db_path}.")
+
+
 # Create a group for component-related commands
 @cli.group(help="Commands for working with components")
 def components():
