@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 from archetypal import IDF
 from pydantic import BaseModel, Field
@@ -10,14 +11,11 @@ from epinterface.analysis.overheating import OverheatingAnalysisConfig
 from epinterface.geometry import ShoeboxGeometry
 from epinterface.sbem.builder import AtticAssumptions, BasementAssumptions, Model
 from epinterface.sbem.components.envelope import (
-    ConstructionAssemblyComponent,
-    ConstructionLayerComponent,
     EnvelopeAssemblyComponent,
     GlazingConstructionSimpleComponent,
     InfiltrationComponent,
     ZoneEnvelopeComponent,
 )
-from epinterface.sbem.components.materials import ConstructionMaterialComponent
 from epinterface.sbem.components.operations import ZoneOperationsComponent
 from epinterface.sbem.components.schedules import (
     DayComponent,
@@ -47,163 +45,27 @@ from epinterface.sbem.components.systems import (
     ZoneHVACComponent,
 )
 from epinterface.sbem.components.zones import ZoneComponent
+from epinterface.sbem.flat_constructions.assemblies import (
+    build_floor_ceiling_assembly,
+    build_partition_assembly,
+)
+from epinterface.sbem.flat_constructions.base import (
+    CavityInsulationMaterialName,
+    ContinuousInsulationMaterialName,
+)
+from epinterface.sbem.flat_constructions.roofs import build_roof_assembly
+from epinterface.sbem.flat_constructions.slabs import (
+    GroundSlabInteriorFinishName,
+    GroundSlabSystemName,
+    GroundSlabSystems,
+)
+from epinterface.sbem.flat_constructions.walls import (
+    WallExteriorFinishName,
+    WallFramingSystemName,
+    WallFramingSystems,
+    WallInteriorFinishName,
+)
 from epinterface.weather import WeatherUrl
-
-xps_board = ConstructionMaterialComponent(
-    Name="XPSBoard",
-    Conductivity=0.037,
-    Density=40,
-    SpecificHeat=1200,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Insulation",
-)
-
-concrete_mc_light = ConstructionMaterialComponent(
-    Name="ConcreteMC_Light",
-    Conductivity=1.65,
-    Density=2100,
-    SpecificHeat=1040,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Concrete",
-)
-
-concrete_rc_dense = ConstructionMaterialComponent(
-    Name="ConcreteRC_Dense",
-    Conductivity=1.75,
-    Density=2400,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Concrete",
-)
-
-gypsum_board = ConstructionMaterialComponent(
-    Name="GypsumBoard",
-    Conductivity=0.16,
-    Density=950,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
-
-gypsum_plaster = ConstructionMaterialComponent(
-    Name="GypsumPlaster",
-    Conductivity=0.42,
-    Density=900,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
-
-softwood_general = ConstructionMaterialComponent(
-    Name="SoftwoodGeneral",
-    Conductivity=0.13,
-    Density=496,
-    SpecificHeat=1630,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Timber",
-)
-
-clay_brick = ConstructionMaterialComponent(
-    Name="ClayBrick",
-    Conductivity=0.41,
-    Density=1000,
-    SpecificHeat=920,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Masonry",
-)
-
-concrete_block_h = ConstructionMaterialComponent(
-    Name="ConcreteBlockH",
-    Conductivity=1.25,
-    Density=880,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Concrete",
-)
-
-fiberglass_batts = ConstructionMaterialComponent(
-    Name="FiberglassBatt",
-    Conductivity=0.043,
-    Density=12,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Insulation",
-)
-
-cement_mortar = ConstructionMaterialComponent(
-    Name="CementMortar",
-    Conductivity=0.8,
-    Density=1900,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Other",
-)
-
-ceramic_tile = ConstructionMaterialComponent(
-    Name="CeramicTile",
-    Conductivity=0.8,
-    Density=2243,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
-
-urethane_carpet = ConstructionMaterialComponent(
-    Name="UrethaneCarpet",
-    Conductivity=0.045,
-    Density=110,
-    SpecificHeat=840,
-    ThermalAbsorptance=0.9,
-    SolarAbsorptance=0.6,
-    VisibleAbsorptance=0.6,
-    TemperatureCoefficientThermalConductivity=0.0,
-    Roughness="MediumRough",
-    Type="Finishes",
-)
 
 
 class ParametericYear(BaseModel):
@@ -756,92 +618,11 @@ class ParametricSetpoints(BaseModel):
         return hsp_year, csp_year
 
 
+ZoningMode = Literal["core/perim", "by_storey", "by_building", "auto"]
+
+
 class FlatModel(BaseModel):
     """A flattened set of parameters for invoking building energy models more conveniently."""
-
-    # EquipmentSummerWeekdayNight: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekdayEarlyMorning: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekdayMorning: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekdayLunch: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekdayAfternoon: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekdayEvening: float = Field(ge=0, le=1)
-
-    # EquipmentSummerWeekendNight: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekendEarlyMorning: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekendMorning: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekendLunch: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekendAfternoon: float = Field(ge=0, le=1)
-    # EquipmentSummerWeekendEvening: float = Field(ge=0, le=1)
-
-    # EquipmentRegularWeekdayNight: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekdayEarlyMorning: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekdayMorning: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekdayLunch: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekdayAfternoon: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekdayEvening: float = Field(ge=0, le=1)
-
-    # EquipmentRegularWeekendNight: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekendEarlyMorning: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekendMorning: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekendLunch: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekendAfternoon: float = Field(ge=0, le=1)
-    # EquipmentRegularWeekendEvening: float = Field(ge=0, le=1)
-
-    # LightingSummerWeekdayNight: float = Field(ge=0, le=1)
-    # LightingSummerWeekdayEarlyMorning: float = Field(ge=0, le=1)
-    # LightingSummerWeekdayMorning: float = Field(ge=0, le=1)
-    # LightingSummerWeekdayLunch: float = Field(ge=0, le=1)
-    # LightingSummerWeekdayAfternoon: float = Field(ge=0, le=1)
-    # LightingSummerWeekdayEvening: float = Field(ge=0, le=1)
-
-    # LightingSummerWeekendNight: float = Field(ge=0, le=1)
-    # LightingSummerWeekendEarlyMorning: float = Field(ge=0, le=1)
-    # LightingSummerWeekendMorning: float = Field(ge=0, le=1)
-    # LightingSummerWeekendLunch: float = Field(ge=0, le=1)
-    # LightingSummerWeekendAfternoon: float = Field(ge=0, le=1)
-    # LightingSummerWeekendEvening: float = Field(ge=0, le=1)
-
-    # LightingRegularWeekdayNight: float = Field(ge=0, le=1)
-    # LightingRegularWeekdayEarlyMorning: float = Field(ge=0, le=1)
-    # LightingRegularWeekdayMorning: float = Field(ge=0, le=1)
-    # LightingRegularWeekdayLunch: float = Field(ge=0, le=1)
-    # LightingRegularWeekdayAfternoon: float = Field(ge=0, le=1)
-    # LightingRegularWeekdayEvening: float = Field(ge=0, le=1)
-
-    # LightingRegularWeekendNight: float = Field(ge=0, le=1)
-    # LightingRegularWeekendEarlyMorning: float = Field(ge=0, le=1)
-    # LightingRegularWeekendMorning: float = Field(ge=0, le=1)
-    # LightingRegularWeekendLunch: float = Field(ge=0, le=1)
-    # LightingRegularWeekendAfternoon: float = Field(ge=0, le=1)
-    # LightingRegularWeekendEvening: float = Field(ge=0, le=1)
-
-    # OccupancySummerWeekdayNight: float = Field(ge=0, le=1)
-    # OccupancySummerWeekdayEarlyMorning: float = Field(ge=0, le=1)
-    # OccupancySummerWeekdayMorning: float = Field(ge=0, le=1)
-    # OccupancySummerWeekdayLunch: float = Field(ge=0, le=1)
-    # OccupancySummerWeekdayAfternoon: float = Field(ge=0, le=1)
-    # OccupancySummerWeekdayEvening: float = Field(ge=0, le=1)
-
-    # OccupancySummerWeekendNight: float = Field(ge=0, le=1)
-    # OccupancySummerWeekendEarlyMorning: float = Field(ge=0, le=1)
-    # OccupancySummerWeekendMorning: float = Field(ge=0, le=1)
-    # OccupancySummerWeekendLunch: float = Field(ge=0, le=1)
-    # OccupancySummerWeekendAfternoon: float = Field(ge=0, le=1)
-    # OccupancySummerWeekendEvening: float = Field(ge=0, le=1)
-
-    # OccupancyRegularWeekdayNight: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekdayEarlyMorning: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekdayMorning: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekdayLunch: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekdayAfternoon: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekdayEvening: float = Field(ge=0, le=1)
-
-    # OccupancyRegularWeekendNight: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekendEarlyMorning: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekendMorning: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekendLunch: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekendAfternoon: float = Field(ge=0, le=1)
-    # OccupancyRegularWeekendEvening: float = Field(ge=0, le=1)
 
     EquipmentBase: float = Field(ge=0, le=1)
     EquipmentAMInterp: float = Field(ge=0, le=1)
@@ -863,20 +644,6 @@ class FlatModel(BaseModel):
     OccupancyPMInterp: float = Field(ge=0, le=1)
     OccupancyWeekendPeakInterp: float = Field(ge=0, le=1)
     OccupancySummerPeakInterp: float = Field(ge=0, le=1)
-
-    # HSPRegularWeekdayWorkhours: float = Field(ge=0, le=23)
-    # HSPRegularWeekdayNight: float = Field(ge=0, le=23)
-    # HSPSummerWeekdayWorkhours: float = Field(ge=0, le=23)
-    # HSPSummerWeekdayNight: float = Field(ge=0, le=23)
-    # HSPWeekendWorkhours: float = Field(ge=0, le=23)
-    # HSPWeekendNight: float = Field(ge=0, le=23)
-
-    # CSPRegularWeekdayWorkhours: float = Field(ge=20, le=30)
-    # CSPRegularWeekdayNight: float = Field(ge=20, le=30)
-    # CSPSummerWeekdayWorkhours: float = Field(ge=20, le=30)
-    # CSPSummerWeekdayNight: float = Field(ge=20, le=30)
-    # CSPWeekendWorkhours: float = Field(ge=20, le=30)
-    # CSPWeekendNight: float = Field(ge=20, le=30)
 
     HeatingSetpointBase: float = Field(ge=0, le=23)
     SetpointDeadband: float = Field(ge=0, le=10)
@@ -910,14 +677,60 @@ class FlatModel(BaseModel):
     DHWDistributionCOP: float
 
     InfiltrationACH: float
+    BasementInfiltrationACH: float
 
     WindowUValue: float
     WindowSHGF: float
     WindowTVis: float
 
-    FacadeRValue: float
-    RoofRValue: float
-    SlabRValue: float
+    FacadeFramingSystem: WallFramingSystemName = "2x4 16OCC Woodframe"
+    FacadeCavityInsulationRValue: float = Field(default=0, ge=0)
+    FacadeExteriorInsulationRValue: float = Field(default=0, ge=0)
+    FacadeInteriorInsulationRValue: float = Field(default=0, ge=0)
+    FacadeExteriorInsulationMaterial: ContinuousInsulationMaterialName = "XPSBoard"
+    FacadeInteriorInsulationMaterial: ContinuousInsulationMaterialName = "XPSBoard"
+    FacadeCavityInsulationMaterial: CavityInsulationMaterialName = "FiberglassBatt"
+    FacadeInteriorFinish: WallInteriorFinishName = "drywall"
+    FacadeExteriorFinish: WallExteriorFinishName = "wood_siding"
+
+    SubterraneanWallFramingSystem: WallFramingSystemName = "2x4 16OCC Woodframe"
+    SubterraneanCavityInsulationRValue: float = Field(default=0, ge=0)
+    SubterraneanExteriorInsulationRValue: float = Field(default=0, ge=0)
+    SubterraneanInteriorInsulationRValue: float = Field(default=0, ge=0)
+    SubterraneanExteriorInsulationMaterial: ContinuousInsulationMaterialName = (
+        "XPSBoard"
+    )
+    SubterraneanInteriorInsulationMaterial: ContinuousInsulationMaterialName = (
+        "XPSBoard"
+    )
+    SubterraneanCavityInsulationMaterial: CavityInsulationMaterialName = (
+        "FiberglassBatt"
+    )
+    SubterraneanInteriorFinish: WallInteriorFinishName = "drywall"
+    SubterraneanExteriorFinish: WallExteriorFinishName = "wood_siding"
+
+    # RoofStructuralSystem: RoofStructuralSystemType = "poured_concrete"
+    # RoofCavityInsulationRValue: float = Field(default=0, ge=0)
+    # RoofExteriorInsulationRValue: float = Field(default=2.5, ge=0)
+    # RoofInteriorInsulationRValue: float = Field(default=0, ge=0)
+    # RoofExteriorInsulationMaterial: ContinuousInsulationMaterial = "polyiso"
+    # RoofInteriorInsulationMaterial: ContinuousInsulationMaterial = "polyiso"
+    # RoofCavityInsulationMaterial: CavityInsulationMaterial = "fiberglass"
+    # RoofExteriorCavityType: ExteriorCavityType = "none"
+    # RoofInteriorFinish: RoofInteriorFinishType = "gypsum_board"
+    # RoofExteriorFinish: RoofExteriorFinishType = "epdm_membrane"
+    RoofRValue: float = Field(default=3.0, ge=0)
+
+    GroundSlabSystem: GroundSlabSystemName = "BasicConcrete"
+    GroundSlabInsulationRValue: float = Field(default=1.5, ge=0)
+    GroundSlabInsulationMaterial: ContinuousInsulationMaterialName = "XPSBoard"
+    GroundSlabInteriorFinish: GroundSlabInteriorFinishName = "wood_floor"
+    GroundSlabStructuralThickness: float = Field(
+        default=0.15,
+        gt=0,
+        le=0.5,
+        description="The thickness of the structural material in the ground slab.",
+    )
 
     WWR: float
     F2FHeight: float
@@ -925,476 +738,12 @@ class FlatModel(BaseModel):
     Width: float
     Depth: float
     Rotation: float
+    ZoningMode: ZoningMode
 
     EPWURI: WeatherUrl | Path
 
     def to_zone(self) -> ZoneComponent:
         """Convert the flat model to a full zone."""
-        # occ_regular_workday = DayComponent(
-        #     Name="Occupancy_Regular_Workday",
-        #     Type="Fraction",
-        #     Hour_00=self.OccupancyRegularWeekdayNight,
-        #     Hour_01=self.OccupancyRegularWeekdayNight,
-        #     Hour_02=self.OccupancyRegularWeekdayNight,
-        #     Hour_03=self.OccupancyRegularWeekdayNight,
-        #     Hour_04=self.OccupancyRegularWeekdayNight,
-        #     Hour_05=self.OccupancyRegularWeekdayNight,
-        #     Hour_06=self.OccupancyRegularWeekdayEarlyMorning,
-        #     Hour_07=self.OccupancyRegularWeekdayEarlyMorning,
-        #     Hour_08=self.OccupancyRegularWeekdayEarlyMorning,
-        #     Hour_09=self.OccupancyRegularWeekdayMorning,
-        #     Hour_10=self.OccupancyRegularWeekdayMorning,
-        #     Hour_11=self.OccupancyRegularWeekdayMorning,
-        #     Hour_12=self.OccupancyRegularWeekdayLunch,
-        #     Hour_13=self.OccupancyRegularWeekdayLunch,
-        #     Hour_14=self.OccupancyRegularWeekdayAfternoon,
-        #     Hour_15=self.OccupancyRegularWeekdayAfternoon,
-        #     Hour_16=self.OccupancyRegularWeekdayAfternoon,
-        #     Hour_17=self.OccupancyRegularWeekdayAfternoon,
-        #     Hour_18=self.OccupancyRegularWeekdayEvening,
-        #     Hour_19=self.OccupancyRegularWeekdayEvening,
-        #     Hour_20=self.OccupancyRegularWeekdayEvening,
-        #     Hour_21=self.OccupancyRegularWeekdayNight,
-        #     Hour_22=self.OccupancyRegularWeekdayNight,
-        #     Hour_23=self.OccupancyRegularWeekdayNight,
-        # )
-
-        # occ_regular_weekend = DayComponent(
-        #     Name="Occupancy_Regular_Weekend",
-        #     Type="Fraction",
-        #     Hour_00=self.OccupancyRegularWeekendNight,
-        #     Hour_01=self.OccupancyRegularWeekendNight,
-        #     Hour_02=self.OccupancyRegularWeekendNight,
-        #     Hour_03=self.OccupancyRegularWeekendNight,
-        #     Hour_04=self.OccupancyRegularWeekendNight,
-        #     Hour_05=self.OccupancyRegularWeekendNight,
-        #     Hour_06=self.OccupancyRegularWeekendEarlyMorning,
-        #     Hour_07=self.OccupancyRegularWeekendEarlyMorning,
-        #     Hour_08=self.OccupancyRegularWeekendEarlyMorning,
-        #     Hour_09=self.OccupancyRegularWeekendMorning,
-        #     Hour_10=self.OccupancyRegularWeekendMorning,
-        #     Hour_11=self.OccupancyRegularWeekendMorning,
-        #     Hour_12=self.OccupancyRegularWeekendLunch,
-        #     Hour_13=self.OccupancyRegularWeekendLunch,
-        #     Hour_14=self.OccupancyRegularWeekendAfternoon,
-        #     Hour_15=self.OccupancyRegularWeekendAfternoon,
-        #     Hour_16=self.OccupancyRegularWeekendAfternoon,
-        #     Hour_17=self.OccupancyRegularWeekendAfternoon,
-        #     Hour_18=self.OccupancyRegularWeekendEvening,
-        #     Hour_19=self.OccupancyRegularWeekendEvening,
-        #     Hour_20=self.OccupancyRegularWeekendEvening,
-        #     Hour_21=self.OccupancyRegularWeekendNight,
-        #     Hour_22=self.OccupancyRegularWeekendNight,
-        #     Hour_23=self.OccupancyRegularWeekendNight,
-        # )
-
-        # occ_summer_workday = DayComponent(
-        #     Name="Occupancy_Summer_Workday",
-        #     Type="Fraction",
-        #     Hour_00=self.OccupancySummerWeekdayNight,
-        #     Hour_01=self.OccupancySummerWeekdayNight,
-        #     Hour_02=self.OccupancySummerWeekdayNight,
-        #     Hour_03=self.OccupancySummerWeekdayNight,
-        #     Hour_04=self.OccupancySummerWeekdayNight,
-        #     Hour_05=self.OccupancySummerWeekdayNight,
-        #     Hour_06=self.OccupancySummerWeekdayEarlyMorning,
-        #     Hour_07=self.OccupancySummerWeekdayEarlyMorning,
-        #     Hour_08=self.OccupancySummerWeekdayEarlyMorning,
-        #     Hour_09=self.OccupancySummerWeekdayMorning,
-        #     Hour_10=self.OccupancySummerWeekdayMorning,
-        #     Hour_11=self.OccupancySummerWeekdayMorning,
-        #     Hour_12=self.OccupancySummerWeekdayLunch,
-        #     Hour_13=self.OccupancySummerWeekdayLunch,
-        #     Hour_14=self.OccupancySummerWeekdayAfternoon,
-        #     Hour_15=self.OccupancySummerWeekdayAfternoon,
-        #     Hour_16=self.OccupancySummerWeekdayAfternoon,
-        #     Hour_17=self.OccupancySummerWeekdayAfternoon,
-        #     Hour_18=self.OccupancySummerWeekdayEvening,
-        #     Hour_19=self.OccupancySummerWeekdayEvening,
-        #     Hour_20=self.OccupancySummerWeekdayEvening,
-        #     Hour_21=self.OccupancySummerWeekdayNight,
-        #     Hour_22=self.OccupancySummerWeekdayNight,
-        #     Hour_23=self.OccupancySummerWeekdayNight,
-        # )
-
-        # occ_summer_weekend = DayComponent(
-        #     Name="Occupancy_Summer_Weekend",
-        #     Type="Fraction",
-        #     Hour_00=self.OccupancySummerWeekendNight,
-        #     Hour_01=self.OccupancySummerWeekendNight,
-        #     Hour_02=self.OccupancySummerWeekendNight,
-        #     Hour_03=self.OccupancySummerWeekendNight,
-        #     Hour_04=self.OccupancySummerWeekendNight,
-        #     Hour_05=self.OccupancySummerWeekendNight,
-        #     Hour_06=self.OccupancySummerWeekendEarlyMorning,
-        #     Hour_07=self.OccupancySummerWeekendEarlyMorning,
-        #     Hour_08=self.OccupancySummerWeekendEarlyMorning,
-        #     Hour_09=self.OccupancySummerWeekendMorning,
-        #     Hour_10=self.OccupancySummerWeekendMorning,
-        #     Hour_11=self.OccupancySummerWeekendMorning,
-        #     Hour_12=self.OccupancySummerWeekendLunch,
-        #     Hour_13=self.OccupancySummerWeekendLunch,
-        #     Hour_14=self.OccupancySummerWeekendAfternoon,
-        #     Hour_15=self.OccupancySummerWeekendAfternoon,
-        #     Hour_16=self.OccupancySummerWeekendAfternoon,
-        #     Hour_17=self.OccupancySummerWeekendAfternoon,
-        #     Hour_18=self.OccupancySummerWeekendEvening,
-        #     Hour_19=self.OccupancySummerWeekendEvening,
-        #     Hour_20=self.OccupancySummerWeekendEvening,
-        #     Hour_21=self.OccupancySummerWeekendNight,
-        #     Hour_22=self.OccupancySummerWeekendNight,
-        #     Hour_23=self.OccupancySummerWeekendNight,
-        # )
-
-        # occ_regular_week = WeekComponent(
-        #     Name="Occupancy_Regular_Week",
-        #     Monday=occ_regular_workday,
-        #     Tuesday=occ_regular_workday,
-        #     Wednesday=occ_regular_workday,
-        #     Thursday=occ_regular_workday,
-        #     Friday=occ_regular_workday,
-        #     Saturday=occ_regular_weekend,
-        #     Sunday=occ_regular_weekend,
-        # )
-
-        # occ_summer_week = WeekComponent(
-        #     Name="Occupancy_Summer_Week",
-        #     Monday=occ_summer_workday,
-        #     Tuesday=occ_summer_workday,
-        #     Wednesday=occ_summer_workday,
-        #     Thursday=occ_summer_workday,
-        #     Friday=occ_summer_workday,
-        #     Saturday=occ_summer_weekend,
-        #     Sunday=occ_summer_weekend,
-        # )
-
-        # occ_year = YearComponent(
-        #     Name="Occupancy_Schedule",
-        #     Type="Occupancy",
-        #     January=occ_regular_week,
-        #     February=occ_regular_week,
-        #     March=occ_regular_week,
-        #     April=occ_regular_week,
-        #     May=occ_regular_week,
-        #     June=occ_summer_week,
-        #     July=occ_summer_week,
-        #     August=occ_summer_week,
-        #     September=occ_regular_week,
-        #     October=occ_regular_week,
-        #     November=occ_regular_week,
-        #     December=occ_regular_week,
-        # )
-
-        # lighting_regular_workday = DayComponent(
-        #     Name="Lighting_Regular_Workday",
-        #     Type="Fraction",
-        #     Hour_00=self.LightingRegularWeekdayNight,
-        #     Hour_01=self.LightingRegularWeekdayNight,
-        #     Hour_02=self.LightingRegularWeekdayNight,
-        #     Hour_03=self.LightingRegularWeekdayNight,
-        #     Hour_04=self.LightingRegularWeekdayNight,
-        #     Hour_05=self.LightingRegularWeekdayNight,
-        #     Hour_06=self.LightingRegularWeekdayEarlyMorning,
-        #     Hour_07=self.LightingRegularWeekdayEarlyMorning,
-        #     Hour_08=self.LightingRegularWeekdayEarlyMorning,
-        #     Hour_09=self.LightingRegularWeekdayMorning,
-        #     Hour_10=self.LightingRegularWeekdayMorning,
-        #     Hour_11=self.LightingRegularWeekdayMorning,
-        #     Hour_12=self.LightingRegularWeekdayLunch,
-        #     Hour_13=self.LightingRegularWeekdayLunch,
-        #     Hour_14=self.LightingRegularWeekdayAfternoon,
-        #     Hour_15=self.LightingRegularWeekdayAfternoon,
-        #     Hour_16=self.LightingRegularWeekdayAfternoon,
-        #     Hour_17=self.LightingRegularWeekdayAfternoon,
-        #     Hour_18=self.LightingRegularWeekdayEvening,
-        #     Hour_19=self.LightingRegularWeekdayEvening,
-        #     Hour_20=self.LightingRegularWeekdayEvening,
-        #     Hour_21=self.LightingRegularWeekdayNight,
-        #     Hour_22=self.LightingRegularWeekdayNight,
-        #     Hour_23=self.LightingRegularWeekdayNight,
-        # )
-
-        # lighting_regular_weekend = DayComponent(
-        #     Name="Lighting_Regular_Weekend",
-        #     Type="Fraction",
-        #     Hour_00=self.LightingRegularWeekendNight,
-        #     Hour_01=self.LightingRegularWeekendNight,
-        #     Hour_02=self.LightingRegularWeekendNight,
-        #     Hour_03=self.LightingRegularWeekendNight,
-        #     Hour_04=self.LightingRegularWeekendNight,
-        #     Hour_05=self.LightingRegularWeekendNight,
-        #     Hour_06=self.LightingRegularWeekendEarlyMorning,
-        #     Hour_07=self.LightingRegularWeekendEarlyMorning,
-        #     Hour_08=self.LightingRegularWeekendEarlyMorning,
-        #     Hour_09=self.LightingRegularWeekendMorning,
-        #     Hour_10=self.LightingRegularWeekendMorning,
-        #     Hour_11=self.LightingRegularWeekendMorning,
-        #     Hour_12=self.LightingRegularWeekendLunch,
-        #     Hour_13=self.LightingRegularWeekendLunch,
-        #     Hour_14=self.LightingRegularWeekendAfternoon,
-        #     Hour_15=self.LightingRegularWeekendAfternoon,
-        #     Hour_16=self.LightingRegularWeekendAfternoon,
-        #     Hour_17=self.LightingRegularWeekendAfternoon,
-        #     Hour_18=self.LightingRegularWeekendEvening,
-        #     Hour_19=self.LightingRegularWeekendEvening,
-        #     Hour_20=self.LightingRegularWeekendEvening,
-        #     Hour_21=self.LightingRegularWeekendNight,
-        #     Hour_22=self.LightingRegularWeekendNight,
-        #     Hour_23=self.LightingRegularWeekendNight,
-        # )
-
-        # lighting_summer_workday = DayComponent(
-        #     Name="Lighting_Summer_Workday",
-        #     Type="Fraction",
-        #     Hour_00=self.LightingSummerWeekdayNight,
-        #     Hour_01=self.LightingSummerWeekdayNight,
-        #     Hour_02=self.LightingSummerWeekdayNight,
-        #     Hour_03=self.LightingSummerWeekdayNight,
-        #     Hour_04=self.LightingSummerWeekdayNight,
-        #     Hour_05=self.LightingSummerWeekdayNight,
-        #     Hour_06=self.LightingSummerWeekdayEarlyMorning,
-        #     Hour_07=self.LightingSummerWeekdayEarlyMorning,
-        #     Hour_08=self.LightingSummerWeekdayEarlyMorning,
-        #     Hour_09=self.LightingSummerWeekdayMorning,
-        #     Hour_10=self.LightingSummerWeekdayMorning,
-        #     Hour_11=self.LightingSummerWeekdayMorning,
-        #     Hour_12=self.LightingSummerWeekdayLunch,
-        #     Hour_13=self.LightingSummerWeekdayLunch,
-        #     Hour_14=self.LightingSummerWeekdayAfternoon,
-        #     Hour_15=self.LightingSummerWeekdayAfternoon,
-        #     Hour_16=self.LightingSummerWeekdayAfternoon,
-        #     Hour_17=self.LightingSummerWeekdayAfternoon,
-        #     Hour_18=self.LightingSummerWeekdayEvening,
-        #     Hour_19=self.LightingSummerWeekdayEvening,
-        #     Hour_20=self.LightingSummerWeekdayEvening,
-        #     Hour_21=self.LightingSummerWeekdayNight,
-        #     Hour_22=self.LightingSummerWeekdayNight,
-        #     Hour_23=self.LightingSummerWeekdayNight,
-        # )
-
-        # lighting_summer_weekend = DayComponent(
-        #     Name="Lighting_Summer_Weekend",
-        #     Type="Fraction",
-        #     Hour_00=self.LightingSummerWeekendNight,
-        #     Hour_01=self.LightingSummerWeekendNight,
-        #     Hour_02=self.LightingSummerWeekendNight,
-        #     Hour_03=self.LightingSummerWeekendNight,
-        #     Hour_04=self.LightingSummerWeekendNight,
-        #     Hour_05=self.LightingSummerWeekendNight,
-        #     Hour_06=self.LightingSummerWeekendEarlyMorning,
-        #     Hour_07=self.LightingSummerWeekendEarlyMorning,
-        #     Hour_08=self.LightingSummerWeekendEarlyMorning,
-        #     Hour_09=self.LightingSummerWeekendMorning,
-        #     Hour_10=self.LightingSummerWeekendMorning,
-        #     Hour_11=self.LightingSummerWeekendMorning,
-        #     Hour_12=self.LightingSummerWeekendLunch,
-        #     Hour_13=self.LightingSummerWeekendLunch,
-        #     Hour_14=self.LightingSummerWeekendAfternoon,
-        #     Hour_15=self.LightingSummerWeekendAfternoon,
-        #     Hour_16=self.LightingSummerWeekendAfternoon,
-        #     Hour_17=self.LightingSummerWeekendAfternoon,
-        #     Hour_18=self.LightingSummerWeekendEvening,
-        #     Hour_19=self.LightingSummerWeekendEvening,
-        #     Hour_20=self.LightingSummerWeekendEvening,
-        #     Hour_21=self.LightingSummerWeekendNight,
-        #     Hour_22=self.LightingSummerWeekendNight,
-        #     Hour_23=self.LightingSummerWeekendNight,
-        # )
-
-        # lighting_regular_week = WeekComponent(
-        #     Name="Lighting_Regular_Week",
-        #     Monday=lighting_regular_workday,
-        #     Tuesday=lighting_regular_workday,
-        #     Wednesday=lighting_regular_workday,
-        #     Thursday=lighting_regular_workday,
-        #     Friday=lighting_regular_workday,
-        #     Saturday=lighting_regular_weekend,
-        #     Sunday=lighting_regular_weekend,
-        # )
-
-        # lighting_summer_week = WeekComponent(
-        #     Name="Lighting_Summer_Week",
-        #     Monday=lighting_summer_workday,
-        #     Tuesday=lighting_summer_workday,
-        #     Wednesday=lighting_summer_workday,
-        #     Thursday=lighting_summer_workday,
-        #     Friday=lighting_summer_workday,
-        #     Saturday=lighting_summer_weekend,
-        #     Sunday=lighting_summer_weekend,
-        # )
-
-        # lighting_year = YearComponent(
-        #     Name="Lighting_Schedule",
-        #     Type="Lighting",
-        #     January=lighting_regular_week,
-        #     February=lighting_regular_week,
-        #     March=lighting_regular_week,
-        #     April=lighting_regular_week,
-        #     May=lighting_regular_week,
-        #     June=lighting_summer_week,
-        #     July=lighting_summer_week,
-        #     August=lighting_summer_week,
-        #     September=lighting_regular_week,
-        #     October=lighting_regular_week,
-        #     November=lighting_regular_week,
-        #     December=lighting_regular_week,
-        # )
-
-        # equipment_regular_workday = DayComponent(
-        #     Name="Equipment_Regular_Workday",
-        #     Type="Fraction",
-        #     Hour_00=self.EquipmentRegularWeekdayNight,
-        #     Hour_01=self.EquipmentRegularWeekdayNight,
-        #     Hour_02=self.EquipmentRegularWeekdayNight,
-        #     Hour_03=self.EquipmentRegularWeekdayNight,
-        #     Hour_04=self.EquipmentRegularWeekdayNight,
-        #     Hour_05=self.EquipmentRegularWeekdayNight,
-        #     Hour_06=self.EquipmentRegularWeekdayEarlyMorning,
-        #     Hour_07=self.EquipmentRegularWeekdayEarlyMorning,
-        #     Hour_08=self.EquipmentRegularWeekdayEarlyMorning,
-        #     Hour_09=self.EquipmentRegularWeekdayMorning,
-        #     Hour_10=self.EquipmentRegularWeekdayMorning,
-        #     Hour_11=self.EquipmentRegularWeekdayMorning,
-        #     Hour_12=self.EquipmentRegularWeekdayLunch,
-        #     Hour_13=self.EquipmentRegularWeekdayLunch,
-        #     Hour_14=self.EquipmentRegularWeekdayAfternoon,
-        #     Hour_15=self.EquipmentRegularWeekdayAfternoon,
-        #     Hour_16=self.EquipmentRegularWeekdayAfternoon,
-        #     Hour_17=self.EquipmentRegularWeekdayAfternoon,
-        #     Hour_18=self.EquipmentRegularWeekdayEvening,
-        #     Hour_19=self.EquipmentRegularWeekdayEvening,
-        #     Hour_20=self.EquipmentRegularWeekdayEvening,
-        #     Hour_21=self.EquipmentRegularWeekdayNight,
-        #     Hour_22=self.EquipmentRegularWeekdayNight,
-        #     Hour_23=self.EquipmentRegularWeekdayNight,
-        # )
-
-        # equipment_regular_weekend = DayComponent(
-        #     Name="Equipment_Regular_Weekend",
-        #     Type="Fraction",
-        #     Hour_00=self.EquipmentRegularWeekendNight,
-        #     Hour_01=self.EquipmentRegularWeekendNight,
-        #     Hour_02=self.EquipmentRegularWeekendNight,
-        #     Hour_03=self.EquipmentRegularWeekendNight,
-        #     Hour_04=self.EquipmentRegularWeekendNight,
-        #     Hour_05=self.EquipmentRegularWeekendNight,
-        #     Hour_06=self.EquipmentRegularWeekendEarlyMorning,
-        #     Hour_07=self.EquipmentRegularWeekendEarlyMorning,
-        #     Hour_08=self.EquipmentRegularWeekendEarlyMorning,
-        #     Hour_09=self.EquipmentRegularWeekendMorning,
-        #     Hour_10=self.EquipmentRegularWeekendMorning,
-        #     Hour_11=self.EquipmentRegularWeekendMorning,
-        #     Hour_12=self.EquipmentRegularWeekendLunch,
-        #     Hour_13=self.EquipmentRegularWeekendLunch,
-        #     Hour_14=self.EquipmentRegularWeekendAfternoon,
-        #     Hour_15=self.EquipmentRegularWeekendAfternoon,
-        #     Hour_16=self.EquipmentRegularWeekendAfternoon,
-        #     Hour_17=self.EquipmentRegularWeekendAfternoon,
-        #     Hour_18=self.EquipmentRegularWeekendEvening,
-        #     Hour_19=self.EquipmentRegularWeekendEvening,
-        #     Hour_20=self.EquipmentRegularWeekendEvening,
-        #     Hour_21=self.EquipmentRegularWeekendNight,
-        #     Hour_22=self.EquipmentRegularWeekendNight,
-        #     Hour_23=self.EquipmentRegularWeekendNight,
-        # )
-
-        # equipment_summer_workday = DayComponent(
-        #     Name="Equipment_Summer_Workday",
-        #     Type="Fraction",
-        #     Hour_00=self.EquipmentSummerWeekdayNight,
-        #     Hour_01=self.EquipmentSummerWeekdayNight,
-        #     Hour_02=self.EquipmentSummerWeekdayNight,
-        #     Hour_03=self.EquipmentSummerWeekdayNight,
-        #     Hour_04=self.EquipmentSummerWeekdayNight,
-        #     Hour_05=self.EquipmentSummerWeekdayNight,
-        #     Hour_06=self.EquipmentSummerWeekdayEarlyMorning,
-        #     Hour_07=self.EquipmentSummerWeekdayEarlyMorning,
-        #     Hour_08=self.EquipmentSummerWeekdayEarlyMorning,
-        #     Hour_09=self.EquipmentSummerWeekdayMorning,
-        #     Hour_10=self.EquipmentSummerWeekdayMorning,
-        #     Hour_11=self.EquipmentSummerWeekdayMorning,
-        #     Hour_12=self.EquipmentSummerWeekdayLunch,
-        #     Hour_13=self.EquipmentSummerWeekdayLunch,
-        #     Hour_14=self.EquipmentSummerWeekdayAfternoon,
-        #     Hour_15=self.EquipmentSummerWeekdayAfternoon,
-        #     Hour_16=self.EquipmentSummerWeekdayAfternoon,
-        #     Hour_17=self.EquipmentSummerWeekdayAfternoon,
-        #     Hour_18=self.EquipmentSummerWeekdayEvening,
-        #     Hour_19=self.EquipmentSummerWeekdayEvening,
-        #     Hour_20=self.EquipmentSummerWeekdayEvening,
-        #     Hour_21=self.EquipmentSummerWeekdayNight,
-        #     Hour_22=self.EquipmentSummerWeekdayNight,
-        #     Hour_23=self.EquipmentSummerWeekdayNight,
-        # )
-
-        # equipment_summer_weekend = DayComponent(
-        #     Name="Equipment_Summer_Weekend",
-        #     Type="Fraction",
-        #     Hour_00=self.EquipmentSummerWeekendNight,
-        #     Hour_01=self.EquipmentSummerWeekendNight,
-        #     Hour_02=self.EquipmentSummerWeekendNight,
-        #     Hour_03=self.EquipmentSummerWeekendNight,
-        #     Hour_04=self.EquipmentSummerWeekendNight,
-        #     Hour_05=self.EquipmentSummerWeekendNight,
-        #     Hour_06=self.EquipmentSummerWeekendEarlyMorning,
-        #     Hour_07=self.EquipmentSummerWeekendEarlyMorning,
-        #     Hour_08=self.EquipmentSummerWeekendEarlyMorning,
-        #     Hour_09=self.EquipmentSummerWeekendMorning,
-        #     Hour_10=self.EquipmentSummerWeekendMorning,
-        #     Hour_11=self.EquipmentSummerWeekendMorning,
-        #     Hour_12=self.EquipmentSummerWeekendLunch,
-        #     Hour_13=self.EquipmentSummerWeekendLunch,
-        #     Hour_14=self.EquipmentSummerWeekendAfternoon,
-        #     Hour_15=self.EquipmentSummerWeekendAfternoon,
-        #     Hour_16=self.EquipmentSummerWeekendAfternoon,
-        #     Hour_17=self.EquipmentSummerWeekendAfternoon,
-        #     Hour_18=self.EquipmentSummerWeekendEvening,
-        #     Hour_19=self.EquipmentSummerWeekendEvening,
-        #     Hour_20=self.EquipmentSummerWeekendEvening,
-        #     Hour_21=self.EquipmentSummerWeekendNight,
-        #     Hour_22=self.EquipmentSummerWeekendNight,
-        #     Hour_23=self.EquipmentSummerWeekendNight,
-        # )
-
-        # equipment_regular_week = WeekComponent(
-        #     Name="Equipment_Regular_Week",
-        #     Monday=equipment_regular_workday,
-        #     Tuesday=equipment_regular_workday,
-        #     Wednesday=equipment_regular_workday,
-        #     Thursday=equipment_regular_workday,
-        #     Friday=equipment_regular_workday,
-        #     Saturday=equipment_regular_weekend,
-        #     Sunday=equipment_regular_weekend,
-        # )
-
-        # equipment_summer_week = WeekComponent(
-        #     Name="Equipment_Summer_Week",
-        #     Monday=equipment_summer_workday,
-        #     Tuesday=equipment_summer_workday,
-        #     Wednesday=equipment_summer_workday,
-        #     Thursday=equipment_summer_workday,
-        #     Friday=equipment_summer_workday,
-        #     Saturday=equipment_summer_weekend,
-        #     Sunday=equipment_summer_weekend,
-        # )
-
-        # equipment_year = YearComponent(
-        #     Name="equipment_Schedule",
-        #     Type="Equipment",
-        #     January=equipment_regular_week,
-        #     February=equipment_regular_week,
-        #     March=equipment_regular_week,
-        #     April=equipment_regular_week,
-        #     May=equipment_regular_week,
-        #     June=equipment_summer_week,
-        #     July=equipment_summer_week,
-        #     August=equipment_summer_week,
-        #     September=equipment_regular_week,
-        #     October=equipment_regular_week,
-        #     November=lighting_regular_week,
-        #     December=equipment_regular_week,
-        # )
-
         equipment_paramteric = ParametericYear(
             Base=self.EquipmentBase,
             AMInterp=self.EquipmentAMInterp,
@@ -1432,258 +781,6 @@ class FlatModel(BaseModel):
             name="Occupancy", category="Occupancy"
         )
 
-        # hsp_regular_workday = DayComponent(
-        #     Name="HeatingSetpoint_Regular_Workday",
-        #     Type="Temperature",
-        #     Hour_00=self.HSPRegularWeekdayNight,
-        #     Hour_01=self.HSPRegularWeekdayNight,
-        #     Hour_02=self.HSPRegularWeekdayNight,
-        #     Hour_03=self.HSPRegularWeekdayNight,
-        #     Hour_04=self.HSPRegularWeekdayNight,
-        #     Hour_05=self.HSPRegularWeekdayNight,
-        #     Hour_06=self.HSPRegularWeekdayWorkhours,
-        #     Hour_07=self.HSPRegularWeekdayWorkhours,
-        #     Hour_08=self.HSPRegularWeekdayWorkhours,
-        #     Hour_09=self.HSPRegularWeekdayWorkhours,
-        #     Hour_10=self.HSPRegularWeekdayWorkhours,
-        #     Hour_11=self.HSPRegularWeekdayWorkhours,
-        #     Hour_12=self.HSPRegularWeekdayWorkhours,
-        #     Hour_13=self.HSPRegularWeekdayWorkhours,
-        #     Hour_14=self.HSPRegularWeekdayWorkhours,
-        #     Hour_15=self.HSPRegularWeekdayWorkhours,
-        #     Hour_16=self.HSPRegularWeekdayWorkhours,
-        #     Hour_17=self.HSPRegularWeekdayWorkhours,
-        #     Hour_18=self.HSPRegularWeekdayWorkhours,
-        #     Hour_19=self.HSPRegularWeekdayNight,
-        #     Hour_20=self.HSPRegularWeekdayNight,
-        #     Hour_21=self.HSPRegularWeekdayNight,
-        #     Hour_22=self.HSPRegularWeekdayNight,
-        #     Hour_23=self.HSPRegularWeekdayNight,
-        # )
-
-        # hsp_regular_weekend = DayComponent(
-        #     Name="HeatingSetpoint_Regular_Weekend",
-        #     Type="Temperature",
-        #     Hour_00=self.HSPWeekendNight,
-        #     Hour_01=self.HSPWeekendNight,
-        #     Hour_02=self.HSPWeekendNight,
-        #     Hour_03=self.HSPWeekendNight,
-        #     Hour_04=self.HSPWeekendNight,
-        #     Hour_05=self.HSPWeekendNight,
-        #     Hour_06=self.HSPWeekendWorkhours,
-        #     Hour_07=self.HSPWeekendWorkhours,
-        #     Hour_08=self.HSPWeekendWorkhours,
-        #     Hour_09=self.HSPWeekendWorkhours,
-        #     Hour_10=self.HSPWeekendWorkhours,
-        #     Hour_11=self.HSPWeekendWorkhours,
-        #     Hour_12=self.HSPWeekendWorkhours,
-        #     Hour_13=self.HSPWeekendWorkhours,
-        #     Hour_14=self.HSPWeekendWorkhours,
-        #     Hour_15=self.HSPWeekendWorkhours,
-        #     Hour_16=self.HSPWeekendWorkhours,
-        #     Hour_17=self.HSPWeekendWorkhours,
-        #     Hour_18=self.HSPWeekendWorkhours,
-        #     Hour_19=self.HSPWeekendNight,
-        #     Hour_20=self.HSPWeekendNight,
-        #     Hour_21=self.HSPWeekendNight,
-        #     Hour_22=self.HSPWeekendNight,
-        #     Hour_23=self.HSPWeekendNight,
-        # )
-
-        # hsp_summer_workday = DayComponent(
-        #     Name="HeatingSetpoint_Summer_Workday",
-        #     Type="Temperature",
-        #     Hour_00=self.HSPSummerWeekdayNight,
-        #     Hour_01=self.HSPSummerWeekdayNight,
-        #     Hour_02=self.HSPSummerWeekdayNight,
-        #     Hour_03=self.HSPSummerWeekdayNight,
-        #     Hour_04=self.HSPSummerWeekdayNight,
-        #     Hour_05=self.HSPSummerWeekdayNight,
-        #     Hour_06=self.HSPSummerWeekdayWorkhours,
-        #     Hour_07=self.HSPSummerWeekdayWorkhours,
-        #     Hour_08=self.HSPSummerWeekdayWorkhours,
-        #     Hour_09=self.HSPSummerWeekdayWorkhours,
-        #     Hour_10=self.HSPSummerWeekdayWorkhours,
-        #     Hour_11=self.HSPSummerWeekdayWorkhours,
-        #     Hour_12=self.HSPSummerWeekdayWorkhours,
-        #     Hour_13=self.HSPSummerWeekdayWorkhours,
-        #     Hour_14=self.HSPSummerWeekdayWorkhours,
-        #     Hour_15=self.HSPSummerWeekdayWorkhours,
-        #     Hour_16=self.HSPSummerWeekdayWorkhours,
-        #     Hour_17=self.HSPSummerWeekdayWorkhours,
-        #     Hour_18=self.HSPSummerWeekdayWorkhours,
-        #     Hour_19=self.HSPSummerWeekdayNight,
-        #     Hour_20=self.HSPSummerWeekdayNight,
-        #     Hour_21=self.HSPSummerWeekdayNight,
-        #     Hour_22=self.HSPSummerWeekdayNight,
-        #     Hour_23=self.HSPSummerWeekdayNight,
-        # )
-
-        # hsp_regular_week = WeekComponent(
-        #     Name="HeatingSetpoint_Regular_Week",
-        #     Monday=hsp_regular_workday,
-        #     Tuesday=hsp_regular_workday,
-        #     Wednesday=hsp_regular_workday,
-        #     Thursday=hsp_regular_workday,
-        #     Friday=hsp_regular_workday,
-        #     Saturday=hsp_regular_weekend,
-        #     Sunday=hsp_regular_weekend,
-        # )
-
-        # hsp_summer_week = WeekComponent(
-        #     Name="HeatingSetpoint_Summer_Week",
-        #     Monday=hsp_summer_workday,
-        #     Tuesday=hsp_summer_workday,
-        #     Wednesday=hsp_summer_workday,
-        #     Thursday=hsp_summer_workday,
-        #     Friday=hsp_summer_workday,
-        #     Saturday=hsp_regular_weekend,
-        #     Sunday=hsp_regular_weekend,
-        # )
-
-        # hsp_year = YearComponent(
-        #     Name="HeatingSetpoint_Schedule",
-        #     Type="Setpoint",
-        #     January=hsp_regular_week,
-        #     February=hsp_regular_week,
-        #     March=hsp_regular_week,
-        #     April=hsp_regular_week,
-        #     May=hsp_regular_week,
-        #     June=hsp_summer_week,
-        #     July=hsp_summer_week,
-        #     August=hsp_summer_week,
-        #     September=hsp_regular_week,
-        #     October=hsp_regular_week,
-        #     November=hsp_regular_week,
-        #     December=hsp_regular_week,
-        # )
-
-        # csp_regular_workday = DayComponent(
-        #     Name="CoolingSetpoint_Regular_Workday",
-        #     Type="Temperature",
-        #     Hour_00=self.CSPRegularWeekdayNight,
-        #     Hour_01=self.CSPRegularWeekdayNight,
-        #     Hour_02=self.CSPRegularWeekdayNight,
-        #     Hour_03=self.CSPRegularWeekdayNight,
-        #     Hour_04=self.CSPRegularWeekdayNight,
-        #     Hour_05=self.CSPRegularWeekdayNight,
-        #     Hour_06=self.CSPRegularWeekdayWorkhours,
-        #     Hour_07=self.CSPRegularWeekdayWorkhours,
-        #     Hour_08=self.CSPRegularWeekdayWorkhours,
-        #     Hour_09=self.CSPRegularWeekdayWorkhours,
-        #     Hour_10=self.CSPRegularWeekdayWorkhours,
-        #     Hour_11=self.CSPRegularWeekdayWorkhours,
-        #     Hour_12=self.CSPRegularWeekdayWorkhours,
-        #     Hour_13=self.CSPRegularWeekdayWorkhours,
-        #     Hour_14=self.CSPRegularWeekdayWorkhours,
-        #     Hour_15=self.CSPRegularWeekdayWorkhours,
-        #     Hour_16=self.CSPRegularWeekdayWorkhours,
-        #     Hour_17=self.CSPRegularWeekdayWorkhours,
-        #     Hour_18=self.CSPRegularWeekdayWorkhours,
-        #     Hour_19=self.CSPRegularWeekdayNight,
-        #     Hour_20=self.CSPRegularWeekdayNight,
-        #     Hour_21=self.CSPRegularWeekdayNight,
-        #     Hour_22=self.CSPRegularWeekdayNight,
-        #     Hour_23=self.CSPRegularWeekdayNight,
-        # )
-
-        # csp_regular_weekend = DayComponent(
-        #     Name="CoolingSetpoint_Regular_Weekend",
-        #     Type="Temperature",
-        #     Hour_00=self.CSPWeekendNight,
-        #     Hour_01=self.CSPWeekendNight,
-        #     Hour_02=self.CSPWeekendNight,
-        #     Hour_03=self.CSPWeekendNight,
-        #     Hour_04=self.CSPWeekendNight,
-        #     Hour_05=self.CSPWeekendNight,
-        #     Hour_06=self.CSPWeekendWorkhours,
-        #     Hour_07=self.CSPWeekendWorkhours,
-        #     Hour_08=self.CSPWeekendWorkhours,
-        #     Hour_09=self.CSPWeekendWorkhours,
-        #     Hour_10=self.CSPWeekendWorkhours,
-        #     Hour_11=self.CSPWeekendWorkhours,
-        #     Hour_12=self.CSPWeekendWorkhours,
-        #     Hour_13=self.CSPWeekendWorkhours,
-        #     Hour_14=self.CSPWeekendWorkhours,
-        #     Hour_15=self.CSPWeekendWorkhours,
-        #     Hour_16=self.CSPWeekendWorkhours,
-        #     Hour_17=self.CSPWeekendWorkhours,
-        #     Hour_18=self.CSPWeekendWorkhours,
-        #     Hour_19=self.CSPWeekendNight,
-        #     Hour_20=self.CSPWeekendNight,
-        #     Hour_21=self.CSPWeekendNight,
-        #     Hour_22=self.CSPWeekendNight,
-        #     Hour_23=self.CSPWeekendNight,
-        # )
-
-        # csp_summer_workday = DayComponent(
-        #     Name="CoolingSetpoint_Summer_Workday",
-        #     Type="Temperature",
-        #     Hour_00=self.CSPSummerWeekdayNight,
-        #     Hour_01=self.CSPSummerWeekdayNight,
-        #     Hour_02=self.CSPSummerWeekdayNight,
-        #     Hour_03=self.CSPSummerWeekdayNight,
-        #     Hour_04=self.CSPSummerWeekdayNight,
-        #     Hour_05=self.CSPSummerWeekdayNight,
-        #     Hour_06=self.CSPSummerWeekdayWorkhours,
-        #     Hour_07=self.CSPSummerWeekdayWorkhours,
-        #     Hour_08=self.CSPSummerWeekdayWorkhours,
-        #     Hour_09=self.CSPSummerWeekdayWorkhours,
-        #     Hour_10=self.CSPSummerWeekdayWorkhours,
-        #     Hour_11=self.CSPSummerWeekdayWorkhours,
-        #     Hour_12=self.CSPSummerWeekdayWorkhours,
-        #     Hour_13=self.CSPSummerWeekdayWorkhours,
-        #     Hour_14=self.CSPSummerWeekdayWorkhours,
-        #     Hour_15=self.CSPSummerWeekdayWorkhours,
-        #     Hour_16=self.CSPSummerWeekdayWorkhours,
-        #     Hour_17=self.CSPSummerWeekdayWorkhours,
-        #     Hour_18=self.CSPSummerWeekdayWorkhours,
-        #     Hour_19=self.CSPSummerWeekdayNight,
-        #     Hour_20=self.CSPSummerWeekdayNight,
-        #     Hour_21=self.CSPSummerWeekdayNight,
-        #     Hour_22=self.CSPSummerWeekdayNight,
-        #     Hour_23=self.CSPSummerWeekdayNight,
-        # )
-
-        # csp_regular_week = WeekComponent(
-        #     Name="CoolingSetpoint_Regular_Week",
-        #     Monday=csp_regular_workday,
-        #     Tuesday=csp_regular_workday,
-        #     Wednesday=csp_regular_workday,
-        #     Thursday=csp_regular_workday,
-        #     Friday=csp_regular_workday,
-        #     Saturday=csp_regular_weekend,
-        #     Sunday=csp_regular_weekend,
-        # )
-
-        # csp_summer_week = WeekComponent(
-        #     Name="CoolingSetpoint_Summer_Week",
-        #     Monday=csp_summer_workday,
-        #     Tuesday=csp_summer_workday,
-        #     Wednesday=csp_summer_workday,
-        #     Thursday=csp_summer_workday,
-        #     Friday=csp_summer_workday,
-        #     Saturday=csp_regular_weekend,
-        #     Sunday=csp_regular_weekend,
-        # )
-
-        # csp_year = YearComponent(
-        #     Name="CoolingSetpoint_Schedule",
-        #     Type="Setpoint",
-        #     January=csp_regular_week,
-        #     February=csp_regular_week,
-        #     March=csp_regular_week,
-        #     April=csp_regular_week,
-        #     May=csp_regular_week,
-        #     June=csp_summer_week,
-        #     July=csp_summer_week,
-        #     August=csp_summer_week,
-        #     September=csp_regular_week,
-        #     October=csp_regular_week,
-        #     November=csp_regular_week,
-        #     December=csp_regular_week,
-        # )
-
         setpoint_parametric = ParametricSetpoints(
             HeatingSetpoint=self.HeatingSetpointBase,
             DeadBand=self.SetpointDeadband,
@@ -1705,16 +802,19 @@ class FlatModel(BaseModel):
             CoolingSchedule=csp_year,
         )
 
+        by_building_scaling_factor = (
+            1.0 if self.ZoningMode != "by_building" else self.NFloors
+        )
         equipment = EquipmentComponent(
             Name="Equipment",
-            PowerDensity=self.EquipmentPowerDensity,
+            PowerDensity=self.EquipmentPowerDensity * by_building_scaling_factor,
             Schedule=equipment_schedule,
             IsOn=True,
         )
 
         lighting = LightingComponent(
             Name="Lighting",
-            PowerDensity=self.LightingPowerDensity,
+            PowerDensity=self.LightingPowerDensity * by_building_scaling_factor,
             Schedule=lighting_schedule,
             IsOn=True,
             DimmingType="Off",
@@ -1722,7 +822,7 @@ class FlatModel(BaseModel):
 
         occupancy = OccupancyComponent(
             Name="Occupancy",
-            PeopleDensity=self.OccupantDensity,
+            PeopleDensity=self.OccupantDensity * by_building_scaling_factor,
             Schedule=occupancy_schedule,
             IsOn=True,
         )
@@ -1823,7 +923,7 @@ class FlatModel(BaseModel):
 
         ventilation_system = VentilationComponent(
             Name="VentilationSystem",
-            FreshAirPerFloorArea=self.VentFlowRatePerArea,
+            FreshAirPerFloorArea=self.VentFlowRatePerArea * by_building_scaling_factor,
             FreshAirPerPerson=self.VentFlowRatePerPerson,
             Provider=self.VentProvider,
             # TODO: should hrv sensible/latent efficiency be configurable? (e.g. high/medium/low)
@@ -1879,194 +979,73 @@ class FlatModel(BaseModel):
             AFNAirMassFlowCoefficientCrack=0.0,
             FlowPerExteriorSurfaceArea=0.0,
         )
-
-        # TODO: verify interior/exterior
-        # TODO: are we okaky with mass assumptions?
-        facade = ConstructionAssemblyComponent(
-            Name="Facade",
-            Type="Facade",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=clay_brick,
-                    Thickness=0.002,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_block_h,
-                    Thickness=0.15,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=fiberglass_batts,
-                    Thickness=0.05,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_board,
-                    Thickness=0.015,
-                    LayerOrder=3,
-                ),
-            ],
+        basement_infiltration = InfiltrationComponent(
+            Name="BasementInfiltration",
+            IsOn=True,
+            CalculationMethod="AirChanges/Hour",
+            AirChangesPerHour=self.BasementInfiltrationACH,
+            ConstantCoefficient=0.0,
+            TemperatureCoefficient=0.0,
+            WindVelocityCoefficient=0.0,
+            WindVelocitySquaredCoefficient=0.0,
+            AFNAirMassFlowCoefficientCrack=0.0,
+            FlowPerExteriorSurfaceArea=0.0,
         )
 
-        facade_r_value_without_fiberglass = (
-            facade.r_value - facade.sorted_layers[2].r_value
+        facade = WallFramingSystems[self.FacadeFramingSystem].to_construction_assembly(
+            cav_insul_rval=self.FacadeCavityInsulationRValue,
+            ext_insul_rval=self.FacadeExteriorInsulationRValue,
+            int_insul_rval=self.FacadeInteriorInsulationRValue,
+            ext_insul_name=self.FacadeExteriorInsulationMaterial,
+            int_insul_name=self.FacadeInteriorInsulationMaterial,
+            cav_insul_name=self.FacadeCavityInsulationMaterial,
+            ext_finish=self.FacadeExteriorFinish,
+            int_finish=self.FacadeInteriorFinish,
+        )
+        ground_wall = WallFramingSystems[
+            self.SubterraneanWallFramingSystem
+        ].to_construction_assembly(
+            cav_insul_rval=self.SubterraneanCavityInsulationRValue,
+            ext_insul_rval=self.SubterraneanExteriorInsulationRValue,
+            int_insul_rval=self.SubterraneanInteriorInsulationRValue,
+            ext_insul_name=self.SubterraneanExteriorInsulationMaterial,
+            int_insul_name=self.SubterraneanInteriorInsulationMaterial,
+            cav_insul_name=self.SubterraneanCavityInsulationMaterial,
+            ext_finish=self.SubterraneanExteriorFinish,
+            int_finish=self.SubterraneanInteriorFinish,
+        )
+        ground_slab = GroundSlabSystems[self.GroundSlabSystem].to_construction_assembly(
+            insul_name=self.GroundSlabInsulationMaterial,
+            insul_rval=self.GroundSlabInsulationRValue,
+            structural_thickness=self.GroundSlabStructuralThickness,
+            interior_finish=self.GroundSlabInteriorFinish,
         )
 
-        facade_r_value_delta = self.FacadeRValue - facade_r_value_without_fiberglass
-        required_fiberglass_thickness = (
-            fiberglass_batts.Conductivity * facade_r_value_delta
-        )
+        roof = build_roof_assembly(r_value=self.RoofRValue)
 
-        if required_fiberglass_thickness < 0.003:
-            msg = f"Required Facade Fiberglass thickness is less than 3mm because the desired total facade R-value is {self.FacadeRValue} m²K/W but the concrete and gypsum layers already have a total R-value of {facade_r_value_without_fiberglass} m²K/W."
-            raise ValueError(msg)
+        partition = build_partition_assembly()
 
-        facade.sorted_layers[2].Thickness = required_fiberglass_thickness
-
-        roof = ConstructionAssemblyComponent(
-            Name="Roof",
-            Type="FlatRoof",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=xps_board,
-                    Thickness=0.1,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_mc_light,
-                    Thickness=0.15,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_rc_dense,
-                    Thickness=0.2,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_board,
-                    Thickness=0.02,
-                    LayerOrder=3,
-                ),
-            ],
-        )
-
-        roof_r_value_without_xps = roof.r_value - roof.sorted_layers[0].r_value
-        roof_r_value_delta = self.RoofRValue - roof_r_value_without_xps
-        required_xps_thickness = xps_board.Conductivity * roof_r_value_delta
-        if required_xps_thickness < 0.003:
-            msg = f"Required Roof XPS thickness is less than 3mm because the desired total roof R-value is {self.RoofRValue} m²K/W but the concrete layers already have a total R-value of {roof_r_value_without_xps} m²K/W."
-            raise ValueError(msg)
-
-        roof.sorted_layers[0].Thickness = required_xps_thickness
-
-        partition = ConstructionAssemblyComponent(
-            Name="Partition",
-            Type="Partition",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_plaster,
-                    Thickness=0.02,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=softwood_general,
-                    Thickness=0.02,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_plaster,
-                    Thickness=0.02,
-                    LayerOrder=2,
-                ),
-            ],
-        )
-
-        floor_ceiling = ConstructionAssemblyComponent(
-            Name="FloorCeiling",
-            Type="FloorCeiling",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=urethane_carpet,
-                    Thickness=0.02,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=cement_mortar,
-                    Thickness=0.02,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_rc_dense,
-                    Thickness=0.15,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=gypsum_board,
-                    Thickness=0.02,
-                    LayerOrder=3,
-                ),
-            ],
-        )
-
-        ground_slab_assembly = ConstructionAssemblyComponent(
-            Name="GroundSlabAssembly",
-            Type="GroundSlab",
-            Layers=[
-                ConstructionLayerComponent(
-                    ConstructionMaterial=xps_board,
-                    Thickness=0.02,
-                    LayerOrder=0,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_rc_dense,
-                    Thickness=0.15,
-                    LayerOrder=1,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=concrete_mc_light,
-                    Thickness=0.04,
-                    LayerOrder=2,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=cement_mortar,
-                    Thickness=0.03,
-                    LayerOrder=3,
-                ),
-                ConstructionLayerComponent(
-                    ConstructionMaterial=ceramic_tile,
-                    Thickness=0.02,
-                    LayerOrder=4,
-                ),
-            ],
-        )
-
-        ground_slab_r_value_without_xps = (
-            ground_slab_assembly.r_value - ground_slab_assembly.sorted_layers[0].r_value
-        )
-        ground_slab_r_value_delta = self.SlabRValue - ground_slab_r_value_without_xps
-        required_xps_thickness = xps_board.Conductivity * ground_slab_r_value_delta
-        if required_xps_thickness < 0.003:
-            msg = f"Required Ground Slab XPS thickness is less than 3mm because the desired total slab R-value is {self.SlabRValue} m²K/W but the concrete layers already have a total R-value of {ground_slab_r_value_without_xps} m²K/W."
-            raise ValueError(msg)
-
-        ground_slab_assembly.sorted_layers[0].Thickness = required_xps_thickness
+        floor_ceiling = build_floor_ceiling_assembly()
 
         assemblies = EnvelopeAssemblyComponent(
             Name="EnvelopeAssemblies",
+            GroundWallAssembly=ground_wall,
             FacadeAssembly=facade,
+            GroundSlabAssembly=ground_slab,
+            # TODO: Basement ceiling assembly should be configurable; see mabi retrofits
+            BasementCeilingAssembly=floor_ceiling,
+            # TODO: attic roof assembly should be configurable; see mabi retrofits
             FlatRoofAssembly=roof,
             AtticRoofAssembly=roof,
-            PartitionAssembly=partition,
-            FloorCeilingAssembly=floor_ceiling,
             AtticFloorAssembly=floor_ceiling,
-            BasementCeilingAssembly=floor_ceiling,
-            GroundSlabAssembly=ground_slab_assembly,
-            GroundWallAssembly=ground_slab_assembly,
-            ExternalFloorAssembly=ground_slab_assembly,
+            # Unused, no overhangs
+            ExternalFloorAssembly=ground_slab,
+            # Constant
+            PartitionAssembly=partition,
+            # Constant
+            FloorCeilingAssembly=floor_ceiling,
         )
 
-        basement_infiltration = infiltration.model_copy(deep=True)
         envelope = ZoneEnvelopeComponent(
             Name="Envelope",
             AtticInfiltration=infiltration,
@@ -2086,20 +1065,39 @@ class FlatModel(BaseModel):
 
     def to_model(self) -> tuple[Model, Callable[[IDF], IDF]]:
         """Returns a tuple of a Model and a post-geometry callback."""
-        zone = self.to_zone()
         # TODO: add in a shading mask
+        zone = self.to_zone()
+        perim_depth = 3
+        effective_zoning_mode = (
+            self.ZoningMode if self.ZoningMode != "by_building" else "by_storey"
+        )
+        if effective_zoning_mode == "auto":
+            if (self.Width > (2 * perim_depth + 3)) and (
+                self.Depth > (2 * perim_depth + 3)
+            ):
+                # Both the core and perim are large enough to support core/perim zoning
+                effective_zoning_mode = "core/perim"
+            else:
+                effective_zoning_mode = "by_storey"
+        effective_f2f_height = (
+            self.F2FHeight
+            if effective_zoning_mode != "by_building"
+            else self.F2FHeight * self.NFloors
+        )
+
         geometry = ShoeboxGeometry(
             x=0,
             y=0,
             w=self.Width,
             d=self.Depth,
-            h=self.F2FHeight,
+            h=effective_f2f_height,
             num_stories=self.NFloors,
-            # TODO: should core/perim be dependent on width, depth > 9m?
-            zoning="core/perim",
+            zoning=effective_zoning_mode,
             roof_height=None,
+            perim_depth=3,
             wwr=self.WWR,
             basement=False,
+            exposed_basement_frac=0,
         )
 
         def post_geometry_callback(idf: IDF) -> IDF:
@@ -2110,6 +1108,7 @@ class FlatModel(BaseModel):
             Model(
                 geometry=geometry,
                 Zone=zone,
+                # TODO: enable attic and basement assumptions
                 Attic=AtticAssumptions(
                     UseFraction=None,
                     Conditioned=False,
@@ -2148,13 +1147,39 @@ if __name__ == "__main__":
         Rotation=45,
         WWR=0.3,
         NFloors=2,
-        FacadeRValue=3.0,
+        FacadeFramingSystem="2x4 16OCC Woodframe",
+        # Facade
+        FacadeCavityInsulationRValue=1.2,
+        FacadeExteriorInsulationRValue=1.0,
+        FacadeInteriorInsulationRValue=0.0,
+        FacadeExteriorInsulationMaterial="XPSBoard",
+        FacadeInteriorInsulationMaterial="XPSBoard",
+        FacadeCavityInsulationMaterial="FiberglassBatt",
+        FacadeInteriorFinish="drywall",
+        FacadeExteriorFinish="wood_siding",
+        # Subterranean
+        SubterraneanWallFramingSystem="2x4 16OCC Woodframe",
+        SubterraneanCavityInsulationRValue=1.2,
+        SubterraneanExteriorInsulationRValue=1.0,
+        SubterraneanInteriorInsulationRValue=0.0,
+        SubterraneanExteriorInsulationMaterial="XPSBoard",
+        SubterraneanInteriorInsulationMaterial="XPSBoard",
+        SubterraneanCavityInsulationMaterial="FiberglassBatt",
+        SubterraneanInteriorFinish="drywall",
+        SubterraneanExteriorFinish="wood_siding",
+        # GroundSlab
+        GroundSlabSystem="BasicConcrete",
+        GroundSlabInsulationRValue=1.5,
+        GroundSlabInsulationMaterial="XPSBoard",
+        GroundSlabInteriorFinish="wood_floor",
+        GroundSlabStructuralThickness=0.15,
+        # Roof
         RoofRValue=3.0,
-        SlabRValue=3.0,
         WindowUValue=3.0,
         WindowSHGF=0.7,
         WindowTVis=0.5,
         InfiltrationACH=0.5,
+        BasementInfiltrationACH=0.5,
         VentFlowRatePerArea=0.001,
         VentFlowRatePerPerson=0.0085,
         VentProvider="Mechanical",
@@ -2186,18 +1211,6 @@ if __name__ == "__main__":
         OccupancyPMInterp=0.5,
         OccupancyWeekendPeakInterp=0.15,
         OccupancySummerPeakInterp=0.85,
-        # HSPRegularWeekdayWorkhours=21,
-        # HSPRegularWeekdayNight=21,
-        # HSPSummerWeekdayWorkhours=21,
-        # HSPSummerWeekdayNight=21,
-        # HSPWeekendWorkhours=21,
-        # HSPWeekendNight=21,
-        # CSPRegularWeekdayWorkhours=23,
-        # CSPRegularWeekdayNight=23,
-        # CSPSummerWeekdayWorkhours=23,
-        # CSPSummerWeekdayNight=23,
-        # CSPWeekendWorkhours=23,
-        # CSPWeekendNight=23,
         HeatingSetpointBase=21,
         SetpointDeadband=2,
         HeatingSetpointSetback=2,
