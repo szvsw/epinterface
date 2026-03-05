@@ -1,5 +1,6 @@
 """Geometry utilities for the UBEM construction."""
 
+import warnings
 from collections.abc import Sequence
 from typing import Literal, cast
 
@@ -16,12 +17,13 @@ from shapely.affinity import translate
 def match_idf_to_building_and_neighbors(
     idf: IDF,
     building: Polygon | str,
-    neighbor_polys: list[Polygon | str | None],
-    neighbor_floors: list[float | int | None],
+    neighbor_polys: Sequence[Polygon | str | None],
+    neighbor_floors: Sequence[float | int | None],
     neighbor_f2f_height: float,
     target_short_length: float,
     target_long_length: float,
     rotation_angle: float,
+    allow_no_height: bool = False,
 ) -> IDF:
     """Match an IDF model to a building and neighbors by scaling and rotating the IDF model and adding shading blocks for neighbors.
 
@@ -34,6 +36,7 @@ def match_idf_to_building_and_neighbors(
         target_short_length (float): The target short length of the building.
         target_long_length (float): The target long length of the building.
         rotation_angle (float): The rotation angle of the building (radians).
+        allow_no_height (bool): Whether to allow no height for neighbors.
 
     Returns:
         idf (IDF): The matched IDF model.
@@ -76,6 +79,16 @@ def match_idf_to_building_and_neighbors(
     long_length = max(idf_lengths)
     short_length = min(idf_lengths)
 
+    if not np.isclose(long_length, target_long_length):
+        warnings.warn(
+            f"Long length mismatch: {long_length} != {target_long_length}, perim zones may be distorted",
+            stacklevel=2,
+        )
+    if not np.isclose(short_length, target_short_length):
+        warnings.warn(
+            f"Short length mismatch: {short_length} != {target_short_length}, perim zones may be distorted",
+            stacklevel=2,
+        )
     idf.scale(target_long_length / long_length, anchor=Vector2D(0, 0), axes="x")
     idf.scale(target_short_length / short_length, anchor=Vector2D(0, 0), axes="y")
     idf.translate((
@@ -85,15 +98,16 @@ def match_idf_to_building_and_neighbors(
     ))  # This translation makes an assumption that the source building is at [(0,0),(0,w),...]
     idf.rotate(rotation_angle * 180 / np.pi)
     for i, (geom, height) in enumerate(translated_neighbors):
-        if not height:
+        if not height and not allow_no_height:
             height = 3.5 * 2
         if np.isnan(height):
             height = 3.5 * 2
-        idf.add_shading_block(
-            name=f"shading_{i}",
-            coordinates=[Vector2D(*coord) for coord in geom.exterior.coords[:-1]],
-            height=height,
-        )
+        if height != 0:
+            idf.add_shading_block(
+                name=f"shading_{i}",
+                coordinates=[Vector2D(*coord) for coord in geom.exterior.coords[:-1]],
+                height=height,
+            )
     return idf
 
 
@@ -315,6 +329,24 @@ def prepare_neighbor_shading_for_idf(
 ZoningType = Literal["core/perim", "by_storey"]
 
 
+class SceneContext(BaseModel, arbitrary_types_allowed=True):
+    """A context for the scene."""
+
+    building: Polygon = Field(..., description="The building polygon to match.")
+    neighbors: list[Polygon] = Field(..., description="The neighbor polygons to match.")
+    neighbor_heights: list[float] = Field(
+        ..., description="The heights of the neighbors."
+    )
+    orientation: float = Field(
+        ...,
+        description="The orientation of the building's long edge (radians).",
+    )
+    azimuthal_angle: float = Field(
+        default=2 * np.pi / 48,
+        description="The azimuthal angle for the shading mask (radians).",
+    )
+
+
 class ShoeboxGeometry(BaseModel):
     """A simple shoebox constructor for the IDF model.
 
@@ -365,6 +397,9 @@ class ShoeboxGeometry(BaseModel):
         description="The window-to-wall ratio of the building.",
         ge=0,
         le=1,
+    )
+    scene_context: SceneContext | None = Field(
+        default=None, description="The context for the scene."
     )
 
     @property
@@ -702,6 +737,34 @@ class ShoeboxGeometry(BaseModel):
             force=True,
             surfaces=window_walls,
         )
+
+        if self.scene_context:
+            mask_polys, neighbor_floors = prepare_neighbor_shading_for_idf(
+                building=self.scene_context.building,
+                neighbors=self.scene_context.neighbors,
+                neighbor_heights=self.scene_context.neighbor_heights,
+                azimuthal_angle=self.scene_context.azimuthal_angle,
+                fence_radius=100,
+                outward_offset=2,
+                f2f_height=self.h,
+            )
+            original_building_area = idf.total_building_area
+            idf = match_idf_to_building_and_neighbors(
+                idf,
+                building=self.scene_context.building,
+                neighbor_polys=mask_polys,
+                neighbor_floors=neighbor_floors,
+                neighbor_f2f_height=self.h,
+                target_short_length=self.d,
+                target_long_length=self.w,
+                rotation_angle=self.scene_context.orientation,
+                allow_no_height=True,
+            )
+            new_building_area = idf.total_building_area
+            if not np.isclose(original_building_area, new_building_area):
+                msg = f"Total building area mismatch after matching to building and neighbors: {original_building_area} != {new_building_area}"
+                raise ValueError(msg)
+
         return idf
 
 
