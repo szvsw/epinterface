@@ -25,7 +25,9 @@ def climatestudio_db_and_map():
             database_path=db_path, if_exists="raise", auto_register=False
         )
         with settings.db:
-            add_climatestudio_to_db(template_path, settings.db, erase_db=True)
+            add_climatestudio_to_db(
+                template_path, settings.db, erase_db=True, template_name="TestTemplate"
+            )
 
         component_map_path.write_text(
             "selector:\n  source_fields: [zone_name]\n",

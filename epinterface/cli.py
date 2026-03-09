@@ -206,7 +206,14 @@ def convert(excel_path: Path, db_path: Path):
     prompt="Enter the path to the database file to create (should have a .db suffix).",
     help="The database file will be created at the given path. If the file already exists, an error will be raised.",
 )
-def convert_cs(cs_path: Path, db_path: Path):
+@click.option(
+    "--name",
+    type=str,
+    default="Default",
+    prompt="Enter a semantic name for the template archetype (e.g. 'Office', 'Residential_pre_1975')",
+    help="Semantic name for the template archetype, used as the Name for all components in the database.",
+)
+def convert_cs(cs_path: Path, db_path: Path, name: str):
     """Convert a ClimateStudio template JSON file to a database file."""
     from epinterface.sbem.ingestion import add_climatestudio_to_db
     from epinterface.sbem.prisma.client import PrismaSettings
@@ -221,7 +228,9 @@ def convert_cs(cs_path: Path, db_path: Path):
     )
     try:
         with settings.db:
-            add_climatestudio_to_db(cs_path, settings.db, erase_db=True)
+            add_climatestudio_to_db(
+                cs_path, settings.db, erase_db=True, template_name=name
+            )
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)

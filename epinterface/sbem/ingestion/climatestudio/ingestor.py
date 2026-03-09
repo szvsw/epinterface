@@ -40,13 +40,13 @@ from epinterface.sbem.components.systems import (
     VentilationComponent,
     ZoneHVACComponent,
 )
-from epinterface.sbem.ingestion.mapper import (
+from epinterface.sbem.ingestion.climatestudio.mapper import (
     convert_fresh_air_rate,
     map_glazing_type,
     map_roughness,
     map_year_schedule_category,
 )
-from epinterface.sbem.ingestion.parser import (
+from epinterface.sbem.ingestion.climatestudio.parser import (
     get_library,
     get_settings,
     get_zones,
@@ -362,9 +362,12 @@ def _create_construction_assemblies(library: dict[str, Any], tx: Prisma) -> None
 
 
 def _create_envelope_assembly_and_infiltration(
-    library: dict[str, Any], settings: dict[str, Any], tx: Prisma
+    library: dict[str, Any],
+    settings: dict[str, Any],
+    tx: Prisma,
+    template_name: str,
 ) -> tuple[str, str]:
-    """Create a default EnvelopeAssembly and Infiltration, returning their names."""
+    """Create EnvelopeAssembly and Infiltration using template_name, returning their names."""
     default_construction = settings.get("DefaultConstructionTemplate") or {}
     constructions = default_construction.get("Constructions") or {}
 
@@ -380,7 +383,7 @@ def _create_envelope_assembly_and_infiltration(
         constructions.get("InternalMassExposedAreaPerArea", 0.0)
     )
 
-    env_assembly_name = str(default_construction.get("Name") or "DefaultEnvelope")
+    env_assembly_name = template_name
     payload: dict[str, Any] = {
         "Name": env_assembly_name,
         "FlatRoofAssembly": {"connect": {"Name": str(roof)}}
@@ -419,7 +422,7 @@ def _create_envelope_assembly_and_infiltration(
     EnvelopeAssemblyComponent.model_validate(envelope_assembly, from_attributes=True)
 
     infil = default_construction.get("Infiltration") or {}
-    infil_name = str(infil.get("Name") or f"{env_assembly_name}_Infiltration")
+    infil_name = f"{template_name}_Infiltration"
     print("Adding infiltration", infil_name)
     infiltration = tx.infiltration.create(
         data={
@@ -465,9 +468,12 @@ def _resolve_schedule_name(name: str, mapping: dict[str, str]) -> str:
 
 
 def _create_space_use_components(
-    settings: dict[str, Any], tx: Prisma, schedule_name_mapping: dict[str, str]
+    settings: dict[str, Any],
+    tx: Prisma,
+    schedule_name_mapping: dict[str, str],
+    template_name: str,
 ) -> tuple[str, str, str, str, str, str]:
-    """Create default Occupancy/Lighting/Equipment/Thermostat/WaterUse/SpaceUse."""
+    """Create Occupancy/Lighting/Equipment/Thermostat/WaterUse/SpaceUse using template_name."""
     space_template = settings.get("DefaultSpaceUseTemplate") or {}
     loads = space_template.get("Loads") or {}
     conditioning = space_template.get("Conditioning") or {}
@@ -498,10 +504,10 @@ def _create_space_use_components(
         str(hot_water.get("WaterSchedule") or "AllOn"), schedule_name_mapping
     )
 
-    print("Adding occupancy", str(loads.get("Name") or "DefaultOccupancy"))
+    print("Adding occupancy", template_name)
     occupancy = tx.occupancy.create(
         data={
-            "Name": str(loads.get("Name") or "DefaultOccupancy"),
+            "Name": template_name,
             "PeopleDensity": float(loads.get("PeopleDensity", 0.0)),
             "IsOn": bool(loads.get("PeopleIsOn", True)),
             "MetabolicRate": float(loads.get("MetabolicRate", 1.2)),
@@ -511,10 +517,10 @@ def _create_space_use_components(
     )
     OccupancyComponent.model_validate(occupancy, from_attributes=True)
 
-    print("Adding lighting", str(loads.get("Name") or "DefaultLighting"))
+    print("Adding lighting", template_name)
     lighting = tx.lighting.create(
         data={
-            "Name": str(loads.get("Name") or "DefaultLighting"),
+            "Name": template_name,
             "PowerDensity": float(loads.get("LightingPowerDensity", 0.0)),
             "DimmingType": str(loads.get("DimmingType") or "Continuous"),
             "IsOn": bool(loads.get("LightsIsOn", True)),
@@ -524,10 +530,10 @@ def _create_space_use_components(
     )
     LightingComponent.model_validate(lighting, from_attributes=True)
 
-    print("Adding equipment", str(loads.get("Name") or "DefaultEquipment"))
+    print("Adding equipment", template_name)
     equipment = tx.equipment.create(
         data={
-            "Name": str(loads.get("Name") or "DefaultEquipment"),
+            "Name": template_name,
             "PowerDensity": float(loads.get("EquipmentPowerDensity", 0.0)),
             "IsOn": bool(loads.get("EquipmentIsOn", True)),
             "Schedule": {"connect": {"Name": equip_sched_name}},
@@ -536,10 +542,10 @@ def _create_space_use_components(
     )
     EquipmentComponent.model_validate(equipment, from_attributes=True)
 
-    print("Adding thermostat", str(conditioning.get("Name") or "DefaultThermostat"))
+    print("Adding thermostat", template_name)
     thermostat = tx.thermostat.create(
         data={
-            "Name": str(conditioning.get("Name") or "DefaultThermostat"),
+            "Name": template_name,
             "HeatingSetpoint": float(conditioning.get("HeatingSetpoint", 20.0)),
             "CoolingSetpoint": float(conditioning.get("CoolingSetpoint", 26.0)),
             "IsOn": True,
@@ -550,10 +556,10 @@ def _create_space_use_components(
     )
     ThermostatComponent.model_validate(thermostat, from_attributes=True)
 
-    print("Adding water use", str(hot_water.get("Name") or "DefaultWaterUse"))
+    print("Adding water use", template_name)
     water_use = tx.wateruse.create(
         data={
-            "Name": str(hot_water.get("Name") or "DefaultWaterUse"),
+            "Name": template_name,
             "FlowRatePerPerson": float(hot_water.get("FlowRatePerPerson", 0.0)),
             "Schedule": {"connect": {"Name": water_sched_name}},
         },
@@ -561,10 +567,10 @@ def _create_space_use_components(
     )
     WaterUseComponent.model_validate(water_use, from_attributes=True)
 
-    print("Adding space use", str(space_template.get("Name") or "DefaultSpaceUse"))
+    print("Adding space use", template_name)
     space_use = tx.spaceuse.create(
         data={
-            "Name": str(space_template.get("Name") or "DefaultSpaceUse"),
+            "Name": template_name,
             "Occupancy": {"connect": {"Name": occupancy.Name}},
             "Lighting": {"connect": {"Name": lighting.Name}},
             "Equipment": {"connect": {"Name": equipment.Name}},
@@ -590,8 +596,9 @@ def _create_hvac_and_dhw(
     settings: dict[str, Any],
     tx: Prisma,
     schedule_name_mapping: dict[str, str],
+    template_name: str,
 ) -> tuple[str, str, str]:
-    """Create ThermalSystem/ConditioningSystems/Ventilation/HVAC/DHW."""
+    """Create ThermalSystem/ConditioningSystems/Ventilation/HVAC/DHW using template_name."""
     hvac_systems = template.get("HVACSystems") or []
     hvac_settings = hvac_systems[0].get("Settings") if hvac_systems else {}
 
@@ -600,10 +607,13 @@ def _create_hvac_and_dhw(
     heating_fuel = str(hvac_settings.get("HeatingFuelType") or "NaturalGas")
     cooling_fuel = str(hvac_settings.get("CoolingFuelType") or "Electricity")
 
-    print("Adding thermal system DefaultHeating")
+    heating_name = f"{template_name}_Heating"
+    cooling_name = f"{template_name}_Cooling"
+
+    print("Adding thermal system", heating_name)
     heating_system = tx.thermalsystem.create(
         data={
-            "Name": "DefaultHeating",
+            "Name": heating_name,
             "ConditioningType": "Heating",
             "Fuel": heating_fuel,
             "SystemCOP": heating_cop,
@@ -613,10 +623,10 @@ def _create_hvac_and_dhw(
     )
     ThermalSystemComponent.model_validate(heating_system, from_attributes=True)
 
-    print("Adding thermal system DefaultCooling")
+    print("Adding thermal system", cooling_name)
     cooling_system = tx.thermalsystem.create(
         data={
-            "Name": "DefaultCooling",
+            "Name": cooling_name,
             "ConditioningType": "Cooling",
             "Fuel": cooling_fuel,
             "SystemCOP": cooling_cop,
@@ -647,10 +657,10 @@ def _create_hvac_and_dhw(
     if economizer_type in {"DifferentialDryBulb", "DifferentialEnthalpy"}:
         econ = economizer_type
 
-    print("Adding ventilation DefaultVentilation")
+    print("Adding ventilation", template_name)
     vent = tx.ventilation.create(
         data={
-            "Name": "DefaultVentilation",
+            "Name": template_name,
             "FreshAirPerPerson": min_fresh_air_person,
             "FreshAirPerFloorArea": min_fresh_air_area,
             "Provider": "Mechanical",
@@ -663,10 +673,10 @@ def _create_hvac_and_dhw(
     )
     VentilationComponent.model_validate(vent, from_attributes=True)
 
-    print("Adding conditioning system DefaultConditioningSystem")
+    print("Adding conditioning system", template_name)
     cond_systems = tx.conditioningsystems.create(
         data={
-            "Name": "DefaultConditioningSystem",
+            "Name": template_name,
             "Heating": {"connect": {"Name": heating_system.Name}},
             "Cooling": {"connect": {"Name": cooling_system.Name}},
         },
@@ -674,10 +684,10 @@ def _create_hvac_and_dhw(
     )
     ConditioningSystemsComponent.model_validate(cond_systems, from_attributes=True)
 
-    print("Adding hvac DefaultHVAC")
+    print("Adding hvac", template_name)
     hvac = tx.hvac.create(
         data={
-            "Name": "DefaultHVAC",
+            "Name": template_name,
             "ConditioningSystems": {"connect": {"Name": cond_systems.Name}},
             "Ventilation": {"connect": {"Name": vent.Name}},
         },
@@ -686,10 +696,10 @@ def _create_hvac_and_dhw(
     ZoneHVACComponent.model_validate(hvac, from_attributes=True)
 
     hot_water = settings.get("DefaultSpaceUseTemplate", {}).get("HotWater") or {}
-    print("Adding dhw", str(hot_water.get("Name") or "DefaultDHW"))
+    print("Adding dhw", template_name)
     dhw = tx.dhw.create(
         data={
-            "Name": str(hot_water.get("Name") or "DefaultDHW"),
+            "Name": template_name,
             "SystemCOP": float(hot_water.get("DomHotWaterCOP", 1.0)),
             "WaterTemperatureInlet": float(
                 hot_water.get("WaterTemperatureInlet", 10.0)
@@ -716,14 +726,15 @@ def _create_operations_and_envelopes(
     hvac_name: str,
     dhw_name: str,
     tx: Prisma,
+    template_name: str,
 ) -> None:
-    """Create Operations, Envelope, and Zone records for all zones."""
+    """Create Operations, Envelope, and Zone records using template_name."""
     zones = get_zones(template)
 
-    print("Adding operations DefaultOperations")
+    print("Adding operations", template_name)
     operations = tx.operations.create(
         data={
-            "Name": "DefaultOperations",
+            "Name": template_name,
             "SpaceUse": {"connect": {"Name": space_use_name}},
             "HVAC": {"connect": {"Name": hvac_name}},
             "DHW": {"connect": {"Name": dhw_name}},
@@ -739,8 +750,13 @@ def _create_operations_and_envelopes(
         win_def = settings.get("WindowDefinition") or {}
         win_construction_name = win_def.get("Construction")
 
+        envelope_name = (
+            f"{template_name}_Envelope"
+            if len(zones) == 1
+            else f"{template_name}_{zone_id}_Envelope"
+        )
         envelope_data: EnvelopeCreateInput = {
-            "Name": f"{zone_id}_Envelope",
+            "Name": envelope_name,
             "Assemblies": {"connect": {"Name": env_assembly_name}},
             "Infiltration": {"connect": {"Name": infil_name}},
             "AtticInfiltration": {"connect": {"Name": infil_name}},
@@ -764,8 +780,21 @@ def _create_operations_and_envelopes(
         print("Adding zone", zone.Name)
 
 
-def add_climatestudio_to_db(path: Path, db: Prisma, erase_db: bool = False) -> None:
-    """Add a ClimateStudio template JSON file to the database."""
+def add_climatestudio_to_db(
+    path: Path,
+    db: Prisma,
+    erase_db: bool = False,
+    template_name: str = "Default",
+) -> None:
+    """Add a ClimateStudio template JSON file to the database.
+
+    Args:
+        path: path to the ClimateStudio template JSON file.
+        db: connected Prisma client.
+        erase_db: erase existing data before ingestion.
+        template_name: semantic name for this template archetype (e.g. 'Office', 'Residential_pre_1975').
+            used as the Name for all semantic components (operations, space use, hvac, dhw, envelope, etc.).
+    """
     if erase_db:
         delete_all(db)
 
@@ -788,7 +817,7 @@ def add_climatestudio_to_db(path: Path, db: Prisma, erase_db: bool = False) -> N
 
         print("-" * 15, "Adding Envelope Assembly and Infiltration", "-" * 15)
         env_name, infil_name = _create_envelope_assembly_and_infiltration(
-            library, settings, tx
+            library, settings, tx, template_name
         )
 
         print("-" * 15, "Adding Space Use", "-" * 15)
@@ -799,11 +828,13 @@ def add_climatestudio_to_db(path: Path, db: Prisma, erase_db: bool = False) -> N
             _therm_name,
             _water_name,
             space_use_name,
-        ) = _create_space_use_components(settings, tx, schedule_name_mapping)
+        ) = _create_space_use_components(
+            settings, tx, schedule_name_mapping, template_name
+        )
 
         print("-" * 15, "Adding HVAC and DHW", "-" * 15)
         hvac_name, dhw_name, _cond_sys_name = _create_hvac_and_dhw(
-            template, settings, tx, schedule_name_mapping
+            template, settings, tx, schedule_name_mapping, template_name
         )
 
         print("-" * 15, "Adding Operations, Envelopes, and Zones", "-" * 15)
@@ -815,6 +846,7 @@ def add_climatestudio_to_db(path: Path, db: Prisma, erase_db: bool = False) -> N
             hvac_name=hvac_name,
             dhw_name=dhw_name,
             tx=tx,
+            template_name=template_name,
         )
 
     print("Done adding components to db.")
@@ -828,6 +860,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("template", type=Path, help="Path to template.json file")
     parser.add_argument(
+        "--name",
+        type=str,
+        default="Default",
+        help="Semantic name for the template archetype (e.g. 'Office', 'Residential_pre_1975').",
+    )
+    parser.add_argument(
         "--erase-db",
         action="store_true",
         help="Erase existing SBEM data before ingestion.",
@@ -837,6 +875,11 @@ if __name__ == "__main__":
     db_client = Prisma()
     db_client.connect()
     try:
-        add_climatestudio_to_db(args.template, db_client, erase_db=bool(args.erase_db))
+        add_climatestudio_to_db(
+            args.template,
+            db_client,
+            erase_db=bool(args.erase_db),
+            template_name=args.name,
+        )
     finally:
         db_client.disconnect()
