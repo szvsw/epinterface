@@ -157,7 +157,7 @@ def make(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore
 )
 def convert(excel_path: Path, db_path: Path):
     """Convert an excel file to a database file."""
-    from epinterface.sbem.interface import add_excel_to_db
+    from epinterface.sbem.ingestion import add_excel_to_db
     from epinterface.sbem.prisma.client import PrismaSettings
 
     if excel_path.suffix != ".xlsx":
@@ -298,7 +298,7 @@ def check(
     component_map_path: Path, semantic_fields_path: Path, db_path: Path, max_tests: int
 ):
     """Check if all semantic field combinations resolve to a valid zone component."""
-    from epinterface.sbem.interface import add_excel_to_db
+    from epinterface.sbem.ingestion import add_excel_to_db
     from epinterface.sbem.prisma.client import PrismaSettings
     from epinterface.sbem.utils import check_model_existence
 

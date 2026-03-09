@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from prisma import Prisma
 
-from epinterface.sbem.interface import add_excel_to_db
+from epinterface.sbem.ingestion import add_excel_to_db
 from epinterface.sbem.prisma.client import PrismaSettings
 
 
