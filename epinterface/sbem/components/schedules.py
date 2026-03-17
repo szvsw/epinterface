@@ -24,17 +24,20 @@ TypeLimits: dict[ScheduleTypeLimitType, ScheduleTypeLimits] = {
         Unit_Type="Dimensionless",
         Lower_Limit_Value=0,
         Upper_Limit_Value=1,
+        Numeric_Type="Continuous",
     ),
     "Temperature": ScheduleTypeLimits(
         Name="Temperature",
         Unit_Type="Temperature",
         Lower_Limit_Value=-270,
         Upper_Limit_Value=1000,
+        Numeric_Type="Continuous",
     ),
     "AnyNumber": ScheduleTypeLimits(
         Name="AnyNumber",
         Lower_Limit_Value=-1000,
         Upper_Limit_Value=1000,
+        Numeric_Type="Continuous",
     ),
 }
 
