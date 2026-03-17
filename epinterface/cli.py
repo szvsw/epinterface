@@ -157,7 +157,7 @@ def make(path: Path, if_exists: Literal["raise", "overwrite", "migrate", "ignore
 )
 def convert(excel_path: Path, db_path: Path):
     """Convert an excel file to a database file."""
-    from epinterface.sbem.interface import add_excel_to_db
+    from epinterface.sbem.ingestion import add_excel_to_db
     from epinterface.sbem.prisma.client import PrismaSettings
 
     if excel_path.suffix != ".xlsx":
@@ -175,6 +175,62 @@ def convert(excel_path: Path, db_path: Path):
     try:
         with settings.db:
             add_excel_to_db(excel_path, settings.db, erase_db=True)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(f"Database available at {db_path}.")
+
+
+@db.command(
+    help="Convert a ClimateStudio template JSON file to a database file. "
+    "Creates the database with the SBEM schema and populates it from the JSON.",
+)
+@click.option(
+    "--cs-path",
+    type=click.Path(
+        exists=True,
+        path_type=Path,
+    ),
+    default="template.json",
+    prompt="Enter the path to the ClimateStudio template JSON file.",
+    help="Path to the ClimateStudio template JSON (e.g. exported from ClimateStudio).",
+)
+@click.option(
+    "--db-path",
+    type=click.Path(
+        exists=False,
+        path_type=Path,
+    ),
+    default="components.db",
+    prompt="Enter the path to the database file to create (should have a .db suffix).",
+    help="The database file will be created at the given path. If the file already exists, an error will be raised.",
+)
+@click.option(
+    "--name",
+    type=str,
+    default="Default",
+    prompt="Enter a semantic name for the template archetype (e.g. 'Office', 'Residential_pre_1975')",
+    help="Semantic name for the template archetype, used as the Name for all components in the database.",
+)
+def convert_cs(cs_path: Path, db_path: Path, name: str):
+    """Convert a ClimateStudio template JSON file to a database file."""
+    from epinterface.sbem.ingestion import add_climatestudio_to_db
+    from epinterface.sbem.prisma.client import PrismaSettings
+
+    if db_path.suffix != ".db":
+        msg = "Error: The database file should have a .db suffix."
+        click.echo(msg, err=True)
+        sys.exit(1)
+
+    settings = PrismaSettings.New(
+        database_path=db_path, if_exists="raise", auto_register=True
+    )
+    try:
+        with settings.db:
+            add_climatestudio_to_db(
+                cs_path, settings.db, erase_db=True, template_name=name
+            )
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -251,7 +307,7 @@ def check(
     component_map_path: Path, semantic_fields_path: Path, db_path: Path, max_tests: int
 ):
     """Check if all semantic field combinations resolve to a valid zone component."""
-    from epinterface.sbem.interface import add_excel_to_db
+    from epinterface.sbem.ingestion import add_excel_to_db
     from epinterface.sbem.prisma.client import PrismaSettings
     from epinterface.sbem.utils import check_model_existence
 

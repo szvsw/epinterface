@@ -1,4 +1,4 @@
-"""A module for parsing SBEM template data and generating EnergyPlus objects."""
+"""Excel SBEM template ingestion for the SBEM library."""
 
 import logging
 from datetime import timedelta
@@ -174,7 +174,6 @@ def excel_parser(path: Path) -> dict[str, pd.DataFrame]:
 
 
 def add_excel_to_db(path: Path, db: Prisma, erase_db: bool = False):  # noqa: C901
-    """Add an excel file to the database."""
     """Add an excel file to the database."""
     if erase_db:
         delete_all(db)
