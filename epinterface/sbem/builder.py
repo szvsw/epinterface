@@ -1215,6 +1215,121 @@ class Model(BaseWeather, validate_assignment=True):
         zone_weights: NDArray[np.float64] = np.array(zone_weights_)
         return zone_weights, zone_names
 
+    def convert_to_onezone(
+        self,
+    ) -> "Model":
+        """Convert the model to a one-zone model."""
+        basement_is_conditioned = self.Basement.Conditioned
+        attic_is_conditioned = self.Attic.Conditioned
+        f2f_h = self.geometry.h
+        num_floors = self.geometry.num_stories
+        zones_height = f2f_h * num_floors
+        conditioned_basement_height = f2f_h if basement_is_conditioned else 0
+        conditioned_attic_height = (
+            (self.geometry.roof_height or 0) / 2 if attic_is_conditioned else 0
+        )  # divide by 2 because attic is gabled
+        total_conditioned_height = (
+            zones_height + conditioned_basement_height + conditioned_attic_height
+        )
+        model = Model(
+            Weather=self.Weather,
+            Zone=self.Zone.model_copy(deep=True),
+            Basement=BasementAssumptions(
+                Conditioned=False,
+                UseFraction=None,
+            ),
+            Attic=AtticAssumptions(
+                Conditioned=False,
+                UseFraction=None,
+            ),
+            geometry=ShoeboxGeometry(
+                x=0,
+                y=0,
+                w=self.geometry.w,
+                d=self.geometry.d,
+                h=total_conditioned_height,
+                wwr=self.geometry.wwr,
+                num_stories=1,
+                basement=False,
+                zoning="by_storey",
+                roof_height=None,
+                exposed_basement_frac=0,
+                scene_context=self.geometry.scene_context.model_copy(deep=True)
+                if self.geometry.scene_context is not None
+                else None,
+            ),
+        )
+
+        old_pd = model.Zone.Operations.SpaceUse.Occupancy.PeopleDensity
+        old_epd = model.Zone.Operations.SpaceUse.Equipment.PowerDensity
+        old_lpd = model.Zone.Operations.SpaceUse.Lighting.PowerDensity
+        gross_use_factor = (
+            num_floors
+            + (self.Basement.UseFraction or 0)
+            + (self.Attic.UseFraction or 0)
+        )
+        gross_conditioned_factor = (
+            num_floors
+            + (1 if self.Basement.Conditioned else 0)
+            + (1 if self.Attic.Conditioned else 0)
+        )
+        model.Zone.Operations.SpaceUse.Occupancy.PeopleDensity = (
+            old_pd * gross_use_factor
+        )
+        model.Zone.Operations.SpaceUse.Equipment.PowerDensity = (
+            old_epd * gross_use_factor
+        )
+        model.Zone.Operations.SpaceUse.Lighting.PowerDensity = (
+            old_lpd * gross_use_factor
+        )
+        old_vdot = model.Zone.Operations.HVAC.Ventilation.FreshAirPerFloorArea
+        model.Zone.Operations.HVAC.Ventilation.FreshAirPerFloorArea = (
+            old_vdot * gross_conditioned_factor
+        )
+        # infiltration is volume weighted
+        old_infil = model.Zone.Envelope.Infiltration.AirChangesPerHour
+        old_infil_attic = model.Zone.Envelope.AtticInfiltration.AirChangesPerHour
+        old_infil_basement = model.Zone.Envelope.BasementInfiltration.AirChangesPerHour
+
+        base_weight = num_floors * f2f_h
+        attic_weight = (
+            (self.geometry.roof_height or 0)
+            / 2
+            * (
+                1
+                if (
+                    self.Attic.Conditioned
+                    or (
+                        self.Attic.UseFraction is not None
+                        and self.Attic.UseFraction > 0
+                    )
+                )
+                else 0
+            )
+        )
+        basement_weight = f2f_h * (
+            1
+            if (
+                self.Basement.Conditioned
+                or (
+                    self.Basement.UseFraction is not None
+                    and self.Basement.UseFraction > 0
+                )
+            )
+            else 0
+        )
+        total_weight = base_weight + attic_weight + basement_weight
+        base_weight = base_weight / total_weight
+        attic_weight = attic_weight / total_weight
+        basement_weight = basement_weight / total_weight
+        model.Zone.Envelope.Infiltration.AirChangesPerHour = (
+            old_infil * base_weight
+            + old_infil_attic * attic_weight
+            + old_infil_basement * basement_weight
+        )
+
+        return model
+
 
 def construct_zone_def(
     component_map_path: Path,
