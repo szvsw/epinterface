@@ -581,6 +581,7 @@ dependencies = [
     { name = "geopandas" },
     { name = "httpx" },
     { name = "ladybug-core" },
+    { name = "obgeneration" },
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "prisma" },
@@ -616,6 +617,7 @@ requires-dist = [
     { name = "geopandas", specifier = "~=1.0.1" },
     { name = "httpx", specifier = "~=0.27.2" },
     { name = "ladybug-core", specifier = ">=0.44.30" },
+    { name = "obgeneration", specifier = ">=0.1.0" },
     { name = "openpyxl", specifier = "~=3.1.5" },
     { name = "pandas", specifier = ">=2.2,<2.3" },
     { name = "prisma", specifier = "~=0.15.0" },
@@ -2017,6 +2019,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ae/ee/89bedf69c36ace1ac8f59e97811c1f5031e179a37e4821c3a230bf750142/numpy-2.3.1-pp311-pypy311_pp73-manylinux_2_28_aarch64.whl", hash = "sha256:c6e0bf9d1a2f50d2b65a7cf56db37c095af17b59f6c132396f7c6d5dd76484df", size = 14399010, upload-time = "2025-06-21T12:26:54.086Z" },
     { url = "https://files.pythonhosted.org/packages/15/08/e00e7070ede29b2b176165eba18d6f9784d5349be3c0c1218338e79c27fd/numpy-2.3.1-pp311-pypy311_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:eabd7e8740d494ce2b4ea0ff05afa1b7b291e978c0ae075487c51e8bd93c0c68", size = 16752042, upload-time = "2025-06-21T12:27:19.018Z" },
     { url = "https://files.pythonhosted.org/packages/48/6b/1c6b515a83d5564b1698a61efa245727c8feecf308f4091f565988519d20/numpy-2.3.1-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:e610832418a2bc09d974cc9fecebfa51e9532d6190223bc5ef6a7402ebf3b5cb", size = 12927246, upload-time = "2025-06-21T12:27:38.618Z" },
+]
+
+[[package]]
+name = "obgeneration"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.3.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pandas" },
+    { name = "pydantic" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/38/186fdce185078f83093fd72cbfcb1bd3c1fd3c946fdd2e5c7d247afbbb88/obgeneration-0.1.0.tar.gz", hash = "sha256:f38ca88995445758049c51f2b664be75a63b068f85431a0a9198b3929b6eaa48", size = 196567, upload-time = "2026-04-19T19:58:25.021Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/b3/6a6dd1fd9bbe0661a08573641da3a11431e9636169a550251094025c78a5/obgeneration-0.1.0-py3-none-any.whl", hash = "sha256:8760943240222fe9126b9c1abf5cfd63eb347443c8d1e5e010f940dee9ab69a4", size = 223075, upload-time = "2026-04-19T19:58:26.58Z" },
 ]
 
 [[package]]

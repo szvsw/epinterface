@@ -5,10 +5,20 @@ from collections.abc import Sequence
 from typing import Literal
 
 import numpy as np
-from pydantic import BaseModel, Field
+from obgeneration.generator.dhw_generator import DHWGenerator
+from obgeneration.generator.equipment_generator import EquipmentGenerator
+from obgeneration.generator.hvac_generator import HVACGenerator
+from obgeneration.generator.lighting_generator import LightingGenerator
+from obgeneration.generator.occupancy_generator import (
+    HouseholdOccupancyFractions,
+    OccupancyGenerator,
+)
+from obgeneration.model import builders
+from obgeneration.model.equipment import Equipment
+from obgeneration.model.occupancy import MobilityCluster
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-# TESTING COMMIT
 class ScheduleOutput(ABC):
     """Base class for schedule outputs."""
 
@@ -30,6 +40,10 @@ class FractionalScheduleOutput(ScheduleOutput, BaseModel):
         ..., description="The normalized timeseries of the schedule."
     )
 
+    def construct_idf_object(self):
+        """Construct the IDF object for the schedule."""
+        raise NotImplementedError("IDF object construction is not implemented")
+
 
 class TemperatureScheduleOutput(ScheduleOutput, BaseModel):
     """Base class for temperature schedule outputs."""
@@ -38,6 +52,10 @@ class TemperatureScheduleOutput(ScheduleOutput, BaseModel):
         ..., description="The timeseries of the temperature schedule."
     )
 
+    def construct_idf_object(self):
+        """Construct the IDF object for the schedule."""
+        raise NotImplementedError("IDF object construction is not implemented")
+
 
 class StochasticEquipmentScheduleOutput(FractionalScheduleOutput):
     """Output for the equipment schedule.
@@ -45,12 +63,6 @@ class StochasticEquipmentScheduleOutput(FractionalScheduleOutput):
     Inherits from FractionalScheduleOutput, so it will contain a normalized timeseries and a peak value.
     """
 
-    dishwasher_cycles_per_week: int = Field(
-        ..., ge=0, description="The number of dishwasher cycles per week."
-    )
-    laundry_cycles_per_week: int = Field(
-        ..., ge=0, description="The number of laundry cycles per week."
-    )
     peak_units: Literal["W/m2"] = "W/m2"
 
 
@@ -60,6 +72,10 @@ class StochasticLightingScheduleOutput(FractionalScheduleOutput):
     Inherits from FractionalScheduleOutput, so it will contain a normalized timeseries and a peak value.
     """
 
+    dimming_enabled: bool = Field(
+        ...,
+        description="Whether daylight dimming is enabled for the lighting schedule.",
+    )
     peak_units: Literal["W/m2"] = "W/m2"
 
 
@@ -112,60 +128,73 @@ ScheduleOutputType = (
 class ScheduleContext(BaseModel):
     """Context for the schedule generation."""
 
-    equipment: StochasticEquipmentScheduleOutput | None = None
-    lighting: StochasticLightingScheduleOutput | None = None
-    occupancy: StochasticOccupancyScheduleOutput | None = None
-    water_use: StochasticWaterUseScheduleOutput | None = None
-    heating_setpoint: StochasticHeatingSetpointScheduleOutput | None = None
-    cooling_setpoint: StochasticCoolingSetpointScheduleOutput | None = None
+    occupancy: list[list[HouseholdOccupancyFractions]] | None = None
+    num_occupants: int | None = None
+    equipment: Equipment | None = None
+    dishwasher_cycles: list[list[int]] | None = None
+    laundry_cycles: list[list[int]] | None = None
 
     @property
-    def safe_occupancy(self) -> StochasticOccupancyScheduleOutput:
-        """Get the occupancy schedule, raising an error if it is not set."""
+    def safe_occupancy(self) -> list[list[HouseholdOccupancyFractions]]:
+        """Get the occupancy states schedule, raising an error if it is not set."""
         if self.occupancy is None:
-            msg = "Occupancy schedule is not set"
+            msg = "Occupancy states schedule is not set"
             raise ValueError(msg)
         return self.occupancy
 
     @property
-    def safe_equipment(self) -> StochasticEquipmentScheduleOutput:
-        """Get the equipment schedule, raising an error if it is not set."""
+    def safe_num_occupants(self) -> int:
+        """Get the number of occupants, raising an error if it is not set."""
+        if self.num_occupants is None:
+            msg = "Number of occupants is not set"
+            raise ValueError(msg)
+        return self.num_occupants
+
+    @property
+    def safe_equipment(self) -> Equipment:
+        """Get the equipment, raising an error if it is not set."""
         if self.equipment is None:
-            msg = "Equipment schedule is not set"
+            msg = "Equipment is not set"
             raise ValueError(msg)
         return self.equipment
 
     @property
-    def safe_lighting(self) -> StochasticLightingScheduleOutput:
-        """Get the lighting schedule, raising an error if it is not set."""
-        if self.lighting is None:
-            msg = "Lighting schedule is not set"
+    def safe_dishwasher_cycles(self) -> list[list[int]]:
+        """Get the dishwasher cycles, raising an error if it is not set."""
+        if self.dishwasher_cycles is None:
+            msg = "Dishwasher cycles are not set"
             raise ValueError(msg)
-        return self.lighting
+        return self.dishwasher_cycles
 
     @property
-    def safe_water_use(self) -> StochasticWaterUseScheduleOutput:
-        """Get the water use schedule, raising an error if it is not set."""
-        if self.water_use is None:
-            msg = "Water use schedule is not set"
+    def safe_laundry_cycles(self) -> list[list[int]]:
+        """Get the laundry cycles, raising an error if it is not set."""
+        if self.laundry_cycles is None:
+            msg = "Laundry cycles are not set"
             raise ValueError(msg)
-        return self.water_use
+        return self.laundry_cycles
 
-    @property
-    def safe_heating_setpoint(self) -> StochasticHeatingSetpointScheduleOutput:
-        """Get the heating setpoint schedule, raising an error if it is not set."""
-        if self.heating_setpoint is None:
-            msg = "Heating setpoint schedule is not set"
-            raise ValueError(msg)
-        return self.heating_setpoint
 
-    @property
-    def safe_cooling_setpoint(self) -> StochasticCoolingSetpointScheduleOutput:
-        """Get the cooling setpoint schedule, raising an error if it is not set."""
-        if self.cooling_setpoint is None:
-            msg = "Cooling setpoint schedule is not set"
-            raise ValueError(msg)
-        return self.cooling_setpoint
+class ScheduleResults(BaseModel):
+    """Results of the schedule generation."""
+
+    occupancy: StochasticOccupancyScheduleOutput | None = None
+    heating_setpoint: StochasticHeatingSetpointScheduleOutput | None = None
+    cooling_setpoint: StochasticCoolingSetpointScheduleOutput | None = None
+    lighting: StochasticLightingScheduleOutput | None = None
+    equipment: StochasticEquipmentScheduleOutput | None = None
+    water_use: StochasticWaterUseScheduleOutput | None = None
+
+
+class ScheduleGenerationConfig(BaseModel):
+    """Shared configuration for all generated schedules."""
+
+    model_config = ConfigDict(frozen=True)
+    resolution_minutes: int = Field(
+        ...,
+        description="Minutes represented by each timestep for all generated schedules.",
+        gt=0,
+    )
 
 
 def get_generator(generator: np.random.Generator | int) -> np.random.Generator:
@@ -180,140 +209,339 @@ class ScheduleGenerator(ABC, BaseModel):
 
     @abstractmethod
     def generate_schedule(
-        self, generator: np.random.Generator | int, context: ScheduleContext
+        self,
+        generator: np.random.Generator | int,
+        context: ScheduleContext,
+        config: ScheduleGenerationConfig,
     ) -> ScheduleOutputType:
         """Generate a schedule."""
         pass
 
 
-class StochasticEquipmentScheduleGenerator(ScheduleGenerator):
-    """Generator for the dishwasher schedule."""
-
-    # TODO: Other parameters for the equipment schedule generator go here...
-    dishwasher_frequency_min: float
-    dishwasher_frequency_max: float
-
-    laundry_frequency_min: float
-    laundry_frequency_max: float
-
-    def generate_schedule(
-        self, generator: np.random.Generator | int, context: ScheduleContext
-    ) -> StochasticEquipmentScheduleOutput:
-        """Generate a dishwasher schedule."""
-        generator = get_generator(generator)
-
-        raise NotImplementedError("DishwasherScheduleGenerator is not implemented")
-
-
-class StochasticLightingScheduleGenerator(ScheduleGenerator):
-    """Generator for the lighting schedule."""
-
-    # TODO: Other parameters for the lighting schedule generator go here...
-    working_hours_start: int = Field(
-        ..., ge=0, le=24, description="The start of the working hours."
-    )
-    working_hours_end: int = Field(
-        ..., ge=0, le=24, description="The end of the working hours."
-    )
-
-    def generate_schedule(
-        self,
-        generator: np.random.Generator | int,
-        context: ScheduleContext,
-    ) -> StochasticLightingScheduleOutput:
-        """Generate a lighting schedule."""
-        generator = get_generator(generator)
-        raise NotImplementedError("LightingScheduleGenerator is not implemented")
-
-
-class StochasticWaterUseScheduleGenerator(ScheduleGenerator):
-    """Generator for the domestic hot water schedule."""
-
-    # TODO: Other parameters for the domestic hot water schedule generator go here...
-
-    def generate_schedule(
-        self,
-        generator: np.random.Generator | int,
-        context: ScheduleContext,
-    ) -> StochasticWaterUseScheduleOutput:
-        """Generate a domestic hot water schedule."""
-        generator = get_generator(generator)
-        equipment = context.safe_equipment
-        _laundry_cycles_per_week = equipment.laundry_cycles_per_week
-        _dishwasher_cycles_per_week = equipment.dishwasher_cycles_per_week
-        raise NotImplementedError(
-            "DomesticHotWaterScheduleGenerator is not implemented"
-        )
+OccupancyPatternName = Literal[
+    "mostly_home",
+    "long_day_away",
+    "morning_away",
+    "afternoon_away",
+    "evening_night_away",
+]
 
 
 class StochasticOccupancyScheduleGenerator(ScheduleGenerator):
     """Generator for the occupancy schedule."""
 
-    # TODO: Other parameters for the occupancy schedule generator go here...
-    home_hours_start: int = Field(
-        ..., ge=0, le=24, description="The start of the home hours."
+    weekday_occupancy_patterns: Sequence[OccupancyPatternName] = Field(
+        ...,
+        description="Per-occupant weekday occupancy patterns.",
     )
-    home_hours_end: int = Field(
-        ..., ge=0, le=24, description="The end of the home hours."
+    weekend_occupancy_patterns: Sequence[OccupancyPatternName] | None = Field(
+        None,
+        description="Per-occupant weekend occupancy patterns. If omitted, weekday patterns are reused.",
     )
-    people_min: int = Field(..., ge=0, description="The minimum number of people.")
-    people_max: int = Field(..., ge=0, description="The maximum number of people.")
+
+    @model_validator(mode="after")
+    def validate_patterns(self):
+        """Validate weekday/weekend occupancy pattern presence and lengths."""
+        if len(self.weekday_occupancy_patterns) == 0:
+            msg = "At least one weekday pattern is required"
+            raise ValueError(msg)
+
+        if self.weekend_occupancy_patterns is not None and len(
+            self.weekend_occupancy_patterns
+        ) != len(self.weekday_occupancy_patterns):
+            msg = (
+                f"weekend_occupancy_patterns must have the same length as "
+                f"weekday_occupancy_patterns, but got {len(self.weekend_occupancy_patterns)} and "
+                f"{len(self.weekday_occupancy_patterns)}, respectively."
+            )
+            raise ValueError(msg)
+        return self
+
+    @property
+    def num_occupants(self) -> int:
+        """Return the number of occupants represented by the weekday patterns."""
+        return len(self.weekday_occupancy_patterns)
+
+    @classmethod
+    def from_uniform_patterns(
+        cls,
+        weekday_pattern: OccupancyPatternName,
+        num_occupants: int,
+        weekend_pattern: OccupancyPatternName | None = None,
+    ) -> "StochasticOccupancyScheduleGenerator":
+        """Create a generator by repeating one pattern for each occupant."""
+        if num_occupants <= 0:
+            msg = f"num_occupants must be positive, but got {num_occupants}."
+            raise ValueError(msg)
+        return cls(
+            weekday_occupancy_patterns=(weekday_pattern,) * num_occupants,
+            weekend_occupancy_patterns=(
+                None if weekend_pattern is None else (weekend_pattern,) * num_occupants
+            ),
+        )
 
     def generate_schedule(
         self,
         generator: np.random.Generator | int,
         context: ScheduleContext,
+        config: ScheduleGenerationConfig,
     ) -> StochasticOccupancyScheduleOutput:
         """Generate an occupancy schedule."""
         generator = get_generator(generator)
-        raise NotImplementedError("OccupancyScheduleGenerator is not implemented")
+        occupancy = builders.build_occupancy(
+            mobility_clusters=[
+                MobilityCluster(pattern) for pattern in self.weekday_occupancy_patterns
+            ],
+            weekend_clusters=[
+                MobilityCluster(pattern) for pattern in self.weekend_occupancy_patterns
+            ]
+            if self.weekend_occupancy_patterns is not None
+            else None,
+        )
+        occupancy_res = OccupancyGenerator.generate_with_defaults(
+            occupancy,
+            config.resolution_minutes,
+            rng=generator,
+        )
+        context.occupancy = occupancy_res.occupancy_states
+        context.num_occupants = self.num_occupants
+        return StochasticOccupancyScheduleOutput(
+            peak_value=occupancy_res.peak_value,
+            normalized_timeseries=occupancy_res.schedule,
+        )
 
 
 class StochasticHeatingSetpointScheduleGenerator(ScheduleGenerator):
     """Generator for the heating setpoint schedule."""
 
-    # TODO: Other parameters for the heating setpoint schedule generator go here...
-    heating_setpoint_min: float = Field(
-        ..., ge=0, description="The minimum heating setpoint."
+    has_heating: bool = Field(..., description="Whether the building has heating.")
+    heating_setpoint_active: float = Field(
+        ..., ge=0, description="Heating setpoint while active."
     )
-    heating_setpoint_max: float = Field(
-        ..., ge=0, description="The maximum heating setpoint."
+    heating_setpoint_sleep: float | None = Field(
+        None, ge=0, description="Heating setpoint while asleep."
+    )
+    heating_setpoint_away: float | None = Field(
+        None, ge=0, description="Heating setpoint while away."
     )
 
     def generate_schedule(
         self,
         generator: np.random.Generator | int,
         context: ScheduleContext,
+        config: ScheduleGenerationConfig,
     ) -> StochasticHeatingSetpointScheduleOutput:
         """Generate a heating setpoint schedule."""
         generator = get_generator(generator)
-        raise NotImplementedError("HeatingSetpointScheduleGenerator is not implemented")
+        heating = builders.build_heating(
+            self.has_heating,
+            self.heating_setpoint_active,
+            self.heating_setpoint_sleep,
+            self.heating_setpoint_away,
+        )
+        heating_setpoint_res = HVACGenerator.generate_heating_with_defaults(
+            heating, context.safe_occupancy
+        )
+        if heating_setpoint_res is None:
+            msg = "Failed to generate heating setpoint schedule."
+            raise RuntimeError(msg)
+        return StochasticHeatingSetpointScheduleOutput(
+            timeseries=heating_setpoint_res.schedule
+        )
 
 
 class StochasticCoolingSetpointScheduleGenerator(ScheduleGenerator):
     """Generator for the cooling setpoint schedule."""
 
-    # TODO: Other parameters for the cooling setpoint schedule generator go here...
-    cooling_setpoint_min: float = Field(
-        ..., ge=0, description="The minimum cooling setpoint."
+    has_cooling: bool = Field(..., description="Whether the building has cooling.")
+    cooling_setpoint_active: float = Field(
+        ..., ge=0, description="Cooling setpoint while active."
     )
-    cooling_setpoint_max: float = Field(
-        ..., ge=0, description="The maximum cooling setpoint."
+    cooling_setpoint_sleep: float | None = Field(
+        None, ge=0, description="Cooling setpoint while asleep."
+    )
+    cooling_setpoint_away: float | None = Field(
+        None, ge=0, description="Cooling setpoint while away."
     )
 
     def generate_schedule(
         self,
         generator: np.random.Generator | int,
         context: ScheduleContext,
+        config: ScheduleGenerationConfig,
     ) -> StochasticCoolingSetpointScheduleOutput:
         """Generate a cooling setpoint schedule."""
         generator = get_generator(generator)
-        raise NotImplementedError("CoolingSetpointScheduleGenerator is not implemented")
+        cooling = builders.build_cooling(
+            self.has_cooling,
+            self.cooling_setpoint_active,
+            self.cooling_setpoint_sleep,
+            self.cooling_setpoint_away,
+        )
+        cooling_setpoint_res = HVACGenerator.generate_cooling_with_defaults(
+            cooling, context.safe_occupancy
+        )
+        if cooling_setpoint_res is None:
+            msg = "Failed to generate cooling setpoint schedule."
+            raise RuntimeError(msg)
+        return StochasticCoolingSetpointScheduleOutput(
+            timeseries=cooling_setpoint_res.schedule
+        )
+
+
+class StochasticLightingScheduleGenerator(ScheduleGenerator):
+    """Generator for the lighting schedule."""
+
+    if_led: bool = Field(
+        ...,
+        description="Whether the building uses LED lighting. This affects the peak value of the schedule.",
+    )
+    when_away: bool | None = Field(
+        None, description="Whether the lights are on when the building is unoccupied."
+    )
+    when_bright: bool | None = Field(
+        None, description="Whether the lights are on when it is bright outside."
+    )
+
+    def generate_schedule(
+        self,
+        generator: np.random.Generator | int,
+        context: ScheduleContext,
+        config: ScheduleGenerationConfig,
+    ) -> StochasticLightingScheduleOutput:
+        """Generate a lighting schedule."""
+        generator = get_generator(generator)
+        lighting = builders.build_lighting(
+            self.if_led,
+            self.when_away,
+            self.when_bright,
+        )
+        lighting_res = LightingGenerator.generate_with_defaults(
+            lighting, context.safe_occupancy, generator
+        )
+        return StochasticLightingScheduleOutput(
+            dimming_enabled=lighting_res.dimming_enabled,
+            peak_value=lighting_res.peak_value,
+            normalized_timeseries=lighting_res.schedule,
+        )
+
+
+class StochasticEquipmentScheduleGenerator(ScheduleGenerator):
+    """Generator for the dishwasher schedule."""
+
+    has_washer: bool = Field(
+        ..., description="Whether the building has a washing machine."
+    )
+    has_dryer: bool = Field(..., description="Whether the building has a dryer.")
+    has_cooking_provider: bool = Field(
+        ..., description="Whether the building has a cooking-related appliance."
+    )
+    has_dishwasher: bool = Field(
+        ..., description="Whether the building has a dishwasher."
+    )
+    num_refrigerators: int = Field(
+        ..., ge=0, description="The number of refrigerators in the building."
+    )
+    washer_efficient: bool | None = Field(
+        None, description="Whether the washing machine is energy efficient."
+    )
+    dryer_efficient: bool | None = Field(
+        None, description="Whether the dryer is energy efficient."
+    )
+    dishwasher_efficient: bool | None = Field(
+        None, description="Whether the dishwasher is energy efficient."
+    )
+    refrigerator_efficient: bool | None = Field(
+        None, description="Whether the refrigerators are energy efficient."
+    )
+    laundry_freq_per_week_min: int = Field(
+        ..., ge=0, description="Minimum number of laundry cycles per week."
+    )
+    laundry_freq_per_week_max: int = Field(
+        ..., ge=0, description="Maximum number of laundry cycles per week."
+    )
+    cooking_freq_per_week_min: int = Field(
+        ...,
+        ge=0,
+        description="Minimum number of cooking-related appliance cycles per week.",
+    )
+    cooking_freq_per_week_max: int = Field(
+        ...,
+        ge=0,
+        description="Maximum number of cooking-related appliance cycles per week.",
+    )
+    dishwasher_freq_per_week_min: int = Field(
+        ..., ge=0, description="Minimum number of dishwasher cycles per week."
+    )
+    dishwasher_freq_per_week_max: int = Field(
+        ..., ge=0, description="Maximum number of dishwasher cycles per week."
+    )
+
+    def generate_schedule(
+        self,
+        generator: np.random.Generator | int,
+        context: ScheduleContext,
+        config: ScheduleGenerationConfig,
+    ) -> StochasticEquipmentScheduleOutput:
+        """Generate a dishwasher schedule."""
+        generator = get_generator(generator)
+
+        eqp = builders.build_equipment(
+            self.has_washer,
+            self.has_dryer,
+            self.has_cooking_provider,
+            self.has_dishwasher,
+            self.num_refrigerators,
+            self.washer_efficient,
+            self.dryer_efficient,
+            self.dishwasher_efficient,
+            self.refrigerator_efficient,
+            (self.laundry_freq_per_week_min, self.laundry_freq_per_week_max),
+            (self.cooking_freq_per_week_min, self.cooking_freq_per_week_max),
+            (self.dishwasher_freq_per_week_min, self.dishwasher_freq_per_week_max),
+        )
+        eqp_res = EquipmentGenerator.generate_with_defaults(
+            eqp,
+            context.safe_occupancy,
+            int(context.safe_num_occupants),
+            resolution_mins=config.resolution_minutes,
+            rng=generator,
+        )
+        context.equipment = eqp
+        context.laundry_cycles = eqp_res.laundry_cycles
+        context.dishwasher_cycles = eqp_res.dishwasher_cycles
+        return StochasticEquipmentScheduleOutput(
+            peak_value=eqp_res.peak_value, normalized_timeseries=eqp_res.schedule
+        )
+
+
+class StochasticWaterUseScheduleGenerator(ScheduleGenerator):
+    """Generator for the domestic hot water schedule."""
+
+    def generate_schedule(
+        self,
+        generator: np.random.Generator | int,
+        context: ScheduleContext,
+        config: ScheduleGenerationConfig,
+    ) -> StochasticWaterUseScheduleOutput:
+        """Generate a domestic hot water schedule."""
+        generator = get_generator(generator)
+        dhw_res = DHWGenerator.generate_with_defaults(
+            int(context.safe_num_occupants),
+            context.safe_equipment,
+            context.safe_laundry_cycles,
+            context.safe_dishwasher_cycles,
+            config.resolution_minutes,
+        )
+        return StochasticWaterUseScheduleOutput(
+            peak_value=dhw_res.peak_value, normalized_timeseries=dhw_res.schedule
+        )
 
 
 class StochasticScheduleGenerator(BaseModel):
     """Generator for stochastic schedules."""
 
+    config: ScheduleGenerationConfig
     equipment: StochasticEquipmentScheduleGenerator
     lighting: StochasticLightingScheduleGenerator
     occupancy: StochasticOccupancyScheduleGenerator
@@ -321,59 +549,79 @@ class StochasticScheduleGenerator(BaseModel):
     heating_setpoint: StochasticHeatingSetpointScheduleGenerator
     cooling_setpoint: StochasticCoolingSetpointScheduleGenerator
 
-    def generate_schedules(self, generator: np.random.Generator | int):
+    def generate_schedules(
+        self, generator: np.random.Generator | int
+    ) -> ScheduleResults:
         """Generate all the schedules."""
         generator = get_generator(generator)
-        context = ScheduleContext(
-            equipment=None,
-            lighting=None,
-            occupancy=None,
-            water_use=None,
-            heating_setpoint=None,
-            cooling_setpoint=None,
+        context = ScheduleContext()
+        results = ScheduleResults()
+        results.occupancy = self.occupancy.generate_schedule(
+            generator, context, self.config
         )
-        context.equipment = self.equipment.generate_schedule(generator, context)
-        context.lighting = self.lighting.generate_schedule(generator, context)
-        context.occupancy = self.occupancy.generate_schedule(generator, context)
-        context.water_use = self.water_use.generate_schedule(generator, context)
-        context.heating_setpoint = self.heating_setpoint.generate_schedule(
-            generator, context
+        results.heating_setpoint = self.heating_setpoint.generate_schedule(
+            generator, context, self.config
         )
-        context.cooling_setpoint = self.cooling_setpoint.generate_schedule(
-            generator, context
+        results.cooling_setpoint = self.cooling_setpoint.generate_schedule(
+            generator, context, self.config
         )
-        return context
+        results.lighting = self.lighting.generate_schedule(
+            generator, context, self.config
+        )
+        results.equipment = self.equipment.generate_schedule(
+            generator, context, self.config
+        )
+        results.water_use = self.water_use.generate_schedule(
+            generator, context, self.config
+        )
+        return results
 
 
 if __name__ == "__main__":
     import yaml
 
     generator = StochasticScheduleGenerator(
+        config=ScheduleGenerationConfig(resolution_minutes=15),
         equipment=StochasticEquipmentScheduleGenerator(
-            dishwasher_frequency_min=1,
-            dishwasher_frequency_max=2,
-            laundry_frequency_min=1,
-            laundry_frequency_max=2,
+            has_washer=True,
+            has_dryer=True,
+            has_cooking_provider=True,
+            has_dishwasher=True,
+            num_refrigerators=1,
+            washer_efficient=True,
+            dryer_efficient=True,
+            dishwasher_efficient=True,
+            refrigerator_efficient=True,
+            laundry_freq_per_week_min=1,
+            laundry_freq_per_week_max=2,
+            cooking_freq_per_week_min=7,
+            cooking_freq_per_week_max=14,
+            dishwasher_freq_per_week_min=1,
+            dishwasher_freq_per_week_max=2,
         ),
         lighting=StochasticLightingScheduleGenerator(
-            working_hours_start=1,
-            working_hours_end=2,
+            if_led=True,
+            when_away=False,
+            when_bright=False,
         ),
-        occupancy=StochasticOccupancyScheduleGenerator(
-            home_hours_start=1,
-            home_hours_end=2,
-            people_min=1,
-            people_max=2,
+        occupancy=StochasticOccupancyScheduleGenerator.from_uniform_patterns(
+            weekday_pattern="mostly_home",
+            weekend_pattern="mostly_home",
+            num_occupants=2,
         ),
         water_use=StochasticWaterUseScheduleGenerator(),
         heating_setpoint=StochasticHeatingSetpointScheduleGenerator(
-            heating_setpoint_min=1,
-            heating_setpoint_max=2,
+            has_heating=True,
+            heating_setpoint_active=21,
+            heating_setpoint_sleep=18,
+            heating_setpoint_away=16,
         ),
         cooling_setpoint=StochasticCoolingSetpointScheduleGenerator(
-            cooling_setpoint_min=1,
-            cooling_setpoint_max=2,
+            has_cooling=True,
+            cooling_setpoint_active=24,
+            cooling_setpoint_sleep=26,
+            cooling_setpoint_away=28,
         ),
     )
-    schedules = generator.generate_schedules(12345)
+    schedules = generator.generate_schedules(42)
     print(yaml.dump(schedules.model_dump(mode="json"), indent=2, sort_keys=False))
