@@ -34,6 +34,9 @@ from epinterface.sbem.components.space_use import (
     ZoneSpaceUseComponent,
 )
 from epinterface.sbem.components.systems import (
+    AFNComponent,
+    AFNCrackComponent,
+    AFNDetailedOpeningComponent,
     ConditioningSystemsComponent,
     DCVMethod,
     DHWComponent,
@@ -911,6 +914,16 @@ class FlatModel(BaseModel):
 
     InfiltrationACH: float
 
+    UseAFN: bool = Field(
+        default=False,
+        title="Use AirflowNetwork multizone ventilation instead of infiltration + wind/stack",
+    )
+    AFNCrackFlowCoefficient: float = Field(
+        default=0.001,
+        title="AFN envelope crack flow coefficient [kg/s @ 1 Pa]",
+        gt=0.0,
+    )
+
     WindowUValue: float
     WindowSHGF: float
     WindowTVis: float
@@ -927,6 +940,35 @@ class FlatModel(BaseModel):
     Rotation: float
 
     EPWURI: WeatherUrl | Path
+
+    def _build_afn(self) -> AFNComponent | None:
+        """Build AFN definition from flat geometry and crack parameters."""
+        if not self.UseAFN:
+            return None
+
+        short_axis = min(self.Width, self.Depth)
+        long_axis = max(self.Width, self.Depth)
+        aspect = short_axis / long_axis if long_axis > 0 else 0.5
+
+        crack_name = "EnvelopeCrack"
+        opening_name = "WindowOpening"
+
+        return AFNComponent(
+            Name="FlatModelAFN",
+            BuildingAspectRatio=aspect,
+            BuildingLongAxisAzimuth=self.Rotation % 180,
+            Cracks={
+                crack_name: AFNCrackComponent(
+                    Name=crack_name,
+                    FlowCoefficient=self.AFNCrackFlowCoefficient,
+                ),
+            },
+            Openings={
+                opening_name: AFNDetailedOpeningComponent(Name=opening_name),
+            },
+            EnvelopeCrackKey=crack_name,
+            WindowOpeningKey=opening_name,
+        )
 
     def to_zone(self) -> ZoneComponent:
         """Convert the flat model to a full zone."""
@@ -1839,6 +1881,7 @@ class FlatModel(BaseModel):
             Name="HVAC",
             ConditioningSystems=conditioning_system,
             Ventilation=ventilation_system,
+            AFN=self._build_afn(),
         )
 
         dhw = DHWComponent(
@@ -1876,7 +1919,9 @@ class FlatModel(BaseModel):
             TemperatureCoefficient=0.0,
             WindVelocityCoefficient=0.0,
             WindVelocitySquaredCoefficient=0.0,
-            AFNAirMassFlowCoefficientCrack=0.0,
+            AFNAirMassFlowCoefficientCrack=self.AFNCrackFlowCoefficient
+            if self.UseAFN
+            else 0.0,
             FlowPerExteriorSurfaceArea=0.0,
         )
 

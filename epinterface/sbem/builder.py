@@ -32,6 +32,10 @@ from epinterface.analysis.overheating import (
     OverheatingAnalysisResults,
     overheating_results_postprocess,
 )
+from epinterface.analysis.overheating_storage import (
+    OverheatingStorageConfig,
+    save_overheating_results,
+)
 from epinterface.constants import assumed_constants, physical_constants
 from epinterface.data import EnergyPlusArtifactDir
 from epinterface.ddy_injector_bayes import DDYSizingSpec
@@ -909,6 +913,10 @@ class Model(BaseWeather, validate_assignment=True):
         # construct zone lists
         idf, added_zone_lists = self.add_zone_lists(idf)
 
+        afn = self.Zone.Operations.HVAC.AFN
+        if afn is not None:
+            idf = afn.add_to_idf(idf)
+
         # Handle main zones
         for zone in added_zone_lists.main_zone_list.Names:
             self.Zone.add_to_idf_zone(idf, zone)
@@ -1129,6 +1137,7 @@ class Model(BaseWeather, validate_assignment=True):
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
         eplus_parent_dir: Path | None = None,
         overheating_config: OverheatingAnalysisConfig | None = None,
+        overheating_storage_config: OverheatingStorageConfig | None = None,
     ) -> "ModelRunResults":
         """Build and simualte the idf model.
 
@@ -1137,6 +1146,7 @@ class Model(BaseWeather, validate_assignment=True):
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
             eplus_parent_dir (Path | None): The parent directory to store the eplus working directory.  If None, a temporary directory will be used.
             overheating_config (OverheatingAnalysisConfig | None): Configuration for overheating analysis. Skips if None.
+            overheating_storage_config (OverheatingStorageConfig | None): If set, saves overheating results to parquet under base_dir.
 
         Returns:
             ModelRunResults: The results of the model run.
@@ -1181,6 +1191,14 @@ class Model(BaseWeather, validate_assignment=True):
             )
 
             err_text = self.get_warnings(idf)
+
+            if (
+                overheating_results is not None
+                and overheating_storage_config is not None
+            ):
+                save_overheating_results(
+                    overheating_results, config=overheating_storage_config
+                )
 
             gc.collect()
             # if eplus_parent_dir is not None, we return the path to the output directory

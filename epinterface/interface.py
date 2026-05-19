@@ -771,6 +771,413 @@ class ZoneInfiltrationDesignFlowRate(BaseObj, extra="ignore"):
     )
 
 
+def _filter_idd_fields(
+    idf: IDF, object_type: str, fields: dict[str, Any]
+) -> dict[str, Any]:
+    """Keep only fields present on the IDF object for this EnergyPlus version."""
+    valid = set(idf.anidfobject(object_type).fieldnames)
+    return {k: v for k, v in fields.items() if k in valid}
+
+
+AFNControl = Literal[
+    "MultizoneWithDistribution",
+    "MultizoneWithoutDistribution",
+    "MultizoneWithDistributionOnlyDuringFanOperation",
+    "NoMultizoneOrDistribution",
+]
+WPCType = Literal["Input", "SurfaceAverageCalculation"]
+HeightSelection = Literal["ExternalNode", "OpeningHeight"]
+BuildingType = Literal["LowRise", "HighRise"]
+InitializationType = Literal["LinearInitializationMethod", "ZeroNodePressures"]
+HeightDependence = Literal["Yes", "No"]
+AllowUnsupportedZoneEquipment = Literal["Yes", "No"]
+
+
+class AirflowNetworkSimulationControl(BaseModel):
+    """AirflowNetwork:SimulationControl — unique top-level controller.
+
+    Sets the multizone simulation mode and the wind-pressure-coefficient source.
+    Only one of these may exist in the IDF.
+    """
+
+    Name: str = Field(default="AFN_Control", title="Name")
+    AirflowNetwork_Control: AFNControl = Field(
+        default="MultizoneWithoutDistribution",
+        title="AirflowNetwork Control",
+        description="Multizone-only mode: pressure network solved across zones; no ducts.",
+    )
+    Wind_Pressure_Coefficient_Type: WPCType = Field(
+        default="SurfaceAverageCalculation",
+        title="Wind Pressure Coefficient Type",
+        description=(
+            "SurfaceAverageCalculation: EnergyPlus computes Cp from Swami-Chandra "
+            "for low-rise rectangular buildings. Input: user-provided Cp arrays."
+        ),
+    )
+    Height_Selection_for_Local_Wind_Pressure_Calculation: HeightSelection = Field(
+        default="OpeningHeight",
+        title="Height Selection for Local Wind Pressure Calculation",
+    )
+    Building_Type: BuildingType = Field(default="LowRise", title="Building Type")
+    Maximum_Number_of_Iterations: int = Field(
+        default=500, title="Maximum Number of Iterations", ge=1, le=30000
+    )
+    Initialization_Type: InitializationType = Field(
+        default="ZeroNodePressures", title="Initialization Type"
+    )
+    Relative_Airflow_Convergence_Tolerance: float = Field(
+        default=1.0e-4, title="Relative Airflow Convergence Tolerance", gt=0
+    )
+    Absolute_Airflow_Convergence_Tolerance: float = Field(
+        default=1.0e-6, title="Absolute Airflow Convergence Tolerance", gt=0
+    )
+    Convergence_Acceleration_Limit: float = Field(
+        default=-0.5,
+        title="Convergence Acceleration Limit",
+        ge=-1.0,
+        le=1.0,
+    )
+    Azimuth_Angle_of_Long_Axis_of_Building: float = Field(
+        default=0.0,
+        title="Azimuth Angle of Long Axis of Building [deg]",
+        ge=0.0,
+        le=180.0,
+    )
+    Ratio_of_Building_Width_Along_Short_Axis_to_Width_Along_Long_Axis: float = Field(
+        default=0.5,
+        title="Ratio of Building Width Along Short Axis to Width Along Long Axis",
+        gt=0.0,
+        le=1.0,
+        description="For SurfaceAverageCalculation Cp model.",
+    )
+    Height_Dependence_of_External_Node_Temperature: HeightDependence = Field(
+        default="No",
+        title="Height Dependence of External Node Temperature",
+    )
+    Allow_Unsupported_Zone_Equipment: AllowUnsupportedZoneEquipment = Field(
+        default="No", title="Allow Unsupported Zone Equipment"
+    )
+
+    def add(self, idf):
+        """Add this object to the IDF. Returns the updated IDF."""
+        key = "AIRFLOWNETWORK:SIMULATIONCONTROL"
+        fields = _filter_idd_fields(
+            idf, key, {k: v for k, v in self.model_dump().items() if v is not None}
+        )
+        idf.newidfobject(key, **fields)
+        return idf
+
+
+VentilationControlMode = Literal[
+    "Temperature",
+    "Enthalpy",
+    "Constant",
+    "ASHRAE55Adaptive",
+    "CEN15251Adaptive",
+    "NoVent",
+    "ZoneLevel",  # surface-only; falls through to zone setting
+    "AdjacentTemperature",
+    "AdjacentEnthalpy",
+]
+
+EquivalentRectangleMethod = Literal[
+    "PolygonHeight", "BaseSurfaceAspectRatio", "UserDefinedAspectRatio"
+]
+
+
+class AirflowNetworkMultiZoneZone(BaseModel):
+    """AirflowNetwork:MultiZone:Zone — per-thermal-zone AFN declaration.
+
+    Use Ventilation_Control_Mode='Constant' to drive opening behavior entirely
+    from per-surface schedules (the operational input the surrogate consumes).
+    """
+
+    Zone_Name: str = Field(..., title="Zone Name")
+    Ventilation_Control_Mode: VentilationControlMode = Field(
+        default="Constant", title="Ventilation Control Mode"
+    )
+    Ventilation_Control_Zone_Temperature_Setpoint_Schedule_Name: str | None = Field(
+        default=None,
+        title="Ventilation Control Zone Temperature Setpoint Schedule Name",
+    )
+    Minimum_Venting_Open_Factor: float = Field(
+        default=0.0, title="Minimum Venting Open Factor", ge=0.0, le=1.0
+    )
+    Indoor_and_Outdoor_Temperature_Difference_Lower_Limit_For_Maximum_Venting_Open_Factor: float = Field(
+        default=0.0,
+        title="Indoor/Outdoor T Difference Lower Limit for Max Venting Open Factor [deltaC]",
+        ge=0.0,
+        le=100.0,
+    )
+    Indoor_and_Outdoor_Temperature_Difference_Upper_Limit_for_Minimum_Venting_Open_Factor: float = Field(
+        default=100.0,
+        title="Indoor/Outdoor T Difference Upper Limit for Min Venting Open Factor [deltaC]",
+        gt=0.0,
+        le=100.0,
+    )
+    Indoor_and_Outdoor_Enthalpy_Difference_Lower_Limit_For_Maximum_Venting_Open_Factor: float = Field(
+        default=0.0,
+        title="Indoor/Outdoor h Difference Lower Limit for Max Venting Open Factor [J/kg]",
+        ge=0.0,
+        le=300000.0,
+    )
+    Indoor_and_Outdoor_Enthalpy_Difference_Upper_Limit_for_Minimum_Venting_Open_Factor: float = Field(
+        default=300000.0,
+        title="Indoor/Outdoor h Difference Upper Limit for Min Venting Open Factor [J/kg]",
+        gt=0.0,
+        le=300000.0,
+    )
+    Venting_Availability_Schedule_Name: str | None = Field(
+        default=None, title="Venting Availability Schedule Name"
+    )
+    Single_Sided_Wind_Pressure_Coefficient_Algorithm: Literal[
+        "Standard", "Advanced"
+    ] = Field(
+        default="Standard", title="Single Sided Wind Pressure Coefficient Algorithm"
+    )
+    Facade_Width: float = Field(default=10.0, title="Facade Width [m]", ge=0.0)
+    Occupant_Ventilation_Control_Name: str | None = Field(
+        default=None, title="Occupant Ventilation Control Name"
+    )
+
+    def add(self, idf):
+        """Add this object to the IDF. Returns the updated IDF."""
+        key = "AIRFLOWNETWORK:MULTIZONE:ZONE"
+        fields = _filter_idd_fields(
+            idf, key, {k: v for k, v in self.model_dump().items() if v is not None}
+        )
+        idf.newidfobject(key, **fields)
+        return idf
+
+
+class AirflowNetworkMultiZoneSurface(BaseModel):
+    """AirflowNetwork:MultiZone:Surface — per-surface flow path.
+
+    One per AFN linkage: window, doorway, or envelope crack.
+    """
+
+    Surface_Name: str = Field(..., title="Surface Name")
+    Leakage_Component_Name: str = Field(..., title="Leakage Component Name")
+    External_Node_Name: str | None = Field(
+        default=None,
+        title="External Node Name",
+        description="Blank when WPC type is SurfaceAverageCalculation.",
+    )
+    Window_or_Door_Opening_Factor_or_Crack_Factor: float = Field(
+        default=1.0,
+        title="Window/Door Opening Factor, or Crack Factor",
+        ge=0.0,
+        le=1.0,
+    )
+    Ventilation_Control_Mode: VentilationControlMode = Field(
+        default="ZoneLevel",
+        title="Ventilation Control Mode (surface override)",
+    )
+    Ventilation_Control_Zone_Temperature_Setpoint_Schedule_Name: str | None = Field(
+        default=None,
+        title="Ventilation Control Zone Temperature Setpoint Schedule Name",
+    )
+    Minimum_Venting_Open_Factor: float = Field(
+        default=0.0, title="Minimum Venting Open Factor", ge=0.0, le=1.0
+    )
+    Indoor_and_Outdoor_Temperature_Difference_Lower_Limit_For_Maximum_Venting_Open_Factor: float = Field(
+        default=0.0,
+        title="Indoor/Outdoor T Diff Lower Limit for Max Venting [deltaC]",
+        ge=0.0,
+        le=100.0,
+    )
+    Indoor_and_Outdoor_Temperature_Difference_Upper_Limit_for_Minimum_Venting_Open_Factor: float = Field(
+        default=100.0,
+        title="Indoor/Outdoor T Diff Upper Limit for Min Venting [deltaC]",
+        gt=0.0,
+        le=100.0,
+    )
+    Indoor_and_Outdoor_Enthalpy_Difference_Lower_Limit_For_Maximum_Venting_Open_Factor: float = Field(
+        default=0.0,
+        title="Indoor/Outdoor h Diff Lower Limit for Max Venting [J/kg]",
+        ge=0.0,
+        le=300000.0,
+    )
+    Indoor_and_Outdoor_Enthalpy_Difference_Upper_Limit_for_Minimum_Venting_Open_Factor: float = Field(
+        default=300000.0,
+        title="Indoor/Outdoor h Diff Upper Limit for Min Venting [J/kg]",
+        gt=0.0,
+        le=300000.0,
+    )
+    Venting_Availability_Schedule_Name: str | None = Field(
+        default=None,
+        title="Venting Availability Schedule Name",
+        description="The per-opening time series — the operational input the surrogate consumes.",
+    )
+    Occupant_Ventilation_Control_Name: str | None = Field(
+        default=None, title="Occupant Ventilation Control Name"
+    )
+    Equivalent_Rectangle_Method: EquivalentRectangleMethod = Field(
+        default="PolygonHeight", title="Equivalent Rectangle Method"
+    )
+    Equivalent_Rectangle_Aspect_Ratio: float = Field(
+        default=1.0, title="Equivalent Rectangle Aspect Ratio", gt=0.0
+    )
+
+    def add(self, idf):
+        """Add this object to the IDF. Returns the updated IDF."""
+        key = "AIRFLOWNETWORK:MULTIZONE:SURFACE"
+        fields = _filter_idd_fields(
+            idf, key, {k: v for k, v in self.model_dump().items() if v is not None}
+        )
+        idf.newidfobject(key, **fields)
+        return idf
+
+
+class AirflowNetworkMultiZoneReferenceCrackConditions(BaseModel):
+    """AirflowNetwork:MultiZone:ReferenceCrackConditions.
+
+    Reference T/P/RH at which crack flow coefficients are defined; EnergyPlus
+    rescales the coefficient to the actual zone air conditions at runtime.
+    """
+
+    Name: str = Field(default="ReferenceCrackConditions", title="Name")
+    Reference_Temperature: float = Field(
+        default=20.0, title="Reference Temperature [degC]", ge=-273.15
+    )
+    Reference_Barometric_Pressure: float = Field(
+        default=101325.0,
+        title="Reference Barometric Pressure [Pa]",
+        ge=31000.0,
+        le=120000.0,
+    )
+    Reference_Humidity_Ratio: float = Field(
+        default=0.0, title="Reference Humidity Ratio [kgWater/kgDryAir]", ge=0.0
+    )
+
+    def add(self, idf):
+        """Add this object to the IDF. Returns the updated IDF."""
+        key = "AIRFLOWNETWORK:MULTIZONE:REFERENCECRACKCONDITIONS"
+        fields = _filter_idd_fields(idf, key, self.model_dump())
+        idf.newidfobject(key, **fields)
+        return idf
+
+
+class AirflowNetworkMultiZoneSurfaceCrack(BaseModel):
+    """AirflowNetwork:MultiZone:Surface:Crack — power-law leakage component.
+
+    m_dot = C * (dP)^n at reference conditions.
+    """
+
+    Name: str = Field(..., title="Name")
+    Air_Mass_Flow_Coefficient_at_Reference_Conditions: float = Field(
+        ...,
+        title="Air Mass Flow Coefficient at Reference Conditions [kg/s @ 1 Pa]",
+        gt=0.0,
+    )
+    Air_Mass_Flow_Exponent: float = Field(
+        default=0.65, title="Air Mass Flow Exponent", ge=0.5, le=1.0
+    )
+    Reference_Crack_Conditions: str | None = Field(
+        default=None,
+        title="Reference Crack Conditions",
+        description="Name of an AirflowNetwork:MultiZone:ReferenceCrackConditions object.",
+    )
+
+    def add(self, idf):
+        """Add this object to the IDF. Returns the updated IDF."""
+        key = "AIRFLOWNETWORK:MULTIZONE:SURFACE:CRACK"
+        fields = _filter_idd_fields(
+            idf, key, {k: v for k, v in self.model_dump().items() if v is not None}
+        )
+        idf.newidfobject(key, **fields)
+        return idf
+
+
+LVOType = Literal["NonPivoted", "HorizontallyPivoted"]
+
+
+class AirflowNetworkMultiZoneComponentDetailedOpening(BaseModel):
+    """AirflowNetwork:MultiZone:Component:DetailedOpening — operable openings.
+
+    Two opening factors (closed + fully open). The DetailedOpening object in
+    EnergyPlus supports up to 4 opening factors, but 2 is the simplest and
+    sufficient for v0.
+
+    The width/height factors at each opening factor define the effective open
+    area:  open_area = surface_area * width_factor * height_factor.
+    """
+
+    Name: str = Field(..., title="Name")
+    Air_Mass_Flow_Coefficient_When_Opening_is_Closed: float = Field(
+        default=0.001,
+        title="Air Mass Flow Coefficient When Opening is Closed [kg/s-m @ 1 Pa]",
+        gt=0.0,
+    )
+    Air_Mass_Flow_Exponent_When_Opening_is_Closed: float = Field(
+        default=0.65,
+        title="Air Mass Flow Exponent When Opening Is Closed",
+        ge=0.5,
+        le=1.0,
+    )
+    Type_of_Rectangular_Large_Vertical_Opening: LVOType = Field(
+        default="NonPivoted",
+        title="Type of Rectangular Large Vertical Opening (LVO)",
+    )
+    Extra_Crack_Length_or_Height_of_Pivoting_Axis: float = Field(
+        default=0.0,
+        title="Extra Crack Length or Height of Pivoting Axis [m]",
+        ge=0.0,
+    )
+    Number_of_Sets_of_Opening_Factor_Data: int = Field(
+        default=2, title="Number of Sets of Opening Factor Data", ge=2, le=4
+    )
+    Opening_Factor_1: float = Field(
+        default=0.0, title="Opening Factor 1", ge=0.0, le=1.0
+    )
+    Discharge_Coefficient_for_Opening_Factor_1: float = Field(
+        default=0.001,
+        title="Discharge Coefficient for Opening Factor 1",
+        gt=0.0,
+        le=1.0,
+    )
+    Width_Factor_for_Opening_Factor_1: float = Field(
+        default=0.0, title="Width Factor for Opening Factor 1", ge=0.0, le=1.0
+    )
+    Height_Factor_for_Opening_Factor_1: float = Field(
+        default=1.0, title="Height Factor for Opening Factor 1", ge=0.0, le=1.0
+    )
+    Start_Height_Factor_for_Opening_Factor_1: float = Field(
+        default=0.0, title="Start Height Factor for Opening Factor 1", ge=0.0, le=1.0
+    )
+    Opening_Factor_2: float = Field(
+        default=1.0, title="Opening Factor 2", ge=0.0, le=1.0
+    )
+    Discharge_Coefficient_for_Opening_Factor_2: float = Field(
+        default=0.6,
+        title="Discharge Coefficient for Opening Factor 2",
+        gt=0.0,
+        le=1.0,
+    )
+    Width_Factor_for_Opening_Factor_2: float = Field(
+        default=1.0, title="Width Factor for Opening Factor 2", ge=0.0, le=1.0
+    )
+    Height_Factor_for_Opening_Factor_2: float = Field(
+        default=0.5,
+        title="Height Factor for Opening Factor 2",
+        ge=0.0,
+        le=1.0,
+        description="Half the window height opens (typical double-hung).",
+    )
+    Start_Height_Factor_for_Opening_Factor_2: float = Field(
+        default=0.0, title="Start Height Factor for Opening Factor 2", ge=0.0, le=1.0
+    )
+
+    def add(self, idf):
+        """Add this object to the IDF. Returns the updated IDF."""
+        key = "AIRFLOWNETWORK:MULTIZONE:COMPONENT:DETAILEDOPENING"
+        fields = _filter_idd_fields(
+            idf, key, {k: v for k, v in self.model_dump().items() if v is not None}
+        )
+        idf.newidfobject(key, **fields)
+        return idf
+
+
 NumberOfPeopleCalculationMethodType = Literal["People", "People/Area", "Area/Person"]
 
 

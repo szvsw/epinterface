@@ -21,5 +21,9 @@ class ZoneComponent(NamedObject):
         idf = self.Operations.SpaceUse.add_loads_to_idf_zone(idf, zone_name)
         idf = self.Operations.add_water_use_to_idf_zone(idf, zone_name)
         idf = self.Operations.add_conditioning_to_idf_zone(idf, zone_name)
-        idf = self.Envelope.Infiltration.add_infiltration_to_idf_zone(idf, zone_name)
+        idf = self.Operations.add_afn_to_idf_zone(idf, zone_name)
+        if self.Operations.HVAC.AFN is None:
+            idf = self.Envelope.Infiltration.add_infiltration_to_idf_zone(
+                idf, zone_name
+            )
         return idf

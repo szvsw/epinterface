@@ -308,7 +308,7 @@ class ZoneOperationsComponent(
         )
         idf = hvac_template.add(idf)
 
-        if self.HVAC.Ventilation.Provider == "Natural":
+        if self.HVAC.Ventilation.Provider == "Natural" and self.HVAC.AFN is None:
             # total_window_area = calculate_window_area_for_zone(idf, target_zone_name)
             total_window_area = get_zone_glazed_area(idf, target_zone_name)
 
@@ -338,5 +338,55 @@ class ZoneOperationsComponent(
                 Opening_Area_Fraction_Schedule_Name=vent_wind_stack_name_sch,
             )
             idf = ventilation_wind_and_stack_open_area.add(idf)
+
+        return idf
+
+    def add_afn_to_idf_zone(self, idf: IDF, target_zone_name: str) -> IDF:
+        """Wire AFN zone declaration and surface linkages for one thermal zone."""
+        afn = self.HVAC.AFN
+        if afn is None:
+            return idf
+
+        idf, venting_schedule_name = self.HVAC.Ventilation.Schedule.add_year_to_idf(
+            idf,
+            name_prefix=f"{target_zone_name}_{self.HVAC.Ventilation.safe_name}",
+            summer_design_day_sch_name="d_AllOff_00",
+            winter_design_day_sch_name="d_AllOff_00",
+        )
+        idf = afn.add_zone_to_idf(idf, target_zone_name)
+
+        window_opening = afn.window_opening_name
+        if window_opening is not None:
+            for window in idf.idfobjects["FENESTRATIONSURFACE:DETAILED"]:
+                parent = idf.getobject(
+                    "BUILDINGSURFACE:DETAILED", window.Building_Surface_Name
+                )
+                if parent is None:
+                    continue
+                if (
+                    parent.Zone_Name == target_zone_name
+                    and window.Surface_Type.lower() == "window"
+                ):
+                    idf = afn.add_linkage_to_idf(
+                        idf,
+                        surface_name=window.Name,
+                        linkage_kind="window",
+                        component_name=window_opening,
+                        venting_schedule_name=venting_schedule_name,
+                    )
+
+        crack_name = afn.envelope_crack_name
+        if crack_name is not None:
+            for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
+                if srf.Zone_Name != target_zone_name:
+                    continue
+                if srf.Outside_Boundary_Condition.lower() != "outdoors":
+                    continue
+                idf = afn.add_linkage_to_idf(
+                    idf,
+                    surface_name=srf.Name,
+                    linkage_kind="crack",
+                    component_name=crack_name,
+                )
 
         return idf
