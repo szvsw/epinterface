@@ -56,6 +56,7 @@ from epinterface.sbem.components.systems import DHWFuelType, FuelType
 from epinterface.sbem.components.zones import ZoneComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
 from epinterface.sbem.prisma.client import PrismaSettings
+from epinterface.sbem.zone_assignment import ZoneAssignmentTable, parse_zone_key
 from epinterface.settings import energyplus_settings
 from epinterface.weather import BaseWeather
 
@@ -69,7 +70,19 @@ AvailableHourlyVariables = Literal[
     "Zone Mean Radiant Temperature",
 ]
 
+ZoneEnergyHourlyVariables = Literal[
+    "Zone Lights Electricity Energy",
+    "Zone Electric Equipment Electricity Energy",
+    "Zone Ideal Loads Zone Total Heating Energy",
+    "Zone Ideal Loads Zone Total Cooling Energy",
+]
+
 AVAILABLE_HOURLY_VARIABLES = get_args(AvailableHourlyVariables)
+ZONE_ENERGY_HOURLY_VARIABLES = get_args(ZoneEnergyHourlyVariables)
+ALL_HOURLY_OUTPUT_VARIABLES = (
+    *AVAILABLE_HOURLY_VARIABLES,
+    *ZONE_ENERGY_HOURLY_VARIABLES,
+)
 
 
 class SimulationPathConfig(BaseModel):
@@ -93,6 +106,7 @@ class SurfaceHandler(BaseModel):
     original_surface_type: str | None
     surface_group: Literal["glazing", "opaque", "internal_mass"]
     zone_name_contains: str | None
+    zone_name_equals: str | None = None
     outside_boundary_condition_object_contains: str | None
 
     @model_validator(mode="after")
@@ -143,7 +157,14 @@ class SurfaceHandler(BaseModel):
             )
 
         # Now we can find the matching idf objects that need a construction.
-        srfs = [srf for srf in idf.idfobjects[obj_type_key] if self.check_srf(srf)]
+        wall_zone_lookup = {
+            w.Name: w.Zone_Name for w in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+        }
+        srfs = [
+            srf
+            for srf in idf.idfobjects[obj_type_key]
+            if self.check_srf(srf, wall_zone_lookup)
+        ]
         idf = construction.add_to_idf(idf)
 
         # and then we can finally assign the construction to the surfaces.
@@ -151,11 +172,12 @@ class SurfaceHandler(BaseModel):
             srf.Construction_Name = construction.Name
         return idf
 
-    def check_srf(self, srf):
+    def check_srf(self, srf, wall_zone_lookup: dict[str, str]):
         """Check if the surface matches the filters.
 
         Args:
             srf (eppy.IDF.BLOCK): The surface to check.
+            wall_zone_lookup (dict[str, str]): Building surface Name -> Zone_Name.
 
         Returns:
             match (bool): True if the surface matches the filters.
@@ -164,7 +186,7 @@ class SurfaceHandler(BaseModel):
             self.check_construction_type(srf)
             and self.check_boundary(srf)
             and self.check_construction_name(srf)
-            and self.check_zone_name(srf)
+            and self.check_zone_name(srf, wall_zone_lookup)
             and self.check_outside_boundary_condition_object(srf)
         )
 
@@ -219,16 +241,19 @@ class SurfaceHandler(BaseModel):
         # Check the original construction name
         return srf.Construction_Name.lower() == self.original_construction_name.lower()
 
-    # TODO: convert this to a regex for better control
-    def check_zone_name(self, srf):
-        """Check that the zone name for the surface contains the expected substring."""
-        if self.zone_name_contains is None:
-            # Ignore the zone name check when filter not provided
-            return True
+    def check_zone_name(self, srf, wall_zone_lookup: dict[str, str]):
+        """Check that the zone name for the surface matches filters."""
         if self.surface_group == "glazing":
-            # Ignore the zone name check for windows
+            if self.zone_name_equals is None:
+                return True
+            wall_name = getattr(srf, "Building_Surface_Name", "")
+            zn = wall_zone_lookup.get(str(wall_name))
+            return zn == self.zone_name_equals
+        if self.zone_name_equals is not None:
+            zone_name = srf.Zone_Name
+            return zone_name == self.zone_name_equals
+        if self.zone_name_contains is None:
             return True
-        # Check the zone name
         zone_name = srf.Zone_Name
         return self.zone_name_contains.lower() in zone_name.lower()
 
@@ -530,6 +555,135 @@ class SurfaceHandlers(BaseModel):
             )
         return idf
 
+    def assign_facade_and_glazing_for_zone(
+        self,
+        idf: IDF,
+        facade_assembly: ConstructionAssemblyComponent,
+        window: GlazingConstructionSimpleComponent | None,
+        zone_name: str,
+    ) -> IDF:
+        """Facade plus fenestration for one thermal zone."""
+        facade_handler = self.Facade.model_copy(
+            update={"zone_name_equals": zone_name, "zone_name_contains": None}
+        )
+        idf = facade_handler.assign_constructions_to_objs(
+            idf=idf, construction=facade_assembly
+        )
+        if window:
+            window_handler = self.Window.model_copy(
+                update={"zone_name_equals": zone_name, "zone_name_contains": None}
+            )
+            idf = window_handler.assign_constructions_to_objs(
+                idf=idf, construction=window
+            )
+        return idf
+
+    def handle_shared_opaque_envelope(
+        self,
+        idf: IDF,
+        constructions: EnvelopeAssemblyComponent,
+        with_attic: bool,
+        with_basement: bool,
+        exposed_basement_frac: float = 0,
+    ) -> IDF:
+        """roof/partition/slab/partitions/ground/internal mass — excludes facade/windows."""
+        floor_ceiling_reversed = constructions.FloorCeilingAssembly.reversed
+        attic_floor_reversed = constructions.AtticFloorAssembly.reversed
+        basement_ceiling_reversed = constructions.BasementCeilingAssembly.reversed
+
+        outdoor_roof_bc = (
+            constructions.AtticRoofAssembly
+            if with_attic
+            else constructions.FlatRoofAssembly
+        )
+        idf = self.RoofOutdoorBC.assign_constructions_to_objs(
+            idf=idf, construction=outdoor_roof_bc
+        )
+
+        idf = self.Partition.assign_constructions_to_objs(
+            idf=idf, construction=constructions.PartitionAssembly
+        )
+        idf = self.FloorCeilingFloor.assign_constructions_to_objs(
+            idf=idf, construction=floor_ceiling_reversed
+        )
+        idf = self.FloorCeilingCeiling.assign_constructions_to_objs(
+            idf=idf, construction=constructions.FloorCeilingAssembly
+        )
+        if with_basement:
+            idf = self.BasementCeilingCeiling.assign_constructions_to_objs(
+                idf=idf, construction=constructions.BasementCeilingAssembly
+            )
+            idf = self.BasementCeilingFloor.assign_constructions_to_objs(
+                idf=idf, construction=basement_ceiling_reversed
+            )
+        if with_attic:
+            idf = self.AtticFloorFloor.assign_constructions_to_objs(
+                idf=idf, construction=constructions.AtticFloorAssembly
+            )
+            idf = self.AtticFloorCeiling.assign_constructions_to_objs(
+                idf=idf, construction=attic_floor_reversed
+            )
+
+        idf = self.GroundSlab.assign_constructions_to_objs(
+            idf=idf, construction=constructions.GroundSlabAssembly
+        )
+        idf = self.GroundWall.assign_constructions_to_objs(
+            idf=idf, construction=constructions.GroundWallAssembly
+        )
+
+        if with_basement and exposed_basement_frac > 0:
+            basement_wall_surfaces = [
+                srf
+                for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+                if srf.Outside_Boundary_Condition == "ground"
+                and srf.Surface_Type == "wall"
+            ]
+            for srf in basement_wall_surfaces:
+                coords = srf.coords
+                z_coords = [c[2] for c in coords]
+                min_z = min(z_coords)
+                max_z = max(z_coords)
+                h = max_z - min_z
+                unexposed_height = h * (1 - exposed_basement_frac)
+                unexposed_height = min(max(unexposed_height, 0.15), h - 0.15)
+                cut_z = min_z + unexposed_height
+                z_coords_lower_section = [z if z == min_z else cut_z for z in z_coords]
+                z_coords_upper_section = [z if z == max_z else cut_z for z in z_coords]
+                coords_lower_section = [
+                    (c[0], c[1], z)
+                    for c, z in zip(coords, z_coords_lower_section, strict=False)
+                ]
+                coords_upper_section = [
+                    (c[0], c[1], z)
+                    for c, z in zip(coords, z_coords_upper_section, strict=False)
+                ]
+                new_bottom_srf = idf.copyidfobject(srf)
+                new_top_srf = idf.copyidfobject(srf)
+                new_bottom_srf.setcoords(coords_lower_section)
+                new_top_srf.setcoords(coords_upper_section)
+                new_bottom_srf.Name = f"{srf.Name}_bottom"
+                new_top_srf.Name = f"{srf.Name}_top"
+                new_top_srf.Outside_Boundary_Condition = "outdoors"
+                idf.removeidfobject(srf)
+
+        if constructions.InternalMassAssembly is not None:
+            for zone in idf.idfobjects["ZONE"]:
+                floor_area = get_zone_floor_area(idf, zone.Name) * (
+                    constructions.InternalMassExposedAreaPerArea or 0
+                )
+                internal_mass = InternalMass(
+                    Name=f"{zone.Name}_InternalMass",
+                    Zone_or_ZoneList_Name=zone.Name,
+                    Construction_Name=constructions.InternalMassAssembly.Name,
+                    Surface_Area=floor_area,
+                )
+                idf = internal_mass.add(idf)
+
+            idf = self.InternalMass.assign_constructions_to_objs(
+                idf=idf, construction=constructions.InternalMassAssembly
+            )
+        return idf
+
 
 @dataclass
 class AddedZoneLists:
@@ -567,7 +721,18 @@ class Model(BaseWeather, validate_assignment=True):
     Attic: AtticAssumptions
     Basement: BasementAssumptions
     # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
-    Zone: ZoneComponent
+    Zone: ZoneComponent | None = Field(default=None)
+    zone_assignments: ZoneAssignmentTable | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_zone_vs_assignments(self):
+        """Exactly one of Zone or zone_assignments must be provided."""
+        z = self.Zone is not None
+        a = self.zone_assignments is not None
+        if z == a:
+            msg = "Exactly one of Zone or zone_assignments must be set on Model."
+            raise ValueError(msg)
+        return self
 
     @field_validator("geometry", mode="after")
     @classmethod
@@ -602,25 +767,20 @@ class Model(BaseWeather, validate_assignment=True):
 
     @property
     def total_people(self) -> float:
-        """The total number of people in the model.
-
-        Returns:
-            ppl (float): The total number of people in the model
-
-        """
-        raise NotImplementedError(
-            "Total people is not yet implemented because of attics/basements etc."
-        )
+        """Approximate occupant count from density times conditioned floor area."""
+        area = self.total_conditioned_area
+        if self.zone_assignments is not None:
+            dens = self.zone_assignments.defaults.OccupantDensity
+            return float(dens * area)
+        if self.Zone is None:
+            msg = "Model has no Zone or zone_assignments for occupant count."
+            raise ValueError(msg)
         ppl_per_m2 = (
             self.Zone.Operations.SpaceUse.Occupancy.PeopleDensity
             if self.Zone.Operations.SpaceUse.Occupancy.IsOn
             else 0
         )
-        total_area = self.total_conditioned_area  # this is wrong - it should be based off of occupied area which may be different depending on attic/basement use fractions.
-        total_ppl = ppl_per_m2 * total_area
-        return total_ppl
-
-        # validate the attic conditioning
+        return float(ppl_per_m2 * area)
 
     @model_validator(mode="after")
     def attic_check(self):
@@ -766,14 +926,22 @@ class Model(BaseWeather, validate_assignment=True):
             energy (float): The annual domestic hot water energy demand (kWh/m2)
         """
         # TODO: this should be computed from the DHW schedule
-        if not self.Zone.Operations.DHW.IsOn:
+        if self.zone_assignments is not None:
+            from epinterface.sbem.flat_model import zone_params_to_zone_component
+
+            ops = zone_params_to_zone_component(
+                self.zone_assignments.defaults
+            ).Operations
+        else:
+            if self.Zone is None:
+                msg = "Model has no Zone for DHW computation."
+                raise ValueError(msg)
+            ops = self.Zone.Operations
+        if not ops.DHW.IsOn:
             return 0
-        flow_rate_per_person = (
-            self.Zone.Operations.SpaceUse.WaterUse.FlowRatePerPerson
-        )  # m3/day/person, average
+        flow_rate_per_person = ops.SpaceUse.WaterUse.FlowRatePerPerson
         temperature_rise = (
-            self.Zone.Operations.DHW.WaterSupplyTemperature
-            - self.Zone.Operations.DHW.WaterTemperatureInlet
+            ops.DHW.WaterSupplyTemperature - ops.DHW.WaterTemperatureInlet
         )  # K
         water_density = physical_constants.WaterDensity_kg_per_m3  # kg/m3
         c = physical_constants.WaterSpecificHeat_J_per_kg_degK  # J/kg.K
@@ -867,7 +1035,7 @@ class Model(BaseWeather, validate_assignment=True):
                     "Variable_Name": variable,
                     "Reporting_Frequency": "Hourly",
                 }
-                for variable in AVAILABLE_HOURLY_VARIABLES
+                for variable in ALL_HOURLY_OUTPUT_VARIABLES
             ]
         )
         idf = IDF(
@@ -885,7 +1053,7 @@ class Model(BaseWeather, validate_assignment=True):
             if output.Key_Name not in desired_meters:
                 idf.removeidfobject(output)
         for output in idf.idfobjects["OUTPUT:VARIABLE"]:
-            if output.Variable_Name not in AVAILABLE_HOURLY_VARIABLES:
+            if output.Variable_Name not in ALL_HOURLY_OUTPUT_VARIABLES:
                 idf.removeidfobject(output)
 
         ddy = IDF(
@@ -909,107 +1077,236 @@ class Model(BaseWeather, validate_assignment=True):
         # construct zone lists
         idf, added_zone_lists = self.add_zone_lists(idf)
 
-        # Handle main zones
-        for zone in added_zone_lists.main_zone_list.Names:
-            self.Zone.add_to_idf_zone(idf, zone)
+        def zone_tag(zn: str) -> str:
+            return "".join(c if c.isalnum() else "_" for c in zn)
 
-        # Handle setting ground temperature
-        subtractor = (
-            4 if (self.geometry.basement and not self.Basement.Conditioned) else 2
-        )
-        has_heating = self.Zone.Operations.HVAC.ConditioningSystems.Heating is not None
-        has_cooling = self.Zone.Operations.HVAC.ConditioningSystems.Cooling is not None
-        hsp = self.Zone.Operations.SpaceUse.Thermostat.HeatingSchedule
-        csp = self.Zone.Operations.SpaceUse.Thermostat.CoolingSchedule
-        epw = EPW(epw_path.as_posix())
-        epw_ground_vals_all = epw.monthly_ground_temperature
-        if self.geometry.basement:
-            # if there is a basement, we use the 2m depth to account for the basement depth.
-            epw_ground_vals = epw_ground_vals_all[4].values
-        else:
-            # if there is no basement, we use the 0.5m depth to account for the ground temperature.
-            epw_ground_vals = epw_ground_vals_all[0.5].values
-        low_ground_val = min(epw_ground_vals)
-        high_ground_val = max(epw_ground_vals)
-        phase = (np.array(epw_ground_vals) - low_ground_val) / (
-            high_ground_val - low_ground_val
-        )
-        if has_heating and has_cooling:
-            winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
-            summer_line = np.array(csp.MonthlyAverageValues) - subtractor
-        elif has_heating:
-            winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
-            summer_line = np.array(hsp.MonthlyAverageValues)
-        elif has_cooling:
-            winter_line = np.array(csp.MonthlyAverageValues) - subtractor
-            summer_line = np.array(csp.MonthlyAverageValues) - subtractor
-        else:
-            # No heating or cooling, so we use the default ground temperature, should not matter much.
-            winter_line = np.array(assumed_constants.SiteGroundTemperature_degC)
-            summer_line = np.array(assumed_constants.SiteGroundTemperature_degC)
-        interp_temp = phase * np.abs(summer_line - winter_line) + winter_line
-        ground_vals = [max(epw_ground_vals[i], interp_temp[i]) for i in range(12)]
-        idf = SiteGroundTemperature.FromValues(ground_vals).add(idf)
+        if self.zone_assignments is not None:
+            from epinterface.sbem.flat_model import zone_params_to_zone_component
 
-        # handle basements
-        if self.Basement.UseFraction or self.Basement.Conditioned:
-            new_zone_def = self.Zone.model_copy(deep=True)
-            frac = self.Basement.UseFraction or 0
-            pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
-            epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
-            lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+            tbl = self.zone_assignments
 
-            new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
-            new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
-            new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
-
-            # # handle infiltration for basements, which we are assuming is 0 (or whatever is in assumed constants)
-            new_zone_def.Envelope.Infiltration = (
-                new_zone_def.Envelope.BasementInfiltration
-            )
-
-            if not self.Basement.Conditioned:
-                new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
-                new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
-                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
-            else:
-                # TODO: make this configurable!!!!
-                print(
-                    "WARNING: Basement conditioned, but Cooling disabled due to MASSACHUSETTS ASSUMPTIONS"
+            def apply_zone(zone_name: str) -> None:
+                key = parse_zone_key(zone_name, self.geometry)
+                params = tbl.resolve(
+                    key,
+                    attic_use_fraction=self.Attic.UseFraction,
+                    attic_conditioned=self.Attic.Conditioned,
+                    basement_use_fraction=self.Basement.UseFraction,
+                    basement_conditioned=self.Basement.Conditioned,
+                    geometry=self.geometry,
                 )
-                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+                zc = zone_params_to_zone_component(params, id_tag=zone_tag(zone_name))
+                zc.add_to_idf_zone(idf, zone_name)
 
-            for zone in added_zone_lists.basement_zone_list.Names:
-                new_zone_def.add_to_idf_zone(idf, zone)
+            for zone in added_zone_lists.main_zone_list.Names:
+                apply_zone(zone)
 
-        if self.Attic.UseFraction or self.Attic.Conditioned:
-            new_zone_def = self.Zone.model_copy(deep=True)
-            frac = self.Attic.UseFraction or 0
-            pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
-            epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
-            lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+            if self.Basement.UseFraction or self.Basement.Conditioned:
+                if self.Basement.Conditioned:
+                    print(
+                        "WARNING: Basement conditioned, but Cooling disabled due to MASSACHUSETTS ASSUMPTIONS"
+                    )
+                for zone in added_zone_lists.basement_zone_list.Names:
+                    apply_zone(zone)
 
-            new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
-            new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
-            new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
+            if self.Attic.UseFraction or self.Attic.Conditioned:
+                for zone in added_zone_lists.attic_zone_list.Names:
+                    apply_zone(zone)
 
-            # handle infiltration for roofs
-            # because the *regular* infiltration object is the one that gets added, we simply copy
-            # the desired attic infiltration into the relevant section.
-            new_zone_def.Envelope.Infiltration = new_zone_def.Envelope.AtticInfiltration
+            subtractor = (
+                4 if (self.geometry.basement and not self.Basement.Conditioned) else 2
+            )
+            hsp_acc = np.zeros(12)
+            csp_acc = np.zeros(12)
+            wsum = 0.0
+            has_heating = False
+            has_cooling = False
+            for zone_name in added_zone_lists.main_zone_list.Names:
+                area = get_zone_floor_area(idf, zone_name)
+                key = parse_zone_key(zone_name, self.geometry)
+                params = tbl.resolve(
+                    key,
+                    attic_use_fraction=self.Attic.UseFraction,
+                    attic_conditioned=self.Attic.Conditioned,
+                    basement_use_fraction=self.Basement.UseFraction,
+                    basement_conditioned=self.Basement.Conditioned,
+                    geometry=self.geometry,
+                )
+                zc = zone_params_to_zone_component(params, id_tag=zone_tag(zone_name))
+                hs = zc.Operations.SpaceUse.Thermostat.HeatingSchedule.MonthlyAverageValues
+                cs = zc.Operations.SpaceUse.Thermostat.CoolingSchedule.MonthlyAverageValues
+                hsp_acc += np.asarray(hs, dtype=float) * area
+                csp_acc += np.asarray(cs, dtype=float) * area
+                wsum += area
+                cond = zc.Operations.HVAC.ConditioningSystems
+                has_heating = has_heating or (cond.Heating is not None)
+                has_cooling = has_cooling or (cond.Cooling is not None)
+            if wsum <= 0:
+                msg = "cannot compute ground temperatures without main zone floor area"
+                raise ValueError(msg)
+            hsp_line = hsp_acc / wsum
+            csp_line = csp_acc / wsum
 
-            if not self.Attic.Conditioned:
-                new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
-                new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
-                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+            epw = EPW(epw_path.as_posix())
+            epw_ground_vals_all = epw.monthly_ground_temperature
+            if self.geometry.basement:
+                epw_ground_vals = epw_ground_vals_all[4].values
+            else:
+                epw_ground_vals = epw_ground_vals_all[0.5].values
+            low_ground_val = min(epw_ground_vals)
+            high_ground_val = max(epw_ground_vals)
+            phase = (np.array(epw_ground_vals) - low_ground_val) / (
+                high_ground_val - low_ground_val
+            )
+            if has_heating and has_cooling:
+                winter_line = np.asarray(hsp_line) - subtractor
+                summer_line = np.asarray(csp_line) - subtractor
+            elif has_heating:
+                winter_line = np.asarray(hsp_line) - subtractor
+                summer_line = np.asarray(hsp_line)
+            elif has_cooling:
+                winter_line = np.asarray(csp_line) - subtractor
+                summer_line = np.asarray(csp_line) - subtractor
+            else:
+                winter_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+                summer_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+            interp_temp = phase * np.abs(summer_line - winter_line) + winter_line
+            ground_vals = [max(epw_ground_vals[i], interp_temp[i]) for i in range(12)]
+            idf = SiteGroundTemperature.FromValues(ground_vals).add(idf)
 
-            # TODO: handle mutating infiltration object when "ventilated attics" are set
-            for zone in added_zone_lists.attic_zone_list.Names:
-                new_zone_def.add_to_idf_zone(idf, zone)
+            ref_zone = zone_params_to_zone_component(tbl.defaults)
+            handlers = SurfaceHandlers.Default(
+                basement_suffix=self.geometry.basement_suffix
+                if self.geometry.basement
+                else "NO-OP"
+            )
+            idf = handlers.handle_shared_opaque_envelope(
+                idf,
+                ref_zone.Envelope.Assemblies,
+                with_attic=(self.geometry.roof_height or 0) > 0,
+                with_basement=self.geometry.basement,
+                exposed_basement_frac=self.geometry.exposed_basement_frac,
+            )
+            for zone_name in added_zone_lists.conditioned_zone_list.Names:
+                key = parse_zone_key(zone_name, self.geometry)
+                params = tbl.resolve(
+                    key,
+                    attic_use_fraction=self.Attic.UseFraction,
+                    attic_conditioned=self.Attic.Conditioned,
+                    basement_use_fraction=self.Basement.UseFraction,
+                    basement_conditioned=self.Basement.Conditioned,
+                    geometry=self.geometry,
+                )
+                zc = zone_params_to_zone_component(params, id_tag=zone_tag(zone_name))
+                idf = handlers.assign_facade_and_glazing_for_zone(
+                    idf,
+                    zc.Envelope.Assemblies.FacadeAssembly,
+                    zc.Envelope.Window,
+                    zone_name,
+                )
 
-        idf = self.add_constructions(
-            idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
-        )
+        else:
+            if self.Zone is None:
+                msg = "Model has no Zone for legacy build path."
+                raise ValueError(msg)
+            # Handle main zones
+            for zone in added_zone_lists.main_zone_list.Names:
+                self.Zone.add_to_idf_zone(idf, zone)
+
+            # Handle setting ground temperature
+            subtractor = (
+                4 if (self.geometry.basement and not self.Basement.Conditioned) else 2
+            )
+            has_heating = (
+                self.Zone.Operations.HVAC.ConditioningSystems.Heating is not None
+            )
+            has_cooling = (
+                self.Zone.Operations.HVAC.ConditioningSystems.Cooling is not None
+            )
+            hsp = self.Zone.Operations.SpaceUse.Thermostat.HeatingSchedule
+            csp = self.Zone.Operations.SpaceUse.Thermostat.CoolingSchedule
+            epw = EPW(epw_path.as_posix())
+            epw_ground_vals_all = epw.monthly_ground_temperature
+            if self.geometry.basement:
+                epw_ground_vals = epw_ground_vals_all[4].values
+            else:
+                epw_ground_vals = epw_ground_vals_all[0.5].values
+            low_ground_val = min(epw_ground_vals)
+            high_ground_val = max(epw_ground_vals)
+            phase = (np.array(epw_ground_vals) - low_ground_val) / (
+                high_ground_val - low_ground_val
+            )
+            if has_heating and has_cooling:
+                winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
+                summer_line = np.array(csp.MonthlyAverageValues) - subtractor
+            elif has_heating:
+                winter_line = np.array(hsp.MonthlyAverageValues) - subtractor
+                summer_line = np.array(hsp.MonthlyAverageValues)
+            elif has_cooling:
+                winter_line = np.array(csp.MonthlyAverageValues) - subtractor
+                summer_line = np.array(csp.MonthlyAverageValues) - subtractor
+            else:
+                winter_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+                summer_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+            interp_temp = phase * np.abs(summer_line - winter_line) + winter_line
+            ground_vals = [max(epw_ground_vals[i], interp_temp[i]) for i in range(12)]
+            idf = SiteGroundTemperature.FromValues(ground_vals).add(idf)
+
+            # handle basements
+            if self.Basement.UseFraction or self.Basement.Conditioned:
+                new_zone_def = self.Zone.model_copy(deep=True)
+                frac = self.Basement.UseFraction or 0
+                pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
+                epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
+                lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+
+                new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
+                new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
+                new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
+
+                new_zone_def.Envelope.Infiltration = (
+                    new_zone_def.Envelope.BasementInfiltration
+                )
+
+                if not self.Basement.Conditioned:
+                    new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
+                    new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                    new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+                else:
+                    print(
+                        "WARNING: Basement conditioned, but Cooling disabled due to MASSACHUSETTS ASSUMPTIONS"
+                    )
+                    new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+
+                for zone in added_zone_lists.basement_zone_list.Names:
+                    new_zone_def.add_to_idf_zone(idf, zone)
+
+            if self.Attic.UseFraction or self.Attic.Conditioned:
+                new_zone_def = self.Zone.model_copy(deep=True)
+                frac = self.Attic.UseFraction or 0
+                pd = new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity
+                epd = new_zone_def.Operations.SpaceUse.Equipment.PowerDensity
+                lpd = new_zone_def.Operations.SpaceUse.Lighting.PowerDensity
+
+                new_zone_def.Operations.SpaceUse.Equipment.PowerDensity = frac * epd
+                new_zone_def.Operations.SpaceUse.Lighting.PowerDensity = frac * lpd
+                new_zone_def.Operations.SpaceUse.Occupancy.PeopleDensity = frac * pd
+
+                new_zone_def.Envelope.Infiltration = (
+                    new_zone_def.Envelope.AtticInfiltration
+                )
+
+                if not self.Attic.Conditioned:
+                    new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
+                    new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
+                    new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+
+                for zone in added_zone_lists.attic_zone_list.Names:
+                    new_zone_def.add_to_idf_zone(idf, zone)
+
+            idf = self.add_constructions(
+                idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
+            )
 
         # > operations
         # ----> space use
@@ -1082,7 +1379,7 @@ class Model(BaseWeather, validate_assignment=True):
         return err_text
 
     def standard_results_postprocess(
-        self, sql: Sql, ep_version_major: int
+        self, sql: Sql, ep_version_major: int, idf: IDF | None = None
     ) -> pd.Series:
         """Postprocess the sql file to get the standard results.
 
@@ -1093,22 +1390,90 @@ class Model(BaseWeather, validate_assignment=True):
         Args:
             sql (Sql): The sql file to postprocess.
             ep_version_major (int): The major version of EnergyPlus.
+            idf (IDF | None): Built model (required for area-weighted COP when using zone_assignments).
 
         Returns:
             series (pd.Series): The postprocessed results.
         """
-        ops = self.Zone.Operations
-        cond_sys = ops.HVAC.ConditioningSystems
-        heat_cop = (
-            cond_sys.Heating.effective_system_cop if cond_sys.Heating is not None else 1
-        )
-        cool_cop = (
-            cond_sys.Cooling.effective_system_cop if cond_sys.Cooling is not None else 1
-        )
-        dhw_cop = ops.DHW.effective_system_cop
-        heat_fuel = cond_sys.Heating.Fuel if cond_sys.Heating is not None else None
-        cool_fuel = cond_sys.Cooling.Fuel if cond_sys.Cooling is not None else None
-        dhw_fuel = ops.DHW.FuelType
+        if self.zone_assignments is None:
+            if self.Zone is None:
+                msg = "Model has no Zone for results postprocess."
+                raise ValueError(msg)
+            ops = self.Zone.Operations
+            cond_sys = ops.HVAC.ConditioningSystems
+            heat_cop = (
+                cond_sys.Heating.effective_system_cop
+                if cond_sys.Heating is not None
+                else 1
+            )
+            cool_cop = (
+                cond_sys.Cooling.effective_system_cop
+                if cond_sys.Cooling is not None
+                else 1
+            )
+            dhw_cop = ops.DHW.effective_system_cop
+            heat_fuel = cond_sys.Heating.Fuel if cond_sys.Heating is not None else None
+            cool_fuel = cond_sys.Cooling.Fuel if cond_sys.Cooling is not None else None
+            dhw_fuel = ops.DHW.FuelType
+        else:
+            from epinterface.sbem.flat_model import zone_params_to_zone_component
+
+            tbl = self.zone_assignments
+            ref_ops = zone_params_to_zone_component(tbl.defaults).Operations
+            cond_ref = ref_ops.HVAC.ConditioningSystems
+            heat_fuel = cond_ref.Heating.Fuel if cond_ref.Heating is not None else None
+            cool_fuel = cond_ref.Cooling.Fuel if cond_ref.Cooling is not None else None
+            dhw_fuel = ref_ops.DHW.FuelType
+            if idf is None:
+                heat_cop = (
+                    cond_ref.Heating.effective_system_cop
+                    if cond_ref.Heating is not None
+                    else 1
+                )
+                cool_cop = (
+                    cond_ref.Cooling.effective_system_cop
+                    if cond_ref.Cooling is not None
+                    else 1
+                )
+                dhw_cop = ref_ops.DHW.effective_system_cop
+            else:
+                heat_num = 0.0
+                cool_num = 0.0
+                dhw_num = 0.0
+                den = 0.0
+                for z in idf.idfobjects["ZONE"]:
+                    area = float(get_zone_floor_area(idf, z.Name))
+                    key = parse_zone_key(z.Name, self.geometry)
+                    params = tbl.resolve(
+                        key,
+                        attic_use_fraction=self.Attic.UseFraction,
+                        attic_conditioned=self.Attic.Conditioned,
+                        basement_use_fraction=self.Basement.UseFraction,
+                        basement_conditioned=self.Basement.Conditioned,
+                        geometry=self.geometry,
+                    )
+                    tag = "".join(c if c.isalnum() else "_" for c in z.Name)
+                    zc = zone_params_to_zone_component(params, id_tag=tag)
+                    cond = zc.Operations.HVAC.ConditioningSystems
+                    hf = (
+                        cond.Heating.effective_system_cop
+                        if cond.Heating is not None
+                        else 1.0
+                    )
+                    cf = (
+                        cond.Cooling.effective_system_cop
+                        if cond.Cooling is not None
+                        else 1.0
+                    )
+                    df = zc.Operations.DHW.effective_system_cop
+                    heat_num += hf * area
+                    cool_num += cf * area
+                    dhw_num += df * area
+                    den += area
+                heat_cop = heat_num / den if den else 1.0
+                cool_cop = cool_num / den if den else 1.0
+                dhw_cop = dhw_num / den if den else 1.0
+
         all_fuel_names = sorted({*get_args(FuelType), *get_args(DHWFuelType)})
         return energy_and_peak_postprocess(
             sql,
@@ -1165,7 +1530,7 @@ class Model(BaseWeather, validate_assignment=True):
                 msg = f"EnergyPlus version not found in IDF file: {idf.idfobjects['VERSION']}"
                 raise ValueError(msg)
             results = self.standard_results_postprocess(
-                sql, ep_version_major=idf.as_version.major
+                sql, ep_version_major=idf.as_version.major, idf=idf
             )
             zone_weights, zone_names = self.get_zone_weights_and_names(idf)
 
