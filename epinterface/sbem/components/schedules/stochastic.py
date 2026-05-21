@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -18,12 +19,15 @@ from obgeneration.model.equipment import Equipment
 from obgeneration.model.occupancy import MobilityCluster
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from epinterface.interface import ScheduleDayList, ScheduleYearFromDays
+from epinterface.weather import WeatherUrl
+
 
 class ScheduleOutput(ABC):
     """Base class for schedule outputs."""
 
     @abstractmethod
-    def construct_idf_object(self):
+    def construct_idf_object(self) -> ScheduleYearFromDays:
         """Construct the IDF object for the schedule."""
         pass
 
@@ -31,6 +35,10 @@ class ScheduleOutput(ABC):
 class FractionalScheduleOutput(ScheduleOutput, BaseModel):
     """Base class for fractional schedule outputs."""
 
+    name: str = Field(
+        ...,
+        description="The name of the schedule.",
+    )
     peak_value: float = Field(
         ...,
         description="The peak value of the schedule, in the units of the peak_units field.",
@@ -42,7 +50,28 @@ class FractionalScheduleOutput(ScheduleOutput, BaseModel):
 
     def construct_idf_object(self):
         """Construct the IDF object for the schedule."""
-        raise NotImplementedError("IDF object construction is not implemented")
+        ts_by_day = (
+            np.array(self.normalized_timeseries)
+            .reshape(-1, 96, 1)
+            .repeat(15, axis=-1)
+            .reshape(-1, 1440)
+        )
+        days = [
+            ScheduleDayList(
+                Name=f"{self.name}Day{i:03d}",
+                Schedule_Type_Limits_Name="Fraction",
+                Values=tuple(ts_by_day[i]),
+                Minutes_per_Item=1,
+            )
+            for i in range(365)
+        ]
+        year = ScheduleYearFromDays(
+            Name=f"{self.name}Year",
+            Schedule_Type_Limits_Name="Fraction",
+            day_schedules=days,
+            start_day_of_week="Sunday",  # this should be the START DAY OF THE INPUT DAYS
+        )
+        return year
 
 
 class TemperatureScheduleOutput(ScheduleOutput, BaseModel):
@@ -306,6 +335,7 @@ class StochasticOccupancyScheduleGenerator(ScheduleGenerator):
         context.occupancy = occupancy_res.occupancy_states
         context.num_occupants = self.num_occupants
         return StochasticOccupancyScheduleOutput(
+            name="Occupancy",
             peak_value=occupancy_res.peak_value,
             normalized_timeseries=occupancy_res.schedule,
         )
@@ -420,6 +450,7 @@ class StochasticLightingScheduleGenerator(ScheduleGenerator):
             lighting, context.safe_occupancy, generator
         )
         return StochasticLightingScheduleOutput(
+            name="Lighting",
             dimming_enabled=lighting_res.dimming_enabled,
             peak_value=lighting_res.peak_value,
             normalized_timeseries=lighting_res.schedule,
@@ -511,7 +542,9 @@ class StochasticEquipmentScheduleGenerator(ScheduleGenerator):
         context.laundry_cycles = eqp_res.laundry_cycles
         context.dishwasher_cycles = eqp_res.dishwasher_cycles
         return StochasticEquipmentScheduleOutput(
-            peak_value=eqp_res.peak_value, normalized_timeseries=eqp_res.schedule
+            name="Equipment",
+            peak_value=eqp_res.peak_value,
+            normalized_timeseries=eqp_res.schedule,
         )
 
 
@@ -534,7 +567,9 @@ class StochasticWaterUseScheduleGenerator(ScheduleGenerator):
             config.resolution_minutes,
         )
         return StochasticWaterUseScheduleOutput(
-            peak_value=dhw_res.peak_value, normalized_timeseries=dhw_res.schedule
+            name="WaterUse",
+            peak_value=dhw_res.peak_value,
+            normalized_timeseries=dhw_res.schedule,
         )
 
 
@@ -578,8 +613,6 @@ class StochasticScheduleGenerator(BaseModel):
 
 
 if __name__ == "__main__":
-    import yaml
-
     generator = StochasticScheduleGenerator(
         config=ScheduleGenerationConfig(resolution_minutes=15),
         equipment=StochasticEquipmentScheduleGenerator(
@@ -624,4 +657,113 @@ if __name__ == "__main__":
         ),
     )
     schedules = generator.generate_schedules(42)
-    print(yaml.dump(schedules.model_dump(mode="json"), indent=2, sort_keys=False))
+
+    if schedules.lighting is None:
+        msg = "Lighting schedule is not set"
+        raise ValueError(msg)
+    if schedules.equipment is None:
+        msg = "Equipment schedule is not set"
+        raise ValueError(msg)
+
+    lighting_year = schedules.lighting.construct_idf_object()
+    equipment_year = schedules.equipment.construct_idf_object()
+    from epinterface.sbem.flat_model import FlatModel
+
+    flat_model = FlatModel(
+        F2FHeight=3.25,
+        Width=40,
+        Depth=40,
+        Rotation=45,
+        WWR=0.3,
+        NFloors=2,
+        FacadeRValue=3.0,
+        RoofRValue=3.0,
+        SlabRValue=3.0,
+        WindowUValue=3.0,
+        WindowSHGF=0.7,
+        WindowTVis=0.5,
+        InfiltrationACH=0.5,
+        VentFlowRatePerArea=0.001,
+        VentFlowRatePerPerson=0.0085,
+        VentProvider="Mechanical",
+        VentHRV="NoHRV",
+        VentEconomizer="NoEconomizer",
+        VentDCV="NoDCV",
+        DHWFlowRatePerPerson=0.010,
+        DHWFuel="Electricity",
+        DHWSystemCOP=1.0,
+        DHWDistributionCOP=1.0,
+        EquipmentPowerDensity=25,
+        LightingPowerDensity=10,
+        OccupantDensity=0.001,
+        EquipmentBase=0.4,
+        EquipmentAMInterp=0.5,
+        EquipmentLunchInterp=0.8,
+        EquipmentPMInterp=0.5,
+        EquipmentWeekendPeakInterp=0.25,
+        EquipmentSummerPeakInterp=0.5,
+        LightingBase=0.3,
+        LightingAMInterp=0.75,
+        LightingLunchInterp=0.75,
+        LightingPMInterp=0.9,
+        LightingWeekendPeakInterp=0.75,
+        LightingSummerPeakInterp=0.9,
+        OccupancyBase=0.05,
+        OccupancyAMInterp=0.25,
+        OccupancyLunchInterp=0.9,
+        OccupancyPMInterp=0.5,
+        OccupancyWeekendPeakInterp=0.15,
+        OccupancySummerPeakInterp=0.85,
+        # HSPRegularWeekdayWorkhours=21,
+        # HSPRegularWeekdayNight=21,
+        # HSPSummerWeekdayWorkhours=21,
+        # HSPSummerWeekdayNight=21,
+        # HSPWeekendWorkhours=21,
+        # HSPWeekendNight=21,
+        # CSPRegularWeekdayWorkhours=23,
+        # CSPRegularWeekdayNight=23,
+        # CSPSummerWeekdayWorkhours=23,
+        # CSPSummerWeekdayNight=23,
+        # CSPWeekendWorkhours=23,
+        # CSPWeekendNight=23,
+        HeatingSetpointBase=21,
+        SetpointDeadband=2,
+        HeatingSetpointSetback=2,
+        CoolingSetpointSetback=2,
+        NightSetback=0.5,
+        WeekendSetback=0.5,
+        SummerSetback=0.5,
+        HeatingFuel="Electricity",
+        CoolingFuel="Electricity",
+        HeatingSystemCOP=1.0,
+        CoolingSystemCOP=1.0,
+        HeatingDistributionCOP=1.0,
+        CoolingDistributionCOP=1.0,
+        EPWURI=WeatherUrl(  # pyright: ignore [reportCallIssue]
+            "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Bedford-Hanscom.Field.AP.744900_TMYx.2009-2023.zip"
+        ),
+    )
+
+    outdir = Path("test-out-lighting")
+    outdir.mkdir(parents=True, exist_ok=True)
+    # r = flat_model.simulate(eplus_parent_dir=outdir)
+    model, cb = flat_model.to_model()
+
+    from archetypal.idfclass.idf import IDF
+
+    def callback(idf: IDF) -> IDF:
+        """Callback to add the schedules to the IDF."""
+        idf = cb(idf)
+        lighting_year.add(idf)
+        equipment_year.add(idf)
+        for lightsobj in idf.idfobjects["LIGHTS"]:
+            lightsobj.Schedule_Name = lighting_year.Name
+        for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
+            equipmentobj.Schedule_Name = equipment_year.Name
+
+        return idf
+
+    r = model.run(eplus_parent_dir=outdir, post_geometry_callback=callback)
+    print(r.energy_and_peak.groupby(level=["Measurement", "Aggregation"]).sum())
+
+    # print(yaml.dump(schedules.model_dump(mode="json"), indent=2, sort_keys=False))
