@@ -826,12 +826,14 @@ class Model(BaseWeather, validate_assignment=True):
         self,
         config: SimulationPathConfig,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
+        post_zone_callback: Callable[[IDF], IDF] | None = None,
     ) -> IDF:
         """Build the energy model using the Climate Studio API.
 
         Args:
             config (SimulationConfig): The configuration for the simulation.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
+            post_zone_callback (Callable[[IDF],IDF] | None): A callback to run after the zones are added.
 
         Returns:
             idf (IDF): The built energy model.
@@ -1010,6 +1012,8 @@ class Model(BaseWeather, validate_assignment=True):
         idf = self.add_constructions(
             idf, self.Zone.Envelope.Assemblies, self.Zone.Envelope.Window
         )
+        if post_zone_callback is not None:
+            idf = post_zone_callback(idf)
 
         # > operations
         # ----> space use
@@ -1049,18 +1053,20 @@ class Model(BaseWeather, validate_assignment=True):
         self,
         config: SimulationPathConfig,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
+        post_zone_callback: Callable[[IDF], IDF] | None = None,
     ) -> tuple[IDF, Sql]:
         """Build and simualte the idf model.
 
         Args:
             config (SimulationConfig): The configuration for the simulation.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
+            post_zone_callback (Callable[[IDF],IDF] | None): A callback to run after the zones are added.
 
         Returns:
             idf (IDF): The built energy model.
             sql (Sql): The sql results file with simulation data.
         """
-        idf = self.build(config, post_geometry_callback)
+        idf = self.build(config, post_geometry_callback, post_zone_callback)
         idf.simulate()
         sql = Sql(idf.sql_file)
         return idf, sql
@@ -1127,6 +1133,7 @@ class Model(BaseWeather, validate_assignment=True):
         self,
         weather_dir: Path | None = None,
         post_geometry_callback: Callable[[IDF], IDF] | None = None,
+        post_zone_callback: Callable[[IDF], IDF] | None = None,
         eplus_parent_dir: Path | None = None,
         overheating_config: OverheatingAnalysisConfig | None = None,
     ) -> "ModelRunResults":
@@ -1135,6 +1142,7 @@ class Model(BaseWeather, validate_assignment=True):
         Args:
             weather_dir (Path): The directory to store the weather files.
             post_geometry_callback (Callable[[IDF],IDF] | None): A callback to run after the geometry is added.
+            post_zone_callback (Callable[[IDF],IDF] | None): A callback to run after the zones are added.
             eplus_parent_dir (Path | None): The parent directory to store the eplus working directory.  If None, a temporary directory will be used.
             overheating_config (OverheatingAnalysisConfig | None): Configuration for overheating analysis. Skips if None.
 
@@ -1160,6 +1168,7 @@ class Model(BaseWeather, validate_assignment=True):
             idf, sql = self.simulate(
                 config,
                 post_geometry_callback=post_geometry_callback,
+                post_zone_callback=post_zone_callback,
             )
             if not idf.as_version:
                 msg = f"EnergyPlus version not found in IDF file: {idf.idfobjects['VERSION']}"

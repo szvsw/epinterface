@@ -19,6 +19,7 @@ from obgeneration.model.equipment import Equipment
 from obgeneration.model.occupancy import MobilityCluster
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from epinterface.geometry import get_zone_floor_area
 from epinterface.interface import ScheduleDayList, ScheduleYearFromDays
 from epinterface.weather import WeatherUrl
 
@@ -656,23 +657,12 @@ if __name__ == "__main__":
             cooling_setpoint_away=28,
         ),
     )
-    schedules = generator.generate_schedules(42)
-
-    if schedules.lighting is None:
-        msg = "Lighting schedule is not set"
-        raise ValueError(msg)
-    if schedules.equipment is None:
-        msg = "Equipment schedule is not set"
-        raise ValueError(msg)
-
-    lighting_year = schedules.lighting.construct_idf_object()
-    equipment_year = schedules.equipment.construct_idf_object()
     from epinterface.sbem.flat_model import FlatModel
 
     flat_model = FlatModel(
         F2FHeight=3.25,
-        Width=40,
-        Depth=40,
+        Width=12,
+        Depth=8,
         Rotation=45,
         WWR=0.3,
         NFloors=2,
@@ -683,8 +673,8 @@ if __name__ == "__main__":
         WindowSHGF=0.7,
         WindowTVis=0.5,
         InfiltrationACH=0.5,
-        VentFlowRatePerArea=0.001,
-        VentFlowRatePerPerson=0.0085,
+        VentFlowRatePerArea=0.0002,
+        VentFlowRatePerPerson=0.0015,
         VentProvider="Mechanical",
         VentHRV="NoHRV",
         VentEconomizer="NoEconomizer",
@@ -749,21 +739,103 @@ if __name__ == "__main__":
     # r = flat_model.simulate(eplus_parent_dir=outdir)
     model, cb = flat_model.to_model()
 
+    import logging
+
     from archetypal.idfclass.idf import IDF
+
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO)
 
     def callback(idf: IDF) -> IDF:
         """Callback to add the schedules to the IDF."""
         idf = cb(idf)
+
+        logger.info("Adding schedules to the IDF.")
+        logger.info("Generating stochastic values.")
+        schedules = generator.generate_schedules(42)
+        logger.info("Stochastic values generated.")
+
+        if schedules.lighting is None:
+            msg = "Lighting schedule is not set"
+            raise ValueError(msg)
+        if schedules.equipment is None:
+            msg = "Equipment schedule is not set"
+            raise ValueError(msg)
+        if schedules.occupancy is None:
+            msg = "Occupancy schedule is not set"
+            raise ValueError(msg)
+        if schedules.water_use is None:
+            msg = "Water use schedule is not set"
+            raise ValueError(msg)
+        if schedules.heating_setpoint is None:
+            msg = "Heating setpoint schedule is not set"
+            raise ValueError(msg)
+        if schedules.cooling_setpoint is None:
+            msg = "Cooling setpoint schedule is not set"
+            raise ValueError(msg)
+        equipment_kWh = (
+            schedules.equipment.peak_value
+            * np.array(schedules.equipment.normalized_timeseries).sum()
+            / 4
+            / 1000
+        )
+        print(f"Equipment kWh: {equipment_kWh}")
+        # get the total occupied floor area of the building
+        # TODO: deal with the fact that some zones, e.g. the basement and attic, use a different use fraction
+        total_occupied_floor_area = sum([
+            get_zone_floor_area(idf, zone.Name) for zone in idf.idfobjects["ZONE"]
+        ])
+        print(f"Total occupied floor area: {total_occupied_floor_area}")
+        print(f"Equipment kWh per m2: {equipment_kWh / total_occupied_floor_area}")
+
+        logger.info("Constructing schedules.")
+        lighting_year = schedules.lighting.construct_idf_object()
+        equipment_year = schedules.equipment.construct_idf_object()
+        occupancy_year = schedules.occupancy.construct_idf_object()
+        water_use_year = schedules.water_use.construct_idf_object()
+        logger.info("Schedules constructed.")
+        logger.info("Adding schedules to the IDF.")
         lighting_year.add(idf)
         equipment_year.add(idf)
+        occupancy_year.add(idf)
+        water_use_year.add(idf)
+        logger.info("Schedules added to the IDF.")
+
+        # lighting is already normalized
+        lpd = schedules.lighting.peak_value
+        # equipment is not normalized since its based off of discrete pieces of equipment etc
+        epd = schedules.equipment.peak_value / total_occupied_floor_area
+        occ_density = schedules.occupancy.peak_value / total_occupied_floor_area
+
+        logger.info("Mutating IDF objects to assign schedules.")
         for lightsobj in idf.idfobjects["LIGHTS"]:
             lightsobj.Schedule_Name = lighting_year.Name
+            lightsobj.Watts_per_Floor_Area = lpd
+
         for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
             equipmentobj.Schedule_Name = equipment_year.Name
+            equipmentobj.Watts_per_Floor_Area = epd
+
+        for peopleobj in idf.idfobjects["PEOPLE"]:
+            peopleobj.Number_of_People_Schedule_Name = occupancy_year.Name
+            peopleobj.People_per_Floor_Area = occ_density
+
+        # for water_use_obj in idf.idfobjects["WATERUSE:EQUIPMENT"]:
+        #     water_use_obj.Flow_Rate_Fraction_Schedule_Name = water_use_year.Name
+        # for heating_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
+        #     heating_setpoint_obj.Heating_Setpoint_Schedule_Name = (
+        #         heating_setpoint_year.Name
+        #     )
+        # for cooling_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
+        #     cooling_setpoint_obj.Cooling_Setpoint_Schedule_Name = (
+        #         cooling_setpoint_year.Name
+        #     )
+        logger.info("Mutating IDF objects to assign schedules complete.")
+        logger.info("Stochastic schedules injected and assigned to IDF objects.")
 
         return idf
 
-    r = model.run(eplus_parent_dir=outdir, post_geometry_callback=callback)
+    r = model.run(eplus_parent_dir=outdir, post_zone_callback=callback)
     print(r.energy_and_peak.groupby(level=["Measurement", "Aggregation"]).sum())
 
     # print(yaml.dump(schedules.model_dump(mode="json"), indent=2, sort_keys=False))
