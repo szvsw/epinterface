@@ -20,7 +20,7 @@ from obgeneration.model.occupancy import MobilityCluster
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from epinterface.geometry import get_zone_floor_area
-from epinterface.interface import ScheduleDayList, ScheduleYearFromDays
+from epinterface.interface import ScheduleDayInterval, ScheduleYearFromDays
 from epinterface.weather import WeatherUrl
 
 
@@ -48,29 +48,72 @@ class FractionalScheduleOutput(ScheduleOutput, BaseModel):
     normalized_timeseries: Sequence[float] = Field(
         ..., description="The normalized timeseries of the schedule."
     )
+    summer_design_day: Sequence[float] | None = Field(
+        default=None,
+        description=(
+            "The normalized timeseries of the schedule for the summer design day."
+        )
+    )
+    winter_design_day: Sequence[float] | None = Field(
+        default=None,
+        description=(
+            "The normalized timeseries of the schedule for the winter design day."
+        )
+    )
 
     def construct_idf_object(self):
         """Construct the IDF object for the schedule."""
-        ts_by_day = (
-            np.array(self.normalized_timeseries)
-            .reshape(-1, 96, 1)
-            .repeat(15, axis=-1)
-            .reshape(-1, 1440)
-        )
+        timeseries = np.array(self.normalized_timeseries)
+        n_days = 365
+        if len(timeseries) % n_days != 0:
+            msg = (
+                f"Expected normalized_timeseries length to divide evenly into "
+                f"{n_days} days, got {len(timeseries)}"
+            )
+            raise ValueError(msg)
+        items_per_day = len(timeseries) // n_days
+        if 24 * 60 % items_per_day != 0:
+            msg = f"Expected an even number of minutes per item, got {items_per_day} items per day"
+            raise ValueError(msg)
+        minutes_per_item = 24 * 60 // items_per_day
+        ts_by_day = timeseries.reshape(n_days, items_per_day)
         days = [
-            ScheduleDayList(
+            ScheduleDayInterval(
                 Name=f"{self.name}Day{i:03d}",
                 Schedule_Type_Limits_Name="Fraction",
                 Values=tuple(ts_by_day[i]),
-                Minutes_per_Item=1,
+                Minutes_per_Item=minutes_per_item,
             )
             for i in range(365)
         ]
+        summer_design_day_schedule = (
+            ScheduleDayInterval(
+                Name=f"{self.name}SummerDesignDay",
+                Schedule_Type_Limits_Name="Fraction",
+                Values=tuple(self.summer_design_day),
+                Minutes_per_Item=minutes_per_item,
+            )
+            if self.summer_design_day is not None
+            else None
+        )
+        winter_design_day_schedule = (
+            ScheduleDayInterval(
+                Name=f"{self.name}WinterDesignDay",
+                Schedule_Type_Limits_Name="Fraction",
+                Values=tuple(self.winter_design_day),
+                Minutes_per_Item=minutes_per_item,
+            )
+            if self.winter_design_day is not None
+            else None
+        )
+
         year = ScheduleYearFromDays(
             Name=f"{self.name}Year",
             Schedule_Type_Limits_Name="Fraction",
             day_schedules=days,
             start_day_of_week="Sunday",  # this should be the START DAY OF THE INPUT DAYS
+            summer_design_day_schedule=summer_design_day_schedule,
+            winter_design_day_schedule=winter_design_day_schedule,
         )
         return year
 
@@ -78,13 +121,77 @@ class FractionalScheduleOutput(ScheduleOutput, BaseModel):
 class TemperatureScheduleOutput(ScheduleOutput, BaseModel):
     """Base class for temperature schedule outputs."""
 
+    name: str = Field(
+        ...,
+        description="The name of the schedule.",
+    )
     timeseries: Sequence[float] = Field(
         ..., description="The timeseries of the temperature schedule."
+    )
+    summer_design_day: Sequence[float] | None = Field(
+        default=None,
+        description=("The timeseries of the schedule for the summer design day."),
+    )
+    winter_design_day: Sequence[float] | None = Field(
+        default=None,
+        description=("The timeseries of the schedule for the winter design day."),
     )
 
     def construct_idf_object(self):
         """Construct the IDF object for the schedule."""
-        raise NotImplementedError("IDF object construction is not implemented")
+        timeseries = np.array(self.timeseries)
+        n_days = 365
+        if len(timeseries) % n_days != 0:
+            msg = (
+                f"Expected timeseries length to divide evenly into "
+                f"{n_days} days, got {len(timeseries)}"
+            )
+            raise ValueError(msg)
+        items_per_day = len(timeseries) // n_days
+        if 24 * 60 % items_per_day != 0:
+            msg = f"Expected an even number of minutes per item, got {items_per_day} items per day"
+            raise ValueError(msg)
+        minutes_per_item = 24 * 60 // items_per_day
+        ts_by_day = timeseries.reshape(n_days, items_per_day)
+        days = [
+            ScheduleDayInterval(
+                Name=f"{self.name}Day{i:03d}",
+                Schedule_Type_Limits_Name="Temperature",
+                Values=tuple(ts_by_day[i]),
+                Minutes_per_Item=minutes_per_item,
+            )
+            for i in range(365)
+        ]
+        summer_design_day_schedule = (
+            ScheduleDayInterval(
+                Name=f"{self.name}SummerDesignDay",
+                Schedule_Type_Limits_Name="Temperature",
+                Values=tuple(self.summer_design_day),
+                Minutes_per_Item=minutes_per_item,
+            )
+            if self.summer_design_day is not None
+            else None
+        )
+        winter_design_day_schedule = (
+            ScheduleDayInterval(
+                Name=f"{self.name}WinterDesignDay",
+                Schedule_Type_Limits_Name="Temperature",
+                Values=tuple(self.winter_design_day),
+                Minutes_per_Item=minutes_per_item,
+            )
+            if self.winter_design_day is not None
+            else None
+        )
+
+        year = ScheduleYearFromDays(
+            Name=f"{self.name}Year",
+            Schedule_Type_Limits_Name="Temperature",
+            day_schedules=days,
+            start_day_of_week="Sunday",  # this should be the START DAY OF THE INPUT DAYS
+            summer_design_day_schedule=summer_design_day_schedule,
+            winter_design_day_schedule=winter_design_day_schedule,
+        )
+        return year
 
 
 class StochasticEquipmentScheduleOutput(FractionalScheduleOutput):
@@ -338,7 +445,9 @@ class StochasticOccupancyScheduleGenerator(ScheduleGenerator):
         return StochasticOccupancyScheduleOutput(
             name="Occupancy",
             peak_value=occupancy_res.peak_value,
-            normalized_timeseries=occupancy_res.schedule,
+            normalized_timeseries=occupancy_res.annual_schedule,
+            summer_design_day=occupancy_res.summer_design_day_schedule,
+            winter_design_day=occupancy_res.winter_design_day_schedule,
         )
 
 
@@ -377,7 +486,10 @@ class StochasticHeatingSetpointScheduleGenerator(ScheduleGenerator):
             msg = "Failed to generate heating setpoint schedule."
             raise RuntimeError(msg)
         return StochasticHeatingSetpointScheduleOutput(
-            timeseries=heating_setpoint_res.schedule
+            name="HeatingSetpoint",
+            timeseries=heating_setpoint_res.annual_schedule,
+            summer_design_day=heating_setpoint_res.summer_design_day_schedule,
+            winter_design_day=heating_setpoint_res.winter_design_day_schedule,
         )
 
 
@@ -416,7 +528,10 @@ class StochasticCoolingSetpointScheduleGenerator(ScheduleGenerator):
             msg = "Failed to generate cooling setpoint schedule."
             raise RuntimeError(msg)
         return StochasticCoolingSetpointScheduleOutput(
-            timeseries=cooling_setpoint_res.schedule
+            name="CoolingSetpoint",
+            timeseries=cooling_setpoint_res.annual_schedule,
+            summer_design_day=cooling_setpoint_res.summer_design_day_schedule,
+            winter_design_day=cooling_setpoint_res.winter_design_day_schedule,
         )
 
 
@@ -454,7 +569,9 @@ class StochasticLightingScheduleGenerator(ScheduleGenerator):
             name="Lighting",
             dimming_enabled=lighting_res.dimming_enabled,
             peak_value=lighting_res.peak_value,
-            normalized_timeseries=lighting_res.schedule,
+            normalized_timeseries=lighting_res.annual_schedule,
+            summer_design_day=lighting_res.summer_design_day_schedule,
+            winter_design_day=lighting_res.winter_design_day_schedule,
         )
 
 
@@ -545,7 +662,9 @@ class StochasticEquipmentScheduleGenerator(ScheduleGenerator):
         return StochasticEquipmentScheduleOutput(
             name="Equipment",
             peak_value=eqp_res.peak_value,
-            normalized_timeseries=eqp_res.schedule,
+            normalized_timeseries=eqp_res.annual_schedule,
+            summer_design_day=eqp_res.summer_design_day_schedule,
+            winter_design_day=eqp_res.winter_design_day_schedule,
         )
 
 
@@ -570,7 +689,9 @@ class StochasticWaterUseScheduleGenerator(ScheduleGenerator):
         return StochasticWaterUseScheduleOutput(
             name="WaterUse",
             peak_value=dhw_res.peak_value,
-            normalized_timeseries=dhw_res.schedule,
+            normalized_timeseries=dhw_res.annual_schedule,
+            summer_design_day=dhw_res.summer_design_day_schedule,
+            winter_design_day=dhw_res.winter_design_day_schedule,
         )
 
 
@@ -790,35 +911,36 @@ if __name__ == "__main__":
 
         logger.info("Constructing schedules.")
         lighting_year = schedules.lighting.construct_idf_object()
-        equipment_year = schedules.equipment.construct_idf_object()
-        occupancy_year = schedules.occupancy.construct_idf_object()
-        water_use_year = schedules.water_use.construct_idf_object()
+
+        # equipment_year = schedules.equipment.construct_idf_object()
+        # occupancy_year = schedules.occupancy.construct_idf_object()
+        # water_use_year = schedules.water_use.construct_idf_object()
         logger.info("Schedules constructed.")
         logger.info("Adding schedules to the IDF.")
         lighting_year.add(idf)
-        equipment_year.add(idf)
-        occupancy_year.add(idf)
-        water_use_year.add(idf)
+        # equipment_year.add(idf)
+        # occupancy_year.add(idf)
+        # water_use_year.add(idf)
         logger.info("Schedules added to the IDF.")
-
+        breakpoint()
         # lighting is already normalized
         lpd = schedules.lighting.peak_value
         # equipment is not normalized since its based off of discrete pieces of equipment etc
-        epd = schedules.equipment.peak_value / total_occupied_floor_area
-        occ_density = schedules.occupancy.peak_value / total_occupied_floor_area
+        # epd = schedules.equipment.peak_value / total_occupied_floor_area
+        # occ_density = schedules.occupancy.peak_value / total_occupied_floor_area
 
         logger.info("Mutating IDF objects to assign schedules.")
         for lightsobj in idf.idfobjects["LIGHTS"]:
             lightsobj.Schedule_Name = lighting_year.Name
-            lightsobj.Watts_per_Floor_Area = lpd
+            lightsobj.Watts_per_Zone_Floor_Area  = lpd
 
-        for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
-            equipmentobj.Schedule_Name = equipment_year.Name
-            equipmentobj.Watts_per_Floor_Area = epd
+        # for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
+        #     equipmentobj.Schedule_Name = equipment_year.Name
+        #     equipmentobj.Watts_per_Zone_Floor_Area  = epd
 
-        for peopleobj in idf.idfobjects["PEOPLE"]:
-            peopleobj.Number_of_People_Schedule_Name = occupancy_year.Name
-            peopleobj.People_per_Floor_Area = occ_density
+        # for peopleobj in idf.idfobjects["PEOPLE"]:
+        #     peopleobj.Number_of_People_Schedule_Name = occupancy_year.Name
+        #     peopleobj.People_per_Floor_Area = occ_density
 
         # for water_use_obj in idf.idfobjects["WATERUSE:EQUIPMENT"]:
         #     water_use_obj.Flow_Rate_Fraction_Schedule_Name = water_use_year.Name

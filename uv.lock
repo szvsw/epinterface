@@ -2023,7 +2023,7 @@ wheels = [
 
 [[package]]
 name = "obgeneration"
-version = "0.1.0"
+version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -2034,9 +2034,9 @@ dependencies = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/38/186fdce185078f83093fd72cbfcb1bd3c1fd3c946fdd2e5c7d247afbbb88/obgeneration-0.1.0.tar.gz", hash = "sha256:f38ca88995445758049c51f2b664be75a63b068f85431a0a9198b3929b6eaa48", size = 196567, upload-time = "2026-04-19T19:58:25.021Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/c9/af391d173e63f33386ea5cf84c50f0a380b5e5bf003b74821bfbaabfe10b/obgeneration-0.1.1.tar.gz", hash = "sha256:8b0512816fa86d5172859f0ac2a8f8a36c2c6a9eb6df9d20c8ca2df10bbefda5", size = 199471, upload-time = "2026-05-21T20:25:34.325Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/b3/6a6dd1fd9bbe0661a08573641da3a11431e9636169a550251094025c78a5/obgeneration-0.1.0-py3-none-any.whl", hash = "sha256:8760943240222fe9126b9c1abf5cfd63eb347443c8d1e5e010f940dee9ab69a4", size = 223075, upload-time = "2026-04-19T19:58:26.58Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/99/2f9e79fa6c39fd05cbf95d5dc02b4ccfd20c979a7b5eff3c5b79e6853534/obgeneration-0.1.1-py3-none-any.whl", hash = "sha256:b9621d0505d6c49fe08bfdc0c2c49e7489efcee79a955a5264de7a6f4aeb7f17", size = 226239, upload-time = "2026-05-21T20:25:32.985Z" },
 ]
 
 [[package]]

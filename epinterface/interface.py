@@ -835,32 +835,42 @@ class ScheduleDayHourly(BaseObj, extra="ignore"):
     Hour_24: float
 
 
-N_TS_PER_DAY = 96
-"""Number of timesteps per day for 15-minute interval schedules (24 * 60 / 15)."""
-
 InterpolateToTimestepType = Literal["Average", "Linear", "No"]
 
 
 class ScheduleDayInterval(BaseObj, extra="ignore"):
     """Schedule:Day:Interval object for sub-hourly schedule data.
 
-    Fixed at 15-minute intervals (96 values per day).
-    Each value covers a 15-minute window ending at the corresponding time.
+    Each value covers a fixed minute window ending at the corresponding time.
     """
 
     key: ClassVar[str] = "SCHEDULE:DAY:INTERVAL"
     Name: str
     Schedule_Type_Limits_Name: str
     Interpolate_to_Timestep: InterpolateToTimestepType = "No"
-    Values: tuple[float, ...] = Field(
-        ..., min_length=N_TS_PER_DAY, max_length=N_TS_PER_DAY
-    )
+    Minutes_per_Item: int = Field(default=15, ge=1, le=60)
+    Values: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _validate_values_length(self) -> Self:
+        """Validate that the number of values matches Minutes_per_Item."""
+        if 60 % self.Minutes_per_Item != 0:
+            msg = f"Minutes_per_Item ({self.Minutes_per_Item}) must evenly divide 60"
+            raise ValueError(msg)
+        expected = 24 * 60 // self.Minutes_per_Item
+        if len(self.Values) != expected:
+            msg = (
+                f"Expected {expected} values for "
+                f"{self.Minutes_per_Item}-minute intervals, "
+                f"got {len(self.Values)}"
+            )
+            raise ValueError(msg)
+        return self
 
     def add(self, idf: IDF):
         """Add the object to the IDF.
 
-        Generates the Time/Value field pairs for 96 fifteen-minute intervals
-        (00:15 through 24:00).
+        Generates the Time/Value field pairs for the configured interval.
 
         Args:
             idf (IDF): The IDF object to add the schedule to.
@@ -875,7 +885,7 @@ class ScheduleDayInterval(BaseObj, extra="ignore"):
         }
         for i, val in enumerate(self.Values):
             idx = i + 1
-            total_minutes = idx * 15
+            total_minutes = idx * self.Minutes_per_Item
             hours = total_minutes // 60
             minutes = total_minutes % 60
             fields[f"Time_{idx}"] = f"{hours:02d}:{minutes:02d}"
@@ -1135,7 +1145,8 @@ class DynamicScheduleYear(BaseObj, extra="ignore"):
 class ScheduleYearFromDays(BaseModel):
     """Builds a complete Schedule:Year hierarchy from per-day schedules.
 
-    Takes a sequence of 365 (or 366) ScheduleDayList objects -- one per
+    Takes a sequence of 365 (or 366) ScheduleDayList or ScheduleDayInterval
+    objects -- one per
     calendar day -- and groups them into calendar weeks based on the
     simulation start day of week.  Intermediate Schedule:Week:Daily objects
     are created so that EnergyPlus can resolve day-of-week correctly within
@@ -1146,7 +1157,7 @@ class ScheduleYearFromDays(BaseModel):
         Name: Name for the resulting Schedule:Year (also used as a prefix
             for the generated Schedule:Week:Daily names).
         Schedule_Type_Limits_Name: Reference to a ScheduleTypeLimits object.
-        day_schedules: Exactly 365 (or 366 for leap years) ScheduleDayList
+        day_schedules: Exactly 365 (or 366 for leap years) day schedule
             objects, ordered Jan 1 through Dec 31.
         start_day_of_week: The day of week for January 1 (must match
             RunPeriod.Day_of_Week_for_Start_Day).
@@ -1158,10 +1169,10 @@ class ScheduleYearFromDays(BaseModel):
 
     Name: str
     Schedule_Type_Limits_Name: str
-    day_schedules: Sequence[ScheduleDayList]
+    day_schedules: Sequence[ScheduleDayList | ScheduleDayInterval]
     start_day_of_week: DayOfWeekType = "Sunday"
-    summer_design_day_schedule: ScheduleDayList | None = None
-    winter_design_day_schedule: ScheduleDayList | None = None
+    summer_design_day_schedule: ScheduleDayList | ScheduleDayInterval | None = None
+    winter_design_day_schedule: ScheduleDayList | ScheduleDayInterval | None = None
 
     @model_validator(mode="after")
     def _validate_day_count(self) -> Self:
