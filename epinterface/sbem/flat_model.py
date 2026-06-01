@@ -26,6 +26,7 @@ from epinterface.sbem.components.schedules import (
     YearScheduleCategory,
 )
 from epinterface.sbem.components.space_use import (
+    DimmingTypeType,
     EquipmentComponent,
     LightingComponent,
     OccupancyComponent,
@@ -897,6 +898,8 @@ class FlatModel(BaseModel):
     LightingPowerDensity: float = Field(ge=0, le=100)
     OccupantDensity: float = Field(ge=0, le=50)
 
+    LightingDimmingType: DimmingTypeType = Field(..., title="Dimming type")
+
     VentFlowRatePerPerson: float
     VentFlowRatePerArea: float
     VentProvider: VentilationProvider
@@ -1717,7 +1720,7 @@ class FlatModel(BaseModel):
             PowerDensity=self.LightingPowerDensity,
             Schedule=lighting_schedule,
             IsOn=True,
-            DimmingType="Off",
+            DimmingType= self.LightingDimmingType,
         )
 
         occupancy = OccupancyComponent(

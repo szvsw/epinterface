@@ -807,6 +807,7 @@ if __name__ == "__main__":
         EquipmentPowerDensity=25,
         LightingPowerDensity=10,
         OccupantDensity=0.001,
+        LightingDimmingType="Continuous",
         EquipmentBase=0.4,
         EquipmentAMInterp=0.5,
         EquipmentLunchInterp=0.8,
@@ -854,7 +855,6 @@ if __name__ == "__main__":
             "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Bedford-Hanscom.Field.AP.744900_TMYx.2009-2023.zip"
         ),
     )
-
     outdir = Path("test-out-lighting")
     outdir.mkdir(parents=True, exist_ok=True)
     # r = flat_model.simulate(eplus_parent_dir=outdir)
@@ -897,7 +897,7 @@ if __name__ == "__main__":
         equipment_kWh = (
             schedules.equipment.peak_value
             * np.array(schedules.equipment.normalized_timeseries).sum()
-            / 4
+            / (60 / generator.config.resolution_minutes)
             / 1000
         )
         print(f"Equipment kWh: {equipment_kWh}")
@@ -907,57 +907,63 @@ if __name__ == "__main__":
             get_zone_floor_area(idf, zone.Name) for zone in idf.idfobjects["ZONE"]
         ])
         print(f"Total occupied floor area: {total_occupied_floor_area}")
-        print(f"Equipment kWh per m2: {equipment_kWh / total_occupied_floor_area}")
 
         logger.info("Constructing schedules.")
         lighting_year = schedules.lighting.construct_idf_object()
-
-        # equipment_year = schedules.equipment.construct_idf_object()
-        # occupancy_year = schedules.occupancy.construct_idf_object()
-        # water_use_year = schedules.water_use.construct_idf_object()
+        equipment_year = schedules.equipment.construct_idf_object()
+        occupancy_year = schedules.occupancy.construct_idf_object()
+        water_use_year = schedules.water_use.construct_idf_object()
+        heating_setpoint_year = schedules.heating_setpoint.construct_idf_object()
+        cooling_setpoint_year = schedules.cooling_setpoint.construct_idf_object()
         logger.info("Schedules constructed.")
         logger.info("Adding schedules to the IDF.")
+
         lighting_year.add(idf)
-        # equipment_year.add(idf)
-        # occupancy_year.add(idf)
-        # water_use_year.add(idf)
+        equipment_year.add(idf)
+        occupancy_year.add(idf)
+        water_use_year.add(idf)
+        heating_setpoint_year.add(idf)
+        cooling_setpoint_year.add(idf)
         logger.info("Schedules added to the IDF.")
-        breakpoint()
+
         # lighting is already normalized
         lpd = schedules.lighting.peak_value
         # equipment is not normalized since its based off of discrete pieces of equipment etc
-        # epd = schedules.equipment.peak_value / total_occupied_floor_area
-        # occ_density = schedules.occupancy.peak_value / total_occupied_floor_area
+        epd = schedules.equipment.peak_value / total_occupied_floor_area
+        occ_density = schedules.occupancy.peak_value / total_occupied_floor_area
 
         logger.info("Mutating IDF objects to assign schedules.")
         for lightsobj in idf.idfobjects["LIGHTS"]:
             lightsobj.Schedule_Name = lighting_year.Name
             lightsobj.Watts_per_Zone_Floor_Area  = lpd
 
-        # for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
-        #     equipmentobj.Schedule_Name = equipment_year.Name
-        #     equipmentobj.Watts_per_Zone_Floor_Area  = epd
+        for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
+            equipmentobj.Schedule_Name = equipment_year.Name
+            equipmentobj.Watts_per_Zone_Floor_Area  = epd
 
-        # for peopleobj in idf.idfobjects["PEOPLE"]:
-        #     peopleobj.Number_of_People_Schedule_Name = occupancy_year.Name
-        #     peopleobj.People_per_Floor_Area = occ_density
+        for peopleobj in idf.idfobjects["PEOPLE"]:
+            peopleobj.Number_of_People_Schedule_Name = occupancy_year.Name
+            peopleobj.People_per_Floor_Area = occ_density
 
-        # for water_use_obj in idf.idfobjects["WATERUSE:EQUIPMENT"]:
-        #     water_use_obj.Flow_Rate_Fraction_Schedule_Name = water_use_year.Name
-        # for heating_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
-        #     heating_setpoint_obj.Heating_Setpoint_Schedule_Name = (
-        #         heating_setpoint_year.Name
-        #     )
-        # for cooling_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
-        #     cooling_setpoint_obj.Cooling_Setpoint_Schedule_Name = (
-        #         cooling_setpoint_year.Name
-        #     )
+        #breakpoint()
+
+        for water_use_obj in idf.idfobjects["WATERUSE:EQUIPMENT"]:
+            water_use_obj.Flow_Rate_Fraction_Schedule_Name = water_use_year.Name
+        for heating_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
+            heating_setpoint_obj.Heating_Setpoint_Schedule_Name = (
+                heating_setpoint_year.Name
+            )
+        for cooling_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
+            cooling_setpoint_obj.Cooling_Setpoint_Schedule_Name = (
+                cooling_setpoint_year.Name
+            )
         logger.info("Mutating IDF objects to assign schedules complete.")
         logger.info("Stochastic schedules injected and assigned to IDF objects.")
 
         return idf
 
     r = model.run(eplus_parent_dir=outdir, post_zone_callback=callback)
+    breakpoint()
     print(r.energy_and_peak.groupby(level=["Measurement", "Aggregation"]).sum())
-
+    
     # print(yaml.dump(schedules.model_dump(mode="json"), indent=2, sort_keys=False))

@@ -905,3 +905,38 @@ def get_zone_glazed_area(idf: IDF, zone_name: str) -> float:
         raise ValueError(msg)
 
     return total_window_area
+
+def get_zone_center_point(
+    idf: IDF,
+    target_zone_name: str,
+    z: float = 0.8,
+) -> tuple[float, float, float]:
+    """Return a simple floor-plan center point for a zone."""
+    floor_surfaces = [
+        surface
+        for surface in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+        if surface.Zone_Name == target_zone_name
+        and surface.Surface_Type.lower() == "floor"
+    ]
+
+    if not floor_surfaces:
+        msg = f"No floor surface found for zone {target_zone_name}"
+        raise ValueError(msg)
+
+    points: list[tuple[float, float]] = []
+    for surface in floor_surfaces:
+        for i in range(1, 50):
+            x_raw = getattr(surface, f"Vertex_{i}_Xcoordinate", None)
+            y_raw = getattr(surface, f"Vertex_{i}_Ycoordinate", None)
+
+            if x_raw is None or y_raw is None or x_raw == "" or y_raw == "":
+                break
+
+            x = float(x_raw)
+            y = float(y_raw)
+            points.append((x, y))
+
+    x = sum(point[0] for point in points) / len(points)
+    y = sum(point[1] for point in points) / len(points)
+
+    return x, y, z

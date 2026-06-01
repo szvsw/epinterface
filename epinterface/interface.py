@@ -710,6 +710,57 @@ class Lights(BaseObj, extra="ignore"):
         return data
 
 
+class DaylightingControls(BaseObj, extra="ignore"):
+    """Daylighting:Controls object."""
+
+    key = "DAYLIGHTING:CONTROLS"
+    Name: str
+    Zone_or_Space_Name: str
+    Daylighting_Method: Literal["SplitFlux", "DElight"] = "SplitFlux"
+    Availability_Schedule_Name: str | None = None
+    Lighting_Control_Type: Literal["Continuous", "Stepped", "ContinuousOff"]
+    Minimum_Input_Power_Fraction_for_Continuous_or_ContinuousOff_Dimming_Control: (
+        float | None
+    ) = 0.3
+    Minimum_Light_Output_Fraction_for_Continuous_or_ContinuousOff_Dimming_Control: (
+        float | None
+    ) = 0.2
+    Number_of_Stepped_Control_Steps: int | None = None
+    Probability_Lighting_will_be_Reset_When_Needed_in_Manual_Stepped_Control: (
+        float | None
+    ) = 1.0
+    Glare_Calculation_Daylighting_Reference_Point_Name: str | None = None
+    Glare_Calculation_Azimuth_Angle_of_View_Direction_Clockwise_from_Zone_yAxis: (
+        float | None
+    ) = None
+    Maximum_Allowable_Discomfort_Glare_Index: float | None = None
+    DElight_Gridding_Resolution: float | None = None
+    Daylighting_Reference_Point_1_Name: str
+    Fraction_of_Lights_Controlled_by_Reference_Point_1: float = 1.0
+    Illuminance_Setpoint_at_Reference_Point_1: float = 300
+
+    def add(self, idf: IDF):
+        obj = idf.newidfobject(self.key, **self.model_dump(exclude_none=True))
+
+        last_field = "Illuminance_Setpoint_at_Reference_Point_1"
+        last_idx = obj.fieldnames.index(last_field)
+
+        # obj.obj includes key at index 0, fieldnames also includes key at index 0
+        obj.obj = obj.obj[: last_idx + 1]
+
+        return idf
+
+
+class DaylightingReferencePoint(BaseObj, extra="ignore"):
+    """Daylighting:ReferencePoint object."""
+    key = "DAYLIGHTING:REFERENCEPOINT"
+    Name: str
+    Zone_or_Space_Name: str
+    XCoordinate_of_Reference_Point: float
+    YCoordinate_of_Reference_Point: float
+    ZCoordinate_of_Reference_Point: float
+
+
 InfDesignFlowRateCalculationMethodType = Literal[
     "Flow/Zone",
     "Flow/Area",
