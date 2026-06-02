@@ -103,8 +103,9 @@ class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
         idf = people.add(idf)
         return idf
 
-# Disallow Stepped and ContinuousOff for now.
-DimmingTypeType = Literal["Off", "Continuous"]
+# Allow legacy/database dimming values to deserialize; unsupported modes
+# are rejected when translating the component into EnergyPlus objects.
+DimmingTypeType = Literal["Off", "Continuous", "Stepped", "ContinuousOff"]
 
 
 class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
@@ -122,11 +123,6 @@ class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
     )
     Schedule: YearComponent = Field(..., title="Lighting schedule of the object [frac]")
     IsOn: BoolStr = Field(..., title="Lights are on")
-    IlluminanceTarget: float = Field(
-        default=300,
-        ge=0,
-        title="Illuminance target at daylighting reference point [lux]",
-    )
 
     def add_lights_to_idf_zone(
         self, idf: IDF, target_zone_or_zone_list_name: str
@@ -182,9 +178,7 @@ class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
                 Zone_or_Space_Name=target_zone_or_zone_list_name,
                 Lighting_Control_Type=self.DimmingType,
                 Daylighting_Reference_Point_1_Name=ref_point.Name,
-                Illuminance_Setpoint_at_Reference_Point_1=(
-                    self.IlluminanceTarget or 300
-                ),
+                Illuminance_Setpoint_at_Reference_Point_1= 300,
                 Fraction_of_Lights_Controlled_by_Reference_Point_1=1.0,
             )
             idf = controls.add(idf)

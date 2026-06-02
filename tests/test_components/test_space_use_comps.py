@@ -4,9 +4,15 @@ import pytest
 from archetypal.idfclass.idf import IDF
 from prisma import Prisma
 
-from epinterface.sbem.components.schedules import YearComponent
+from epinterface.data import DefaultEPWPath, DefaultMinimalIDFPath
+from epinterface.geometry import ShoeboxGeometry
+from epinterface.interface import ZoneList
+from epinterface.sbem.components.schedules import (
+    DayComponent,
+    WeekComponent,
+    YearComponent,
+)
 from epinterface.sbem.components.space_use import (
-    DimmingTypeType,
     EquipmentComponent,
     LightingComponent,
     OccupancyComponent,
@@ -16,6 +22,7 @@ from epinterface.sbem.components.space_use import (
 )
 from epinterface.sbem.exceptions import NotImplementedParameter
 from epinterface.sbem.prisma.client import deep_fetcher
+from epinterface.settings import energyplus_settings
 
 
 @pytest.fixture(scope="function")
@@ -25,6 +32,53 @@ def schedule(preseeded_readonly_db: Prisma):
         "Lights_Year", preseeded_readonly_db
     )
     return year_comp
+
+
+@pytest.fixture(scope="function")
+def simple_fraction_schedule():
+    """Build a small in-memory lighting schedule without using Prisma."""
+    day = DayComponent(
+        Name="AlwaysOnDay",
+        Type="Fraction",
+        **{f"Hour_{hour:02d}": 1.0 for hour in range(24)},
+    )
+    week = WeekComponent(
+        Name="AlwaysOnWeek",
+        Monday=day,
+        Tuesday=day,
+        Wednesday=day,
+        Thursday=day,
+        Friday=day,
+        Saturday=day,
+        Sunday=day,
+    )
+    return YearComponent(
+        Name="AlwaysOnYear",
+        Type="Lighting",
+        January=week,
+        February=week,
+        March=week,
+        April=week,
+        May=week,
+        June=week,
+        July=week,
+        August=week,
+        September=week,
+        October=week,
+        November=week,
+        December=week,
+    )
+
+
+@pytest.fixture(scope="function")
+def daylighting_idf():
+    """Create an IDF for daylighting unit tests without writing to temp files."""
+    return IDF(
+        DefaultMinimalIDFPath.as_posix(),
+        epw=DefaultEPWPath.as_posix(),
+        as_version=energyplus_settings.energyplus_version,
+        file_version=energyplus_settings.energyplus_version,
+    )
 
 
 @pytest.mark.parametrize("is_on", [True, False])
@@ -62,20 +116,129 @@ def test_add_lighting_to_idf_zone(idf: IDF, schedule: YearComponent, is_on: bool
         assert not idf.idfobjects["SCHEDULE:YEAR"]
 
 
-@pytest.mark.parametrize("dimming_type", ["Stepped", "Continuous"])
-def test_add_lighting_to_idf_zone_with_dimming(
-    idf: IDF, schedule: YearComponent, dimming_type: DimmingTypeType
+@pytest.mark.parametrize("dimming_type", ["Stepped", "ContinuousOff"])
+def test_add_lighting_to_idf_zone_rejects_unsupported_dimming_type(
+    daylighting_idf: IDF, simple_fraction_schedule: YearComponent, dimming_type: str
 ):
-    """Test the add_lighting_to_idf_zone method with dimming."""
+    """Test stored dimming values can deserialize but unsupported modes fail."""
     lighting = LightingComponent(
         Name="new_office",
         PowerDensity=10,
-        Schedule=schedule,
+        Schedule=simple_fraction_schedule,
         IsOn=True,
         DimmingType=dimming_type,
     )
+
+    # Stepped and ContinuousOff can exist in source data, but are not implemented.
     with pytest.raises(NotImplementedParameter):
-        lighting.add_lights_to_idf_zone(idf, "default_zone")
+        lighting.add_lights_to_idf_zone(daylighting_idf, "default_zone")
+
+
+def test_add_lighting_to_idf_zone_with_continuous_dimming(
+    daylighting_idf: IDF, simple_fraction_schedule: YearComponent
+):
+    """Test continuous dimming adds lights and daylighting controls."""
+    geom = ShoeboxGeometry(
+        x=0,
+        y=0,
+        w=10,
+        d=10,
+        h=3.5,
+        num_stories=1,
+        zoning="by_storey",
+        basement=False,
+        wwr=0.15,
+        roof_height=None,
+    )
+    idf = geom.add(daylighting_idf)
+    zone_name = idf.idfobjects["ZONE"][0].Name
+
+    lighting = LightingComponent(
+        Name="new_office",
+        PowerDensity=10,
+        Schedule=simple_fraction_schedule,
+        IsOn=True,
+        DimmingType="Continuous",
+    )
+
+    idf = lighting.add_lights_to_idf_zone(idf, zone_name)
+
+    lights = idf.idfobjects["LIGHTS"]
+    reference_points = idf.idfobjects["DAYLIGHTING:REFERENCEPOINT"]
+    controls = idf.idfobjects["DAYLIGHTING:CONTROLS"]
+
+    assert len(lights) == 1
+    assert len(reference_points) == 1
+    assert len(controls) == 1
+
+    light = lights[0]
+    reference_point = reference_points[0]
+    control = controls[0]
+    name_prefix = f"{zone_name}_new_office_LIGHTS"
+
+    assert light.Name == name_prefix
+    assert light.Zone_or_ZoneList_or_Space_or_SpaceList_Name == zone_name
+
+    # Daylighting currently assumes one center-point sensor for one real zone.
+    assert reference_point.Name == f"{name_prefix}_DaylightRefPt"
+    assert reference_point.Zone_or_Space_Name == zone_name
+    assert control.Name == f"{name_prefix}_DaylightControls"
+    assert control.Zone_or_Space_Name == zone_name
+    assert control.Lighting_Control_Type == "Continuous"
+    assert control.Daylighting_Reference_Point_1_Name == reference_point.Name
+
+    # The current daylighting implementation uses one fixed 300 lux setpoint.
+    assert control.Fraction_of_Lights_Controlled_by_Reference_Point_1 == 1.0
+    assert control.Illuminance_Setpoint_at_Reference_Point_1 == 300
+    assert (
+        control.Minimum_Input_Power_Fraction_for_Continuous_or_ContinuousOff_Dimming_Control
+        == 0.3
+    )
+    assert (
+        control.Minimum_Light_Output_Fraction_for_Continuous_or_ContinuousOff_Dimming_Control
+        == 0.2
+    )
+
+    # Eppy pre-fills unused extensible fields; the wrapper trims after ref point 1.
+    last_idx = control.fieldnames.index("Illuminance_Setpoint_at_Reference_Point_1")
+    assert len(control.obj) == last_idx + 1
+    assert control.fieldnames.index("Daylighting_Reference_Point_2_Name") >= len(
+        control.obj
+    )
+
+
+def test_add_lighting_to_idf_zone_with_continuous_dimming_rejects_zone_list(
+    daylighting_idf: IDF, simple_fraction_schedule: YearComponent
+):
+    """Test daylighting dimming rejects zone lists."""
+    geom = ShoeboxGeometry(
+        x=0,
+        y=0,
+        w=10,
+        d=10,
+        h=3.5,
+        num_stories=1,
+        zoning="by_storey",
+        basement=False,
+        wwr=0.15,
+        roof_height=None,
+    )
+    idf = geom.add(daylighting_idf)
+    zone_name = idf.idfobjects["ZONE"][0].Name
+    zone_list = ZoneList(Name="Test_Zone_List", Names=[zone_name])
+    idf = zone_list.add(idf)
+
+    lighting = LightingComponent(
+        Name="new_office",
+        PowerDensity=10,
+        Schedule=simple_fraction_schedule,
+        IsOn=True,
+        DimmingType="Continuous",
+    )
+
+    # Daylighting:Controls targets a single zone in this implementation, not a list.
+    with pytest.raises(ValueError, match="zone list"):
+        lighting.add_lights_to_idf_zone(idf, zone_list.Name)
 
 
 @pytest.mark.parametrize("is_on,density", [(True, 10), (False, 0)])

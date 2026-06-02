@@ -740,12 +740,12 @@ class DaylightingControls(BaseObj, extra="ignore"):
     Illuminance_Setpoint_at_Reference_Point_1: float = 300
 
     def add(self, idf: IDF):
+        """Add the object to the IDF with one daylighting reference point."""
         obj = idf.newidfobject(self.key, **self.model_dump(exclude_none=True))
 
-        last_field = "Illuminance_Setpoint_at_Reference_Point_1"
-        last_idx = obj.fieldnames.index(last_field)
-
-        # obj.obj includes key at index 0, fieldnames also includes key at index 0
+        # Eppy emits default values for unused extensible reference point groups.
+        # Keep only the one reference point currently represented by this model.
+        last_idx = obj.fieldnames.index("Illuminance_Setpoint_at_Reference_Point_1")
         obj.obj = obj.obj[: last_idx + 1]
 
         return idf
@@ -992,10 +992,15 @@ class ScheduleDayList(BaseObj, extra="ignore"):
             "Interpolate_to_Timestep": self.Interpolate_to_Timestep,
             "Minutes_per_Item": self.Minutes_per_Item,
         }
-        for i in range(1440):
-            val = self.Values[i] if i < len(self.Values) else None
+        for i, val in enumerate(self.Values):
             fields[f"Value_{i + 1}"] = val
-        idf.newidfobject(self.key, **fields)
+
+        obj = idf.newidfobject(self.key, **fields)
+
+        # Eppy exposes all 1440 possible value fields from the IDD. Keep only
+        # the values represented by this object's Minutes_per_Item setting.
+        last_idx = obj.fieldnames.index(f"Value_{len(self.Values)}")
+        obj.obj = obj.obj[: last_idx + 1]
         return idf
 
 

@@ -855,11 +855,12 @@ if __name__ == "__main__":
             "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Bedford-Hanscom.Field.AP.744900_TMYx.2009-2023.zip"
         ),
     )
+    breakpoint()
     outdir = Path("test-out-lighting")
     outdir.mkdir(parents=True, exist_ok=True)
     # r = flat_model.simulate(eplus_parent_dir=outdir)
     model, cb = flat_model.to_model()
-
+    breakpoint()
     import logging
 
     from archetypal.idfclass.idf import IDF
@@ -875,6 +876,8 @@ if __name__ == "__main__":
         logger.info("Generating stochastic values.")
         schedules = generator.generate_schedules(42)
         logger.info("Stochastic values generated.")
+
+        breakpoint()
 
         if schedules.lighting is None:
             msg = "Lighting schedule is not set"
