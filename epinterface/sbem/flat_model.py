@@ -422,6 +422,79 @@ class ParametericYear(BaseModel):
         return year
 
 
+def parameteric_weekday_hourly(params: ParametericYear) -> list[float]:
+    """24 weekday hour fractions from parametric schedule shape."""
+    peak = 1.0
+    am_inter = params.Base + params.AMInterp * (peak - params.Base)
+    lunch_inter = params.Base + params.LunchInterp * (peak - params.Base)
+    pm_inter = params.Base + params.PMInterp * (peak - params.Base)
+    return [
+        params.Base,
+        params.Base,
+        params.Base,
+        params.Base,
+        params.Base,
+        params.Base,
+        am_inter,
+        am_inter,
+        am_inter,
+        peak,
+        peak,
+        peak,
+        lunch_inter,
+        lunch_inter,
+        peak,
+        peak,
+        peak,
+        peak,
+        pm_inter,
+        pm_inter,
+        pm_inter,
+        params.Base,
+        params.Base,
+        params.Base,
+    ]
+
+
+def year_schedule_from_weekday_hourly(
+    name: str,
+    category: YearScheduleCategory,
+    hourly: list[float],
+) -> YearComponent:
+    """Year schedule with the same weekday profile every day (all seasons)."""
+    day = DayComponent(
+        Name=f"{name}_CustomDay",
+        Type="Fraction",
+        **{f"Hour_{h:02d}": hourly[h] for h in range(24)},
+    )
+    week = WeekComponent(
+        Name=f"{name}_CustomWeek",
+        Monday=day,
+        Tuesday=day,
+        Wednesday=day,
+        Thursday=day,
+        Friday=day,
+        Saturday=day,
+        Sunday=day,
+    )
+    return YearComponent(
+        Name=f"{name}_CustomYear",
+        Type=category,
+        January=week,
+        February=week,
+        March=week,
+        April=week,
+        May=week,
+        June=week,
+        July=week,
+        August=week,
+        September=week,
+        October=week,
+        November=week,
+        December=week,
+    )
+
+
 class ParametricSetpoints(BaseModel):
     """A model for a setpoint schedule that is parameterized by the base, and the setbacks."""
 
@@ -1272,15 +1345,36 @@ def zone_params_to_zone_component(
         SummerPeakInterp=params.OccupancySummerPeakInterp,
     )
 
-    equipment_schedule = equipment_paramteric.to_schedule(
-        name=f"Equipment{sfx}", category="Equipment"
-    )
-    lighting_schedule = lighting_paramteric.to_schedule(
-        name=f"Lighting{sfx}", category="Lighting"
-    )
-    occupancy_schedule = occupancy_paramteric.to_schedule(
-        name=f"Occupancy{sfx}", category="Occupancy"
-    )
+    if params.CustomEquipmentWeekdayHourly is not None:
+        equipment_schedule = year_schedule_from_weekday_hourly(
+            f"Equipment{sfx}",
+            "Equipment",
+            params.CustomEquipmentWeekdayHourly,
+        )
+    else:
+        equipment_schedule = equipment_paramteric.to_schedule(
+            name=f"Equipment{sfx}", category="Equipment"
+        )
+    if params.CustomLightingWeekdayHourly is not None:
+        lighting_schedule = year_schedule_from_weekday_hourly(
+            f"Lighting{sfx}",
+            "Lighting",
+            params.CustomLightingWeekdayHourly,
+        )
+    else:
+        lighting_schedule = lighting_paramteric.to_schedule(
+            name=f"Lighting{sfx}", category="Lighting"
+        )
+    if params.CustomOccupancyWeekdayHourly is not None:
+        occupancy_schedule = year_schedule_from_weekday_hourly(
+            f"Occupancy{sfx}",
+            "Occupancy",
+            params.CustomOccupancyWeekdayHourly,
+        )
+    else:
+        occupancy_schedule = occupancy_paramteric.to_schedule(
+            name=f"Occupancy{sfx}", category="Occupancy"
+        )
 
     # hsp_regular_workday = DayComponent(
     #     Name=f"HeatingSetpoint_Regular_Workday{sfx}",

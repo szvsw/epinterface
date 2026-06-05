@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from epinterface.sbem.components.systems import (
     DCVMethod,
@@ -88,3 +88,26 @@ class ZoneParams(BaseModel):
 
     IdealLoadsHeatingOn: bool = True
     IdealLoadsCoolingOn: bool = True
+
+    # optional flat 24h weekday profiles (0-1); when set, used instead of parametric
+    CustomLightingWeekdayHourly: list[float] | None = None
+    CustomEquipmentWeekdayHourly: list[float] | None = None
+    CustomOccupancyWeekdayHourly: list[float] | None = None
+
+    @field_validator(
+        "CustomLightingWeekdayHourly",
+        "CustomEquipmentWeekdayHourly",
+        "CustomOccupancyWeekdayHourly",
+    )
+    @classmethod
+    def _validate_hourly_profile(cls, value: list[float] | None) -> list[float] | None:
+        if value is None:
+            return None
+        if len(value) != 24:
+            msg = "hourly profile must have exactly 24 values"
+            raise ValueError(msg)
+        for hour, fraction in enumerate(value):
+            if not 0 <= fraction <= 1:
+                msg = f"hour {hour} value {fraction} out of range [0, 1]"
+                raise ValueError(msg)
+        return value
