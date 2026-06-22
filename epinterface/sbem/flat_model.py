@@ -2,13 +2,15 @@
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from archetypal import IDF
 from pydantic import BaseModel, Field
 
 from epinterface.analysis.overheating import OverheatingAnalysisConfig
-from epinterface.geometry import ShoeboxGeometry
+from epinterface.geometry import ShoeboxGeometry, ZoningType
 from epinterface.sbem.builder import AtticAssumptions, BasementAssumptions, Model
+from epinterface.sbem.common import NamedObject
 from epinterface.sbem.components.envelope import (
     ConstructionAssemblyComponent,
     ConstructionLayerComponent,
@@ -47,6 +49,7 @@ from epinterface.sbem.components.systems import (
     ZoneHVACComponent,
 )
 from epinterface.sbem.components.zones import ZoneComponent
+from epinterface.sbem.zone_assignment import ZoneTemplate
 from epinterface.weather import WeatherUrl
 
 xps_board = ConstructionMaterialComponent(
@@ -927,6 +930,11 @@ class FlatModel(BaseModel):
     Rotation: float
 
     EPWURI: WeatherUrl | Path
+    zoning: ZoningType = "core/perim"
+
+    def zone_template(self) -> ZoneTemplate:
+        """Return the shell-free zone template fields from this flat model."""
+        return ZoneTemplate.model_validate(self.model_dump())
 
     def to_zone(self) -> ZoneComponent:
         """Convert the flat model to a full zone."""
@@ -2096,7 +2104,7 @@ class FlatModel(BaseModel):
             h=self.F2FHeight,
             num_stories=self.NFloors,
             # TODO: should core/perim be dependent on width, depth > 9m?
-            zoning="core/perim",
+            zoning=self.zoning,
             roof_height=None,
             wwr=self.WWR,
             basement=False,
@@ -2138,6 +2146,62 @@ class FlatModel(BaseModel):
         )
 
         return r
+
+    def to_building_model(self):
+        """Convert a uniform legacy flat model to the floor-aware building model."""
+        from epinterface.sbem.building_flat_model import BuildingFlatModel
+
+        return BuildingFlatModel.from_uniform_flat_model(self, zoning=self.zoning)
+
+
+def _suffix_named_objects(value: Any, suffix: str, seen: set[int]) -> None:
+    """Suffix component object names recursively, skipping shared material definitions."""
+    obj_id = id(value)
+    if obj_id in seen:
+        return
+    seen.add(obj_id)
+
+    if isinstance(value, ConstructionMaterialComponent):
+        return
+
+    if isinstance(value, NamedObject):
+        value.Name = f"{value.Name}_{suffix}"
+
+    if isinstance(value, BaseModel):
+        for child in value.__dict__.values():
+            _suffix_named_objects(child, suffix, seen)
+    elif isinstance(value, dict):
+        for child in value.values():
+            _suffix_named_objects(child, suffix, seen)
+    elif isinstance(value, list | tuple | set):
+        for child in value:
+            _suffix_named_objects(child, suffix, seen)
+
+
+def zone_template_to_zone_component(
+    params: ZoneTemplate,
+    *,
+    id_tag: str = "",
+) -> ZoneComponent:
+    """Convert a resolved zone template into a uniquely named ZoneComponent."""
+    flat_data = params.model_dump()
+    flat_data.update({
+        "F2FHeight": 3.0,
+        "NFloors": 1,
+        "Width": 10.0,
+        "Depth": 10.0,
+        "Rotation": 0.0,
+        "EPWURI": Path("dummy.zip"),
+        "zoning": "by_storey",
+    })
+    zone = FlatModel.model_validate(flat_data).to_zone()
+    if not params.IdealLoadsHeatingOn:
+        zone.Operations.HVAC.ConditioningSystems.Heating = None
+    if not params.IdealLoadsCoolingOn:
+        zone.Operations.HVAC.ConditioningSystems.Cooling = None
+    if id_tag:
+        _suffix_named_objects(zone, id_tag, set())
+    return zone
 
 
 if __name__ == "__main__":
