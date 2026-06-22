@@ -1672,10 +1672,10 @@ if __name__ == "__main__":
         #     "/Users/daryaguettler/globi/data/Brazil/component-map.yaml"
         # )
         database_path = Path(
-            "/Users/daryaguettler/globi/data/Portugal/components-lib.db"
+            "/Users/daryaguettler/school-repos/globi/inputs/components-lib.db"
         )
         component_map_path = Path(
-            "/Users/daryaguettler/globi/data/Portugal/component-map.yaml"
+            "/Users/daryaguettler/school-repos/globi/inputs/component-map.yaml"
         )
         settings = PrismaSettings(
             database_path=database_path,
@@ -1699,11 +1699,15 @@ if __name__ == "__main__":
         #     "scenario": "withAC",
         # }
         context = {
-            "Region": "I1_V2",
-            "City": "LS",
-            "Typology": "Single_Family_Residential",
-            "Age_buckets": "1971_1980",
-            "scenario": "Baseline",
+            "Region": "Manchester",
+            "Typology": "domestic",
+            "Fabric": "construction0",
+            "Windows": "default_glazing",
+            "Floor_use": "LivingRoomKitchen",
+            "Heating": "NaturalGasHeating",
+            "Cooling": "ACCentral",
+            "Distribution": "AirDuctsConditionedUninsulated",
+            "scenario": "No_DSR",
         }
         with settings.db:
             zone = cast(ZoneComponent, selector.get_component(context=context, db=db))
