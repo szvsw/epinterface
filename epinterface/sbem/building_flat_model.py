@@ -61,7 +61,9 @@ class BuildingShellParams(BaseModel):
     Depth: float
     F2FHeight: float
     NFloors: int = Field(ge=1)
-    WWR: float = Field(ge=0, le=1)
+    WWR: float = Field(
+        ge=0, le=1
+    )  # TODO: discuss- maybe this shoudl be floor level? could be the case for ground level shop vs. resi top floors
     Rotation: float = 0.0
 
     @classmethod
@@ -83,7 +85,9 @@ class BuildingShellParams(BaseModel):
 class FloorFlatModel(BaseModel):
     """Per-storey zone role patches applied on top of building defaults."""
 
-    storey_index: int = Field(ge=0)
+    storey_index: int = Field(
+        ge=0
+    )  # TODO: i'm keeping the naming convention with the e since its used throughout repo - ensure its consistent everywhere and remove e maybe later
     zones: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
