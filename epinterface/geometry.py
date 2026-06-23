@@ -905,3 +905,28 @@ def get_zone_glazed_area(idf: IDF, zone_name: str) -> float:
         raise ValueError(msg)
 
     return total_window_area
+
+
+def get_zone_exterior_wall_area(idf: IDF, zone_name: str) -> float:
+    """Get the gross exterior (outdoor-facing) wall area of a zone [m2].
+
+    This is the sum of the base wall-surface polygon areas, which in EnergyPlus
+    includes the area covered by any window sub-surfaces. It is therefore the
+    correct denominator for a window-to-wall ratio (``glazed_area / wall_area``).
+
+    Args:
+        idf (IDF): The IDF model.
+        zone_name (str): The name of the zone to measure.
+
+    Returns:
+        area (float): The gross exterior wall area of the zone [m2].
+    """
+    total_wall_area = 0.0
+    for srf in idf.idfobjects["BUILDINGSURFACE:DETAILED"]:
+        if (
+            str(srf.Zone_Name).lower() == zone_name.lower()
+            and str(srf.Surface_Type).lower() == "wall"
+            and str(srf.Outside_Boundary_Condition).lower() == "outdoors"
+        ):
+            total_wall_area += float(Polygon3D(srf.coords).area)
+    return total_wall_area
