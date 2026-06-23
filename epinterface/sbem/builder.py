@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -663,19 +664,70 @@ class Model(BaseWeather, validate_assignment=True):
 
     @property
     def total_people(self) -> float:
-        """Approximate the total number of people in the model."""
+        """Approximate the total number of people in the model (uniform path).
+
+        This is only valid for the legacy uniform ``Zone`` path, where occupant
+        density is constant across the building. For assignment-backed models
+        occupant density varies per floor/zone, so a single building-wide density
+        is wrong; use :meth:`total_people_count` with the built IDF instead.
+
+        Raises:
+            NotImplementedError: If the model uses ``zone_assignments``.
+            ValueError: If the model has no ``Zone``.
+        """
         if self.zone_assignments is not None:
-            ppl_per_m2 = self.zone_assignments.defaults.OccupantDensity
-        else:
-            if self.Zone is None:
-                msg = "Model has no Zone for occupant count."
-                raise ValueError(msg)
-            ppl_per_m2 = (
-                self.Zone.Operations.SpaceUse.Occupancy.PeopleDensity
-                if self.Zone.Operations.SpaceUse.Occupancy.IsOn
-                else 0
+            msg = (
+                "total_people is not resolver-aware. For assignment-backed models, "
+                "call total_people_count(idf) with the built IDF so per-zone occupant "
+                "densities and floor areas can be summed."
             )
+            raise NotImplementedError(msg)
+        if self.Zone is None:
+            msg = "Model has no Zone for occupant count."
+            raise ValueError(msg)
+        ppl_per_m2 = (
+            self.Zone.Operations.SpaceUse.Occupancy.PeopleDensity
+            if self.Zone.Operations.SpaceUse.Occupancy.IsOn
+            else 0
+        )
         return float(ppl_per_m2 * self.total_conditioned_area)
+
+    def total_people_count(self, idf: IDF | None = None) -> float:
+        """Total occupants, resolver-aware for assignment-backed models.
+
+        For the legacy uniform path this matches :attr:`total_people`. For
+        assignment-backed models it sums each zone's resolved occupant density
+        times its built floor area (resolved densities already include
+        attic/basement use-fraction scaling, so unoccupied zones contribute 0).
+
+        Args:
+            idf (IDF | None): The built IDF, required for assignment-backed models
+                to read per-zone floor areas.
+
+        Raises:
+            NotImplementedError: If ``zone_assignments`` is set but ``idf`` is None.
+        """
+        if self.zone_assignments is None:
+            return self.total_people
+        if idf is None:
+            msg = (
+                "total_people_count requires the built IDF for assignment-backed "
+                "models so per-zone floor areas can be used."
+            )
+            raise NotImplementedError(msg)
+        total = 0.0
+        for zone in idf.idfobjects["ZONE"]:
+            area = float(get_zone_floor_area(idf, zone.Name))
+            resolved = self.zone_assignments.resolve_zone(
+                zone.Name,
+                self.geometry,
+                attic_use_fraction=self.Attic.UseFraction,
+                attic_conditioned=self.Attic.Conditioned,
+                basement_use_fraction=self.Basement.UseFraction,
+                basement_conditioned=self.Basement.Conditioned,
+            )
+            total += resolved.params.OccupantDensity * area
+        return total
 
     # validate the attic conditioning
 
@@ -814,25 +866,68 @@ class Model(BaseWeather, validate_assignment=True):
         )
 
     # part of the HVAC/conditioning system
-    def compute_dhw(self) -> float:
+    def compute_dhw(self, idf: IDF | None = None) -> float:
         """Explicitly compute the domestic hot water energy demand.
 
         This is useful as a gut-check to make sure the DHW has been added correctly.
 
+        For assignment-backed models this is resolver-aware: it sums each zone's
+        DHW energy using that zone's resolved water-use flow rate, occupant count
+        (resolved occupant density times built floor area), and DHW supply/inlet
+        temperatures. The legacy uniform ``Zone`` path is unchanged.
+
+        Args:
+            idf (IDF | None): The built IDF, required for assignment-backed models
+                so per-zone occupant counts can be computed.
+
         Returns:
             energy (float): The annual domestic hot water energy demand (kWh/m2)
+
+        Raises:
+            NotImplementedError: If ``zone_assignments`` is set but ``idf`` is None.
         """
+        water_density = physical_constants.WaterDensity_kg_per_m3  # kg/m3
+        c = physical_constants.WaterSpecificHeat_J_per_kg_degK  # J/kg.K
+
         if self.zone_assignments is not None:
             from epinterface.sbem.flat_model import zone_template_to_zone_component
 
-            ops = zone_template_to_zone_component(
-                self.zone_assignments.defaults
-            ).Operations
-        else:
-            if self.Zone is None:
-                msg = "Model has no Zone for DHW computation."
-                raise ValueError(msg)
-            ops = self.Zone.Operations
+            if idf is None:
+                msg = (
+                    "compute_dhw requires the built IDF for assignment-backed models "
+                    "so per-zone occupant counts can be computed."
+                )
+                raise NotImplementedError(msg)
+            total_energy_J = 0.0
+            for zone in idf.idfobjects["ZONE"]:
+                area = float(get_zone_floor_area(idf, zone.Name))
+                resolved = self.zone_assignments.resolve_zone(
+                    zone.Name,
+                    self.geometry,
+                    attic_use_fraction=self.Attic.UseFraction,
+                    attic_conditioned=self.Attic.Conditioned,
+                    basement_use_fraction=self.Basement.UseFraction,
+                    basement_conditioned=self.Basement.Conditioned,
+                )
+                ops = zone_template_to_zone_component(resolved.params).Operations
+                if not ops.DHW.IsOn:
+                    continue
+                people = resolved.params.OccupantDensity * area
+                flow_rate_per_person = ops.SpaceUse.WaterUse.FlowRatePerPerson
+                temperature_rise = (
+                    ops.DHW.WaterSupplyTemperature - ops.DHW.WaterTemperatureInlet
+                )  # K
+                total_flow_rate = flow_rate_per_person * people  # m3/day
+                total_volume = total_flow_rate * 365  # m3 / yr
+                total_mass = total_volume * water_density  # kg
+                total_energy_J += total_mass * temperature_rise * c  # J / yr
+            total_energy_kWh = total_energy_J / physical_constants.J_to_kWh
+            return total_energy_kWh / self.total_conditioned_area
+
+        if self.Zone is None:
+            msg = "Model has no Zone for DHW computation."
+            raise ValueError(msg)
+        ops = self.Zone.Operations
 
         # TODO: this should be computed from the DHW schedule
         if not ops.DHW.IsOn:
@@ -841,8 +936,6 @@ class Model(BaseWeather, validate_assignment=True):
         temperature_rise = (
             ops.DHW.WaterSupplyTemperature - ops.DHW.WaterTemperatureInlet
         )  # K
-        water_density = physical_constants.WaterDensity_kg_per_m3  # kg/m3
-        c = physical_constants.WaterSpecificHeat_J_per_kg_degK  # J/kg.K
         total_flow_rate = flow_rate_per_person * self.total_people  # m3/day
         total_volume = total_flow_rate * 365  # m3 / yr
         total_mass = total_volume * water_density  # kg
@@ -1043,12 +1136,35 @@ class Model(BaseWeather, validate_assignment=True):
             subtractor = (
                 4 if (self.geometry.basement and not self.Basement.Conditioned) else 2
             )
+            # Ground-contact heat transfer is driven by the lowest ground-coupled
+            # zones, not by upper floors. Use the basement when present, otherwise
+            # the lowest above-grade floor (floor_index == 0). This prevents a
+            # high-setpoint or high-load upper floor from shifting the slab's
+            # ground temperature in a heterogeneous building.
+            if self.geometry.basement:
+                ground_contact_zone_names = list(
+                    added_zone_lists.basement_zone_list.Names
+                )
+            else:
+                ground_contact_zone_names = [
+                    zone
+                    for zone in added_zone_lists.main_zone_list.Names
+                    if resolver.resolve_zone(
+                        zone,
+                        self.geometry,
+                        attic_use_fraction=self.Attic.UseFraction,
+                        attic_conditioned=self.Attic.Conditioned,
+                        basement_use_fraction=self.Basement.UseFraction,
+                        basement_conditioned=self.Basement.Conditioned,
+                    ).floor_index
+                    == 0
+                ]
             hsp_acc = np.zeros(12)
             csp_acc = np.zeros(12)
             area_sum = 0.0
             has_heating = False
             has_cooling = False
-            for zone in added_zone_lists.main_zone_list.Names:
+            for zone in ground_contact_zone_names:
                 zone_area = float(get_zone_floor_area(idf, zone))
                 zc = resolve_component(zone)
                 hsp_acc += (
@@ -1070,11 +1186,16 @@ class Model(BaseWeather, validate_assignment=True):
                 has_heating = has_heating or cond.Heating is not None
                 has_cooling = has_cooling or cond.Cooling is not None
 
-            if area_sum <= 0:
-                msg = "Cannot compute ground temperatures without main zone floor area."
-                raise ValueError(msg)
-            hsp_line = hsp_acc / area_sum
-            csp_line = csp_acc / area_sum
+            if area_sum > 0:
+                hsp_line = hsp_acc / area_sum
+                csp_line = csp_acc / area_sum
+            else:
+                # No conditioned ground-contact zones (e.g. an unconditioned
+                # basement): fall back to default ground temperatures below.
+                has_heating = False
+                has_cooling = False
+                hsp_line = np.array(assumed_constants.SiteGroundTemperature_degC)
+                csp_line = np.array(assumed_constants.SiteGroundTemperature_degC)
 
             epw = EPW(epw_path.as_posix())
             epw_ground_vals_all = epw.monthly_ground_temperature
@@ -1370,6 +1491,9 @@ class Model(BaseWeather, validate_assignment=True):
                 cool_num = 0.0
                 dhw_num = 0.0
                 area_sum = 0.0
+                heating_fuels: set[str] = set()
+                cooling_fuels: set[str] = set()
+                dhw_fuels: set[str] = set()
                 for zone in idf.idfobjects["ZONE"]:
                     area = float(get_zone_floor_area(idf, zone.Name))
                     resolved = self.zone_assignments.resolve_zone(
@@ -1394,9 +1518,38 @@ class Model(BaseWeather, validate_assignment=True):
                     ) * area
                     dhw_num += zc.Operations.DHW.effective_system_cop * area
                     area_sum += area
+                    if cond.Heating is not None:
+                        heating_fuels.add(str(cond.Heating.Fuel))
+                    if cond.Cooling is not None:
+                        cooling_fuels.add(str(cond.Cooling.Fuel))
+                    dhw_fuels.add(str(zc.Operations.DHW.FuelType))
                 heat_cop = heat_num / area_sum if area_sum else 1.0
                 cool_cop = cool_num / area_sum if area_sum else 1.0
                 dhw_cop = dhw_num / area_sum if area_sum else 1.0
+
+                # The building-level energy_and_peak utility mapping assigns a
+                # single fuel per end use (taken from defaults) and an area-weighted
+                # COP. That is only exact when every zone shares the same fuel per
+                # end use. Warn loudly otherwise so callers do not mistake the
+                # building-level utility split for a true heterogeneous-fuel result.
+                mixed = {
+                    end_use: sorted(fuels)
+                    for end_use, fuels in (
+                        ("heating", heating_fuels),
+                        ("cooling", cooling_fuels),
+                        ("DHW", dhw_fuels),
+                    )
+                    if len(fuels) > 1
+                }
+                if mixed:
+                    warnings.warn(
+                        "Building-level energy_and_peak results are approximate for "
+                        "this heterogeneous model: multiple fuels were resolved across "
+                        f"zones ({mixed}). Utility/fuel mapping uses the default fuel "
+                        "per end use and an area-weighted COP. Use per-zone/per-floor "
+                        "results for fuel-accurate accounting.",
+                        stacklevel=2,
+                    )
         all_fuel_names = sorted({*get_args(FuelType), *get_args(DHWFuelType)})
         return energy_and_peak_postprocess(
             sql,
@@ -1464,7 +1617,9 @@ class Model(BaseWeather, validate_assignment=True):
                 )
 
                 zone_results = zone_energy_summary(sql, idf, model=self)
-                floor_results = floor_energy_summary(zone_results)
+                floor_results = floor_energy_summary(
+                    zone_results, n_floors=self.geometry.num_stories
+                )
             zone_weights, zone_names = self.get_zone_weights_and_names(idf)
 
             overheating_results = (

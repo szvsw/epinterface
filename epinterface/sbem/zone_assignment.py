@@ -166,29 +166,47 @@ class PartialZoneTemplate(BaseModel, extra="forbid"):
     WindowTVis: float | None = Field(default=None, ge=0, le=1)
 
     FacadeRValue: float | None = Field(default=None, gt=0)
-    RoofRValue: float | None = Field(default=None, gt=0)
-    SlabRValue: float | None = Field(default=None, gt=0)
     WWR: float | None = Field(default=None, ge=0, le=1)
 
     IdealLoadsHeatingOn: bool | None = None
     IdealLoadsCoolingOn: bool | None = None
 
+    # NOTE: RoofRValue and SlabRValue are intentionally absent from the partial
+    # override model. They are boundary-envelope quantities that are applied
+    # building-wide from ``defaults`` (the shared opaque envelope), and cannot
+    # yet vary per floor. Exposing them here would silently accept overrides
+    # that never reach the IDF. They remain available on ``ZoneTemplate`` for
+    # the building-wide defaults.
+
 
 class FloorBand(BaseModel, extra="forbid"):
-    """A half-open range of above-grade floors with optional role overrides."""
+    """A half-open range of above-grade floors with optional role overrides.
+
+    Both ``template`` and the values of ``role_overrides`` are sparse
+    ``PartialZoneTemplate`` patches applied on top of the building ``defaults``.
+    Using a typed partial (rather than a full template or a raw dict) means
+    unknown or unsupported override fields fail when the model is created, not
+    silently during the build.
+    """
 
     start: int = Field(ge=0)
     stop: int = Field(gt=0)
-    template: PartialZoneTemplate | ZoneTemplate | None = None
-    role_overrides: dict[ZoneRole, PartialZoneTemplate | ZoneTemplate] = Field(
-        default_factory=dict
-    )
+    template: PartialZoneTemplate | None = None
+    role_overrides: dict[ZoneRole, PartialZoneTemplate] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_range(self) -> FloorBand:
-        """Require a non-empty half-open floor range."""
+        """Require a non-empty half-open floor range and supported overrides."""
         if self.stop <= self.start:
             msg = f"FloorBand stop ({self.stop}) must be greater than start ({self.start})."
+            raise ValueError(msg)
+        core_override = self.role_overrides.get(ZoneRole.core)
+        if core_override is not None and core_override.WWR is not None:
+            msg = (
+                "WWR cannot be overridden on core zones; core zones have no "
+                "exterior walls, so a core WWR override would have no physical "
+                "effect. Set WWR on the floor band template or perimeter roles."
+            )
             raise ValueError(msg)
         return self
 
@@ -341,8 +359,8 @@ class ZoneAssignmentResolver(BaseModel, extra="forbid"):
         return None
 
     @staticmethod
-    def _patch_dict(template: PartialZoneTemplate | ZoneTemplate | None) -> dict:
-        """Return non-null values from a partial or full template."""
+    def _patch_dict(template: PartialZoneTemplate | None) -> dict:
+        """Return non-null values from a sparse template patch."""
         if template is None:
             return {}
         return template.model_dump(exclude_none=True)

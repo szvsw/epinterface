@@ -13,7 +13,12 @@ from pydantic import BaseModel, Field
 from pydantic.functional_validators import model_validator
 
 from epinterface.analysis.overheating import OverheatingAnalysisConfig
-from epinterface.geometry import ShoeboxGeometry, ZoningType
+from epinterface.geometry import (
+    ShoeboxGeometry,
+    ZoningType,
+    get_zone_exterior_wall_area,
+    get_zone_glazed_area,
+)
 from epinterface.sbem.builder import (
     AtticAssumptions,
     BasementAssumptions,
@@ -140,7 +145,14 @@ class BuildingFlatModel(BaseModel, extra="forbid"):
         return model.build(config, post_geometry_callback=callback)
 
     def zone_assignment_summary(self, idf: IDF | None = None) -> pd.DataFrame:
-        """Resolved per-zone inputs, including per-floor WWR and area."""
+        """Resolved per-zone inputs, including requested and as-built WWR/areas.
+
+        ``WWR`` is the *requested* window-to-wall ratio from the resolved
+        template. ``actual_wwr`` is the as-built ratio measured from the IDF
+        (``actual_glazed_area_m2 / actual_exterior_wall_area_m2``); these differ
+        for zones with no exterior walls (e.g. ``core`` zones in ``core/perim``
+        zoning), where the requested WWR has no physical effect.
+        """
         model, _ = self.to_model()
         idf_built = idf or self.build_idf()
         rows = []
@@ -153,6 +165,11 @@ class BuildingFlatModel(BaseModel, extra="forbid"):
             basement_conditioned=self.basement.Conditioned,
         ):
             params = resolved.params
+            glazed_area = float(get_zone_glazed_area(idf_built, resolved.ep_zone_name))
+            wall_area = float(
+                get_zone_exterior_wall_area(idf_built, resolved.ep_zone_name)
+            )
+            actual_wwr = glazed_area / wall_area if wall_area > 0 else 0.0
             rows.append({
                 "ep_zone_name": resolved.ep_zone_name,
                 "ep_storey_index": resolved.ep_storey_index,
@@ -171,6 +188,9 @@ class BuildingFlatModel(BaseModel, extra="forbid"):
                 "WindowSHGF": params.WindowSHGF,
                 "WindowTVis": params.WindowTVis,
                 "WWR": params.WWR,
+                "actual_glazed_area_m2": glazed_area,
+                "actual_exterior_wall_area_m2": wall_area,
+                "actual_wwr": actual_wwr,
                 "HeatingFuel": params.HeatingFuel,
                 "CoolingFuel": params.CoolingFuel,
                 "HeatingSystemCOP": params.HeatingSystemCOP,
@@ -181,7 +201,17 @@ class BuildingFlatModel(BaseModel, extra="forbid"):
         return pd.DataFrame(rows)
 
     def floor_assignment_summary(self, idf: IDF | None = None) -> pd.DataFrame:
-        """Area-weighted input summary with exactly NFloors main rows."""
+        """Floor-area-weighted input summary with exactly NFloors main rows.
+
+        Scalar operating inputs (LPD, EPD, occupancy, setpoints, infiltration,
+        facade/window) are floor-area-weighted. WWR is reported two ways:
+
+        - ``WWR``: floor-area-weighted *requested* WWR (kept for reference; can be
+          misleading because it averages over core zones that have no glazing).
+        - ``actual_wwr``: the as-built ratio summed over exterior walls
+          (``sum(glazed) / sum(exterior wall)``), which is the physically
+          meaningful facade glazing ratio for the floor.
+        """
         zone_summary = self.zone_assignment_summary(idf=idf)
         main = zone_summary[zone_summary["category"] == "main"].copy()
         if main.empty:
@@ -203,10 +233,18 @@ class BuildingFlatModel(BaseModel, extra="forbid"):
             area = group["floor_area_m2"].astype(float)
             total_area = float(area.sum())
             floor_index_int = int(cast(int, floor_index))
-            row = {"floor_index": floor_index_int, "floor_area_m2": total_area}
+            row: dict[str, float | int] = {
+                "floor_index": floor_index_int,
+                "floor_area_m2": total_area,
+            }
             for col in numeric_cols:
                 vals = group[col].astype(float)
                 row[col] = float((vals * area).sum() / total_area)
+            glazed = float(group["actual_glazed_area_m2"].astype(float).sum())
+            wall = float(group["actual_exterior_wall_area_m2"].astype(float).sum())
+            row["actual_glazed_area_m2"] = glazed
+            row["actual_exterior_wall_area_m2"] = wall
+            row["actual_wwr"] = glazed / wall if wall > 0 else 0.0
             rows.append(row)
         return pd.DataFrame(rows).sort_values("floor_index").reset_index(drop=True)
 
@@ -239,13 +277,17 @@ class BuildingFlatModel(BaseModel, extra="forbid"):
         cls,
         flat_model,
         *,
-        zoning: ZoningType = "core/perim",
+        zoning: ZoningType | None = None,
     ) -> BuildingFlatModel:
-        """Create a BuildingFlatModel from an existing uniform FlatModel."""
+        """Create a BuildingFlatModel from an existing uniform FlatModel.
+
+        ``zoning`` defaults to the source model's own ``zoning`` so the converted
+        building keeps the same zoning strategy unless explicitly overridden.
+        """
         template = flat_model.zone_template()
         shell = BuildingShell(
             EPWURI=flat_model.EPWURI,
-            zoning=zoning,
+            zoning=zoning or flat_model.zoning,
             Width=flat_model.Width,
             Depth=flat_model.Depth,
             F2FHeight=flat_model.F2FHeight,

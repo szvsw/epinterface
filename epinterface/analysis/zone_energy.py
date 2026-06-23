@@ -1,4 +1,23 @@
-"""Zone and floor annual energy summaries from EnergyPlus SQL output."""
+"""Zone and floor annual energy summaries from EnergyPlus SQL output.
+
+Energy-accounting caveats (important for interpreting the columns below):
+
+- ``sim_lighting_site_kwh`` and ``sim_equipment_site_kwh`` are electric *site*
+  energy (the electricity consumed by lights and plug loads).
+- ``sim_heating_delivered_kwh`` and ``sim_cooling_delivered_kwh`` are *delivered*
+  ideal-load thermal energy, i.e. the heating/cooling the ideal-loads air system
+  added to / removed from the zone air. They are NOT fuel/utility energy: no COP
+  or fuel mapping has been applied.
+- ``sim_total_included_kwh`` is the sum of the four columns above. It mixes site
+  electricity with delivered thermal energy, so it is neither true site energy,
+  utility energy, nor source energy. It is "the simulated zone energy that is
+  currently included" and should be labelled as such in any downstream report.
+- Domestic hot water (DHW) is NOT included in zone or floor results yet.
+
+The metadata columns (``floor_index``, ``role``, ``category``, ``ep_storey_index``,
+``floor_area_m2``) are owned by the assignment summary; see
+``merge_assignment_and_energy`` for how duplicate metadata is avoided on join.
+"""
 
 from __future__ import annotations
 
@@ -16,12 +35,28 @@ from epinterface.sbem.zone_assignment import (
 
 J_TO_KWH = 1.0 / 3_600_000.0
 
+# (EnergyPlus output variable name, result column name). Column names encode the
+# energy-accounting meaning: "site" = electric site energy, "delivered" = ideal
+# load thermal energy (no COP/fuel applied). See the module docstring.
 _ZONE_ENERGY_VARS: tuple[tuple[str, str], ...] = (
-    ("Zone Lights Electricity Energy", "sim_lighting_kwh"),
-    ("Zone Electric Equipment Electricity Energy", "sim_equipment_kwh"),
+    ("Zone Lights Electricity Energy", "sim_lighting_site_kwh"),
+    ("Zone Electric Equipment Electricity Energy", "sim_equipment_site_kwh"),
     ("Zone Ideal Loads Zone Total Heating Energy", "sim_heating_delivered_kwh"),
     ("Zone Ideal Loads Zone Total Cooling Energy", "sim_cooling_delivered_kwh"),
 )
+
+TOTAL_ENERGY_COLUMN = "sim_total_included_kwh"
+
+# Metadata columns produced by both the assignment summary and the energy
+# summary; dropped from the energy frame before joining so the merge does not
+# create ``*_x`` / ``*_y`` duplicates.
+_ENERGY_METADATA_COLUMNS: frozenset[str] = frozenset({
+    "floor_area_m2",
+    "ep_storey_index",
+    "floor_index",
+    "role",
+    "category",
+})
 
 
 def _normalized_zone_name(name: str) -> str:
@@ -195,21 +230,55 @@ def zone_energy_summary(
             if value is not None:
                 raw_values.append(value)
         total = sum(raw_values) if raw_values else None
-        row["sim_total_delivered_kwh"] = total
-        row["sim_total_delivered_kwh_per_m2"] = None if total is None else total / area
+        row[TOTAL_ENERGY_COLUMN] = total
+        row[f"{TOTAL_ENERGY_COLUMN}_per_m2"] = None if total is None else total / area
         rows.append(row)
     return pd.DataFrame(rows)
 
 
-def floor_energy_summary(zone_energy: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate zone energy to one row per above-grade floor."""
+def floor_energy_summary(
+    zone_energy: pd.DataFrame,
+    *,
+    n_floors: int | None = None,
+) -> pd.DataFrame:
+    """Aggregate zone energy to one row per above-grade floor.
+
+    Raw zone kWh are summed first and only then normalized by the summed floor
+    area, so the per-m2 values are area-weighted correctly (rather than averaging
+    already-normalized zone values). Only ``category == "main"`` zones are
+    included, so basement/attic rows never leak into the floor table.
+
+    Args:
+        zone_energy: Per-zone energy table from :func:`zone_energy_summary`.
+        n_floors: If provided, assert the result has exactly one row per
+            above-grade floor index ``0..n_floors-1``. This enforces the
+            "simulation produces n rows where n is the number of floors"
+            contract for assignment-backed runs (important for ``core/perim``
+            zoning and basement geometries).
+
+    Raises:
+        ValueError: If ``n_floors`` is provided and the aggregated floor indices
+            do not match ``set(range(n_floors))``.
+    """
     if zone_energy.empty or "floor_index" not in zone_energy.columns:
+        if n_floors is not None and n_floors > 0:
+            msg = (
+                "floor_energy_summary produced no rows but expected "
+                f"{n_floors} above-grade floor(s)."
+            )
+            raise ValueError(msg)
         return pd.DataFrame()
     main = zone_energy[zone_energy["category"] == "main"].copy()
     if main.empty:
+        if n_floors is not None and n_floors > 0:
+            msg = (
+                "floor_energy_summary found no 'main' zones but expected "
+                f"{n_floors} above-grade floor(s)."
+            )
+            raise ValueError(msg)
         return pd.DataFrame()
 
-    raw_cols = [column for _, column in _ZONE_ENERGY_VARS] + ["sim_total_delivered_kwh"]
+    raw_cols = [column for _, column in _ZONE_ENERGY_VARS] + [TOTAL_ENERGY_COLUMN]
     grouped = (
         main.groupby("floor_index", dropna=False)[["floor_area_m2", *raw_cols]]
         .sum(min_count=1)
@@ -218,12 +287,39 @@ def floor_energy_summary(zone_energy: pd.DataFrame) -> pd.DataFrame:
     for column in raw_cols:
         grouped[f"{column}_per_m2"] = grouped[column] / grouped["floor_area_m2"]
     grouped["floor_index"] = grouped["floor_index"].astype(int)
-    return grouped.sort_values("floor_index").reset_index(drop=True)
+    grouped = grouped.sort_values("floor_index").reset_index(drop=True)
+
+    if n_floors is not None:
+        found = set(grouped["floor_index"].tolist())
+        expected = set(range(n_floors))
+        if found != expected:
+            missing = sorted(expected - found)
+            extra = sorted(found - expected)
+            msg = (
+                "floor_energy_summary expected exactly one row per above-grade "
+                f"floor 0..{n_floors - 1}, but got floor indices {sorted(found)}."
+            )
+            if missing:
+                msg += f" Missing floors: {missing}."
+            if extra:
+                msg += f" Unexpected floors: {extra}."
+            raise ValueError(msg)
+
+    return grouped
 
 
 def merge_assignment_and_energy(
     assignment: pd.DataFrame,
     energy: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Join resolved assignment summary with simulated zone energy."""
-    return assignment.merge(energy, on="ep_zone_name", how="left")
+    """Join resolved assignment summary with simulated zone energy.
+
+    The energy frame repeats metadata columns (``floor_index``, ``role``,
+    ``category``, ``ep_storey_index``, ``floor_area_m2``) that the assignment
+    frame already owns. Those are dropped from the energy frame before the join
+    so pandas does not emit ``*_x`` / ``*_y`` suffixed duplicates.
+    """
+    energy_for_merge = energy.drop(
+        columns=[c for c in _ENERGY_METADATA_COLUMNS if c in energy.columns]
+    )
+    return assignment.merge(energy_for_merge, on="ep_zone_name", how="left")
