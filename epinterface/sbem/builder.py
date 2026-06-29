@@ -70,6 +70,61 @@ AvailableHourlyVariables = Literal[
 ]
 
 AVAILABLE_HOURLY_VARIABLES = get_args(AvailableHourlyVariables)
+ZONE_TIMESTEP_WHOLE_BUILDING_METERS = ("Electricity:Facility",)
+
+
+def build_output_meter_requests(
+    *,
+    ep_version_major: int,
+    include_zone_timestep_meters: bool,
+) -> list[dict[str, str]]:
+    """Return the EnergyPlus output requests needed for the SBEM workflow.
+
+    Monthly and hourly requests stay aligned with the standard end-use
+    postprocessing contract. When zone-timestep meters are enabled, include both
+    the standard end-use meters and direct whole-building facility electricity so
+    downstream validation can reconstruct a 15-minute total-load series.
+    """
+    desired_meters = DESIRED_METERS_FOR_VERSION[ep_version_major]
+    output_meters = (
+        [
+            {
+                "key": "OUTPUT:METER",
+                "Key_Name": meter,
+                "Reporting_Frequency": "Monthly",
+            }
+            for meter in desired_meters
+        ]
+        + [
+            {
+                "key": "OUTPUT:METER",
+                "Key_Name": meter,
+                "Reporting_Frequency": "Hourly",
+            }
+            for meter in desired_meters
+        ]
+        + (
+            [
+                {
+                    "key": "OUTPUT:METER",
+                    "Key_Name": meter,
+                    "Reporting_Frequency": "Zone Timestep",
+                }
+                for meter in (*desired_meters, *ZONE_TIMESTEP_WHOLE_BUILDING_METERS)
+            ]
+            if include_zone_timestep_meters
+            else []
+        )
+    )
+    return output_meters + [
+        {
+            "key": "OUTPUT:VARIABLE",
+            "Key_Value": "*",
+            "Variable_Name": variable,
+            "Reporting_Frequency": "Hourly",
+        }
+        for variable in AVAILABLE_HOURLY_VARIABLES
+    ]
 
 
 class SimulationPathConfig(BaseModel):
@@ -566,6 +621,8 @@ class Model(BaseWeather, validate_assignment=True):
     geometry: ShoeboxGeometry
     Attic: AtticAssumptions
     Basement: BasementAssumptions
+    timesteps_per_hour: int = Field(default=6, ge=1)
+    include_zone_timestep_meters: bool = False
     # TODO: should we have another field for whether or not the attic is ventilated, i.e. high infiltration?
     Zone: ZoneComponent
 
@@ -844,33 +901,15 @@ class Model(BaseWeather, validate_assignment=True):
         shutil.copy(base_filepath, target_base_filepath)
         epw_path, ddy_path = self.fetch_weather(config.weather_dir)
         ep_version = energyplus_settings.archetypal_energyplus_version
-        desired_meters = DESIRED_METERS_FOR_VERSION[ep_version.major]
-        output_meters = (
-            [
-                {
-                    "key": "OUTPUT:METER",
-                    "Key_Name": meter,
-                    "Reporting_Frequency": "Monthly",
-                }
-                for meter in desired_meters
-            ]
-            + [
-                {
-                    "key": "OUTPUT:METER",
-                    "Key_Name": meter,
-                    "Reporting_Frequency": "Hourly",
-                }
-                for meter in desired_meters
-            ]
-            + [
-                {
-                    "key": "OUTPUT:VARIABLE",
-                    "Key_Value": "*",
-                    "Variable_Name": variable,
-                    "Reporting_Frequency": "Hourly",
-                }
-                for variable in AVAILABLE_HOURLY_VARIABLES
-            ]
+        desired_meters = set(DESIRED_METERS_FOR_VERSION[ep_version.major])
+        retained_meter_names = desired_meters | (
+            set(ZONE_TIMESTEP_WHOLE_BUILDING_METERS)
+            if self.include_zone_timestep_meters
+            else set()
+        )
+        output_meters = build_output_meter_requests(
+            ep_version_major=ep_version.major,
+            include_zone_timestep_meters=self.include_zone_timestep_meters,
         )
         idf = IDF(
             target_base_filepath.as_posix(),
@@ -884,7 +923,7 @@ class Model(BaseWeather, validate_assignment=True):
         # Remove undesired outputs from the IDF file.
         # TODO: test the perfrmance benefits, if any
         for output in idf.idfobjects["OUTPUT:METER"]:
-            if output.Key_Name not in desired_meters:
+            if output.Key_Name not in retained_meter_names:
                 idf.removeidfobject(output)
         for output in idf.idfobjects["OUTPUT:VARIABLE"]:
             if output.Variable_Name not in AVAILABLE_HOURLY_VARIABLES:
@@ -901,7 +940,10 @@ class Model(BaseWeather, validate_assignment=True):
         )
         ddy_spec.inject_ddy(idf, ddy)
 
-        idf = add_default_sim_controls(idf)
+        idf = add_default_sim_controls(
+            idf,
+            timesteps_per_hour=self.timesteps_per_hour,
+        )
         idf, _scheds = add_default_schedules(idf)
 
         idf = self.geometry.add(idf)
@@ -974,12 +1016,12 @@ class Model(BaseWeather, validate_assignment=True):
                 new_zone_def.Operations.HVAC.Ventilation.Provider = "None"
                 new_zone_def.Operations.HVAC.ConditioningSystems.Heating = None
                 new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
-            else:
-                # TODO: make this configurable!!!!
-                print(
-                    "WARNING: Basement conditioned, but Cooling disabled due to MASSACHUSETTS ASSUMPTIONS"
-                )
-                new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
+            # else:
+            #     # TODO: make this configurable!!!!
+            #     print(
+            #         "WARNING: Basement conditioned, but Cooling disabled due to MASSACHUSETTS ASSUMPTIONS"
+            #     )
+            #     new_zone_def.Operations.HVAC.ConditioningSystems.Cooling = None
 
             for zone in added_zone_lists.basement_zone_list.Names:
                 new_zone_def.add_to_idf_zone(idf, zone)

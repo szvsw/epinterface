@@ -1346,11 +1346,12 @@ class ZoneList(BaseModel, extra="ignore"):
         return idf
 
 
-def add_default_sim_controls(idf: IDF) -> IDF:
+def add_default_sim_controls(idf: IDF, timesteps_per_hour: int = 6) -> IDF:
     """Helper to add default simulation controls to the IDF model.
 
     Args:
         idf (IDF): The IDF model to add the simulation controls to.
+        timesteps_per_hour (int): Number of simulation timesteps per hour.
 
     Returns:
         IDF: The IDF model with the added simulation controls.
@@ -1383,9 +1384,7 @@ def add_default_sim_controls(idf: IDF) -> IDF:
     run_period.add(idf)
 
     # configure timestep
-    timestep = Timestep(
-        Number_of_Timesteps_per_Hour=6,
-    )
+    timestep = Timestep(Number_of_Timesteps_per_Hour=timesteps_per_hour)
     timestep.add(idf)
 
     sizing = SizingParameters(
