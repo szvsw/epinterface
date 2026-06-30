@@ -13,6 +13,7 @@ from epinterface.sbem.components.schedules import (
     YearComponent,
 )
 from epinterface.sbem.components.space_use import (
+    DimmingTypeType,
     EquipmentComponent,
     LightingComponent,
     OccupancyComponent,
@@ -118,7 +119,9 @@ def test_add_lighting_to_idf_zone(idf: IDF, schedule: YearComponent, is_on: bool
 
 @pytest.mark.parametrize("dimming_type", ["Stepped", "ContinuousOff"])
 def test_add_lighting_to_idf_zone_rejects_unsupported_dimming_type(
-    daylighting_idf: IDF, simple_fraction_schedule: YearComponent, dimming_type: str
+    daylighting_idf: IDF,
+    simple_fraction_schedule: YearComponent,
+    dimming_type: DimmingTypeType,
 ):
     """Test stored dimming values can deserialize but unsupported modes fail."""
     lighting = LightingComponent(

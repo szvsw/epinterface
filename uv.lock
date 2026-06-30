@@ -617,7 +617,7 @@ requires-dist = [
     { name = "geopandas", specifier = "~=1.0.1" },
     { name = "httpx", specifier = "~=0.27.2" },
     { name = "ladybug-core", specifier = ">=0.44.30" },
-    { name = "obgeneration", specifier = ">=0.1.0" },
+    { name = "obgeneration", specifier = ">=0.1.2" },
     { name = "openpyxl", specifier = "~=3.1.5" },
     { name = "pandas", specifier = ">=2.2,<2.3" },
     { name = "prisma", specifier = "~=0.15.0" },
@@ -2023,7 +2023,7 @@ wheels = [
 
 [[package]]
 name = "obgeneration"
-version = "0.1.1"
+version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -2034,9 +2034,9 @@ dependencies = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/06/c9/af391d173e63f33386ea5cf84c50f0a380b5e5bf003b74821bfbaabfe10b/obgeneration-0.1.1.tar.gz", hash = "sha256:8b0512816fa86d5172859f0ac2a8f8a36c2c6a9eb6df9d20c8ca2df10bbefda5", size = 199471, upload-time = "2026-05-21T20:25:34.325Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/91/326b81a7d0ed984c9c09311912906365367103a64f19c1efdc2a7e242995/obgeneration-0.1.2.tar.gz", hash = "sha256:d5c9e4517872f4f33dc57ae05386b26f605363f1d736fa0e70d56bc395f3f366", size = 202978, upload-time = "2026-06-30T01:58:46.812Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/99/2f9e79fa6c39fd05cbf95d5dc02b4ccfd20c979a7b5eff3c5b79e6853534/obgeneration-0.1.1-py3-none-any.whl", hash = "sha256:b9621d0505d6c49fe08bfdc0c2c49e7489efcee79a955a5264de7a6f4aeb7f17", size = 226239, upload-time = "2026-05-21T20:25:32.985Z" },
+    { url = "https://files.pythonhosted.org/packages/47/41/1834c3c6f4beded53ac04d8fe1ebe8ca0a1fa2c19a8a2be21eec2af6c782/obgeneration-0.1.2-py3-none-any.whl", hash = "sha256:d6d40f537e5fe3c26313c0a3172115d5ee4659b8c6863f4a315195aad5abb484", size = 230345, upload-time = "2026-06-30T01:58:45.577Z" },
 ]
 
 [[package]]

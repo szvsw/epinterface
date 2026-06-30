@@ -753,6 +753,7 @@ class DaylightingControls(BaseObj, extra="ignore"):
 
 class DaylightingReferencePoint(BaseObj, extra="ignore"):
     """Daylighting:ReferencePoint object."""
+
     key = "DAYLIGHTING:REFERENCEPOINT"
     Name: str
     Zone_or_Space_Name: str
@@ -1209,18 +1210,18 @@ class ScheduleYearFromDays(BaseModel):
     each week-long date range.  The resulting Schedule:Year has at most 53
     entries, which is the EnergyPlus maximum.
 
-    Args:
-        Name: Name for the resulting Schedule:Year (also used as a prefix
-            for the generated Schedule:Week:Daily names).
-        Schedule_Type_Limits_Name: Reference to a ScheduleTypeLimits object.
-        day_schedules: Exactly 365 (or 366 for leap years) day schedule
-            objects, ordered Jan 1 through Dec 31.
-        start_day_of_week: The day of week for January 1 (must match
-            RunPeriod.Day_of_Week_for_Start_Day).
-        summer_design_day_schedule: Optional day schedule for the
-            SummerDesignDay slot in every generated week schedule.
-        winter_design_day_schedule: Optional day schedule for the
-            WinterDesignDay slot in every generated week schedule.
+    Attributes:
+        Name: Name for the resulting Schedule:Year. Also used as a prefix for
+            generated `Schedule:Week:Daily` names.
+        Schedule_Type_Limits_Name: Reference to a `ScheduleTypeLimits` object.
+        day_schedules: Exactly 365 day schedules, or 366 for leap years,
+            ordered Jan 1 through Dec 31.
+        start_day_of_week: Day of week for January 1. This must match
+            `RunPeriod.Day_of_Week_for_Start_Day`.
+        summer_design_day_schedule: Optional schedule used for the
+            `SummerDesignDay` slot in each generated week schedule.
+        winter_design_day_schedule: Optional schedule used for the
+            `WinterDesignDay` slot in each generated week schedule.
     """
 
     Name: str

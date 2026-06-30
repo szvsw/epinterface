@@ -2,11 +2,10 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Literal
 
 import numpy as np
-from obgeneration.generator.dhw_generator import DHWGenerator
+from obgeneration.generator.dhw_generator import DHWFlatGenerator, DHWGenerator
 from obgeneration.generator.equipment_generator import EquipmentGenerator
 from obgeneration.generator.hvac_generator import HVACGenerator
 from obgeneration.generator.lighting_generator import LightingGenerator
@@ -19,9 +18,7 @@ from obgeneration.model.equipment import Equipment
 from obgeneration.model.occupancy import MobilityCluster
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from epinterface.geometry import get_zone_floor_area
 from epinterface.interface import ScheduleDayInterval, ScheduleYearFromDays
-from epinterface.weather import WeatherUrl
 
 
 class ScheduleOutput(ABC):
@@ -52,13 +49,13 @@ class FractionalScheduleOutput(ScheduleOutput, BaseModel):
         default=None,
         description=(
             "The normalized timeseries of the schedule for the summer design day."
-        )
+        ),
     )
     winter_design_day: Sequence[float] | None = Field(
         default=None,
         description=(
             "The normalized timeseries of the schedule for the winter design day."
-        )
+        ),
     )
 
     def construct_idf_object(self):
@@ -270,6 +267,8 @@ class ScheduleContext(BaseModel):
     equipment: Equipment | None = None
     dishwasher_cycles: list[list[int]] | None = None
     laundry_cycles: list[list[int]] | None = None
+    dishwasher_dhw_event_schedule: list[list[int]] | None = None
+    laundry_dhw_event_schedule: list[list[int]] | None = None
 
     @property
     def safe_occupancy(self) -> list[list[HouseholdOccupancyFractions]]:
@@ -310,6 +309,22 @@ class ScheduleContext(BaseModel):
             msg = "Laundry cycles are not set"
             raise ValueError(msg)
         return self.laundry_cycles
+
+    @property
+    def safe_dishwasher_dhw_event_schedule(self) -> list[list[int]]:
+        """Get the dishwasher DHW event schedule, raising an error if it is not set."""
+        if self.dishwasher_dhw_event_schedule is None:
+            msg = "Dishwasher DHW event schedule is not set"
+            raise ValueError(msg)
+        return self.dishwasher_dhw_event_schedule
+
+    @property
+    def safe_laundry_dhw_event_schedule(self) -> list[list[int]]:
+        """Get the laundry DHW event schedule, raising an error if it is not set."""
+        if self.laundry_dhw_event_schedule is None:
+            msg = "Laundry DHW event schedule is not set"
+            raise ValueError(msg)
+        return self.laundry_dhw_event_schedule
 
 
 class ScheduleResults(BaseModel):
@@ -659,6 +674,12 @@ class StochasticEquipmentScheduleGenerator(ScheduleGenerator):
         context.equipment = eqp
         context.laundry_cycles = eqp_res.laundry_cycles
         context.dishwasher_cycles = eqp_res.dishwasher_cycles
+        context.laundry_dhw_event_schedule = getattr(
+            eqp_res, "laundry_dhw_event_schedule", None
+        )
+        context.dishwasher_dhw_event_schedule = getattr(
+            eqp_res, "dishwasher_dhw_event_schedule", None
+        )
         return StochasticEquipmentScheduleOutput(
             name="Equipment",
             peak_value=eqp_res.peak_value,
@@ -679,13 +700,37 @@ class StochasticWaterUseScheduleGenerator(ScheduleGenerator):
     ) -> StochasticWaterUseScheduleOutput:
         """Generate a domestic hot water schedule."""
         generator = get_generator(generator)
-        dhw_res = DHWGenerator.generate_with_defaults(
-            int(context.safe_num_occupants),
-            context.safe_equipment,
-            context.safe_laundry_cycles,
-            context.safe_dishwasher_cycles,
-            config.resolution_minutes,
-        )
+        laundry_dhw_event_schedule = context.laundry_dhw_event_schedule
+        dishwasher_dhw_event_schedule = context.dishwasher_dhw_event_schedule
+        if (
+            laundry_dhw_event_schedule is not None
+            and dishwasher_dhw_event_schedule is not None
+        ):
+            try:
+                dhw_res = DHWGenerator.generate_with_defaults(
+                    int(context.safe_num_occupants),
+                    context.safe_equipment,
+                    context.safe_occupancy,
+                    context.safe_laundry_dhw_event_schedule,
+                    context.safe_dishwasher_dhw_event_schedule,
+                    config.resolution_minutes,
+                )
+            except TypeError:
+                dhw_res = DHWFlatGenerator.generate_with_defaults(
+                    int(context.safe_num_occupants),
+                    context.safe_equipment,
+                    context.safe_laundry_cycles,
+                    context.safe_dishwasher_cycles,
+                    config.resolution_minutes,
+                )
+        else:
+            dhw_res = DHWFlatGenerator.generate_with_defaults(
+                int(context.safe_num_occupants),
+                context.safe_equipment,
+                context.safe_laundry_cycles,
+                context.safe_dishwasher_cycles,
+                config.resolution_minutes,
+            )
         return StochasticWaterUseScheduleOutput(
             name="WaterUse",
             peak_value=dhw_res.peak_value,
@@ -734,239 +779,239 @@ class StochasticScheduleGenerator(BaseModel):
         return results
 
 
-if __name__ == "__main__":
-    generator = StochasticScheduleGenerator(
-        config=ScheduleGenerationConfig(resolution_minutes=15),
-        equipment=StochasticEquipmentScheduleGenerator(
-            has_washer=True,
-            has_dryer=True,
-            has_cooking_provider=True,
-            has_dishwasher=True,
-            num_refrigerators=1,
-            washer_efficient=True,
-            dryer_efficient=True,
-            dishwasher_efficient=True,
-            refrigerator_efficient=True,
-            laundry_freq_per_week_min=1,
-            laundry_freq_per_week_max=2,
-            cooking_freq_per_week_min=7,
-            cooking_freq_per_week_max=14,
-            dishwasher_freq_per_week_min=1,
-            dishwasher_freq_per_week_max=2,
-        ),
-        lighting=StochasticLightingScheduleGenerator(
-            if_led=True,
-            when_away=False,
-            when_bright=False,
-        ),
-        occupancy=StochasticOccupancyScheduleGenerator.from_uniform_patterns(
-            weekday_pattern="mostly_home",
-            weekend_pattern="mostly_home",
-            num_occupants=2,
-        ),
-        water_use=StochasticWaterUseScheduleGenerator(),
-        heating_setpoint=StochasticHeatingSetpointScheduleGenerator(
-            has_heating=True,
-            heating_setpoint_active=21,
-            heating_setpoint_sleep=18,
-            heating_setpoint_away=16,
-        ),
-        cooling_setpoint=StochasticCoolingSetpointScheduleGenerator(
-            has_cooling=True,
-            cooling_setpoint_active=24,
-            cooling_setpoint_sleep=26,
-            cooling_setpoint_away=28,
-        ),
-    )
-    from epinterface.sbem.flat_model import FlatModel
+# if __name__ == "__main__":
+#     generator = StochasticScheduleGenerator(
+#         config=ScheduleGenerationConfig(resolution_minutes=15),
+#         equipment=StochasticEquipmentScheduleGenerator(
+#             has_washer=True,
+#             has_dryer=True,
+#             has_cooking_provider=True,
+#             has_dishwasher=True,
+#             num_refrigerators=1,
+#             washer_efficient=True,
+#             dryer_efficient=True,
+#             dishwasher_efficient=True,
+#             refrigerator_efficient=True,
+#             laundry_freq_per_week_min=1,
+#             laundry_freq_per_week_max=2,
+#             cooking_freq_per_week_min=7,
+#             cooking_freq_per_week_max=14,
+#             dishwasher_freq_per_week_min=1,
+#             dishwasher_freq_per_week_max=2,
+#         ),
+#         lighting=StochasticLightingScheduleGenerator(
+#             if_led=True,
+#             when_away=False,
+#             when_bright=False,
+#         ),
+#         occupancy=StochasticOccupancyScheduleGenerator.from_uniform_patterns(
+#             weekday_pattern="mostly_home",
+#             weekend_pattern="mostly_home",
+#             num_occupants=2,
+#         ),
+#         water_use=StochasticWaterUseScheduleGenerator(),
+#         heating_setpoint=StochasticHeatingSetpointScheduleGenerator(
+#             has_heating=True,
+#             heating_setpoint_active=21,
+#             heating_setpoint_sleep=18,
+#             heating_setpoint_away=16,
+#         ),
+#         cooling_setpoint=StochasticCoolingSetpointScheduleGenerator(
+#             has_cooling=True,
+#             cooling_setpoint_active=24,
+#             cooling_setpoint_sleep=26,
+#             cooling_setpoint_away=28,
+#         ),
+#     )
+#     from epinterface.sbem.flat_model import FlatModel
 
-    flat_model = FlatModel(
-        F2FHeight=3.25,
-        Width=12,
-        Depth=8,
-        Rotation=45,
-        WWR=0.3,
-        NFloors=2,
-        FacadeRValue=3.0,
-        RoofRValue=3.0,
-        SlabRValue=3.0,
-        WindowUValue=3.0,
-        WindowSHGF=0.7,
-        WindowTVis=0.5,
-        InfiltrationACH=0.5,
-        VentFlowRatePerArea=0.0002,
-        VentFlowRatePerPerson=0.0015,
-        VentProvider="Mechanical",
-        VentHRV="NoHRV",
-        VentEconomizer="NoEconomizer",
-        VentDCV="NoDCV",
-        DHWFlowRatePerPerson=0.010,
-        DHWFuel="Electricity",
-        DHWSystemCOP=1.0,
-        DHWDistributionCOP=1.0,
-        EquipmentPowerDensity=25,
-        LightingPowerDensity=10,
-        OccupantDensity=0.001,
-        LightingDimmingType="Continuous",
-        EquipmentBase=0.4,
-        EquipmentAMInterp=0.5,
-        EquipmentLunchInterp=0.8,
-        EquipmentPMInterp=0.5,
-        EquipmentWeekendPeakInterp=0.25,
-        EquipmentSummerPeakInterp=0.5,
-        LightingBase=0.3,
-        LightingAMInterp=0.75,
-        LightingLunchInterp=0.75,
-        LightingPMInterp=0.9,
-        LightingWeekendPeakInterp=0.75,
-        LightingSummerPeakInterp=0.9,
-        OccupancyBase=0.05,
-        OccupancyAMInterp=0.25,
-        OccupancyLunchInterp=0.9,
-        OccupancyPMInterp=0.5,
-        OccupancyWeekendPeakInterp=0.15,
-        OccupancySummerPeakInterp=0.85,
-        # HSPRegularWeekdayWorkhours=21,
-        # HSPRegularWeekdayNight=21,
-        # HSPSummerWeekdayWorkhours=21,
-        # HSPSummerWeekdayNight=21,
-        # HSPWeekendWorkhours=21,
-        # HSPWeekendNight=21,
-        # CSPRegularWeekdayWorkhours=23,
-        # CSPRegularWeekdayNight=23,
-        # CSPSummerWeekdayWorkhours=23,
-        # CSPSummerWeekdayNight=23,
-        # CSPWeekendWorkhours=23,
-        # CSPWeekendNight=23,
-        HeatingSetpointBase=21,
-        SetpointDeadband=2,
-        HeatingSetpointSetback=2,
-        CoolingSetpointSetback=2,
-        NightSetback=0.5,
-        WeekendSetback=0.5,
-        SummerSetback=0.5,
-        HeatingFuel="Electricity",
-        CoolingFuel="Electricity",
-        HeatingSystemCOP=1.0,
-        CoolingSystemCOP=1.0,
-        HeatingDistributionCOP=1.0,
-        CoolingDistributionCOP=1.0,
-        EPWURI=WeatherUrl(  # pyright: ignore [reportCallIssue]
-            "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Bedford-Hanscom.Field.AP.744900_TMYx.2009-2023.zip"
-        ),
-    )
-    breakpoint()
-    outdir = Path("test-out-lighting")
-    outdir.mkdir(parents=True, exist_ok=True)
-    # r = flat_model.simulate(eplus_parent_dir=outdir)
-    model, cb = flat_model.to_model()
-    breakpoint()
-    import logging
+#     flat_model = FlatModel(
+#         F2FHeight=3.25,
+#         Width=12,
+#         Depth=8,
+#         Rotation=45,
+#         WWR=0.3,
+#         NFloors=2,
+#         FacadeRValue=3.0,
+#         RoofRValue=3.0,
+#         SlabRValue=3.0,
+#         WindowUValue=3.0,
+#         WindowSHGF=0.7,
+#         WindowTVis=0.5,
+#         InfiltrationACH=0.5,
+#         VentFlowRatePerArea=0.0002,
+#         VentFlowRatePerPerson=0.0015,
+#         VentProvider="Mechanical",
+#         VentHRV="NoHRV",
+#         VentEconomizer="NoEconomizer",
+#         VentDCV="NoDCV",
+#         DHWFlowRatePerPerson=0.010,
+#         DHWFuel="Electricity",
+#         DHWSystemCOP=1.0,
+#         DHWDistributionCOP=1.0,
+#         EquipmentPowerDensity=25,
+#         LightingPowerDensity=10,
+#         OccupantDensity=0.001,
+#         LightingDimmingType="Continuous",
+#         EquipmentBase=0.4,
+#         EquipmentAMInterp=0.5,
+#         EquipmentLunchInterp=0.8,
+#         EquipmentPMInterp=0.5,
+#         EquipmentWeekendPeakInterp=0.25,
+#         EquipmentSummerPeakInterp=0.5,
+#         LightingBase=0.3,
+#         LightingAMInterp=0.75,
+#         LightingLunchInterp=0.75,
+#         LightingPMInterp=0.9,
+#         LightingWeekendPeakInterp=0.75,
+#         LightingSummerPeakInterp=0.9,
+#         OccupancyBase=0.05,
+#         OccupancyAMInterp=0.25,
+#         OccupancyLunchInterp=0.9,
+#         OccupancyPMInterp=0.5,
+#         OccupancyWeekendPeakInterp=0.15,
+#         OccupancySummerPeakInterp=0.85,
+#         # HSPRegularWeekdayWorkhours=21,
+#         # HSPRegularWeekdayNight=21,
+#         # HSPSummerWeekdayWorkhours=21,
+#         # HSPSummerWeekdayNight=21,
+#         # HSPWeekendWorkhours=21,
+#         # HSPWeekendNight=21,
+#         # CSPRegularWeekdayWorkhours=23,
+#         # CSPRegularWeekdayNight=23,
+#         # CSPSummerWeekdayWorkhours=23,
+#         # CSPSummerWeekdayNight=23,
+#         # CSPWeekendWorkhours=23,
+#         # CSPWeekendNight=23,
+#         HeatingSetpointBase=21,
+#         SetpointDeadband=2,
+#         HeatingSetpointSetback=2,
+#         CoolingSetpointSetback=2,
+#         NightSetback=0.5,
+#         WeekendSetback=0.5,
+#         SummerSetback=0.5,
+#         HeatingFuel="Electricity",
+#         CoolingFuel="Electricity",
+#         HeatingSystemCOP=1.0,
+#         CoolingSystemCOP=1.0,
+#         HeatingDistributionCOP=1.0,
+#         CoolingDistributionCOP=1.0,
+#         EPWURI=WeatherUrl(  # pyright: ignore [reportCallIssue]
+#             "https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/MA_Massachusetts/USA_MA_Bedford-Hanscom.Field.AP.744900_TMYx.2009-2023.zip"
+#         ),
+#     )
+#     breakpoint()
+#     outdir = Path("test-out-lighting")
+#     outdir.mkdir(parents=True, exist_ok=True)
+#     # r = flat_model.simulate(eplus_parent_dir=outdir)
+#     model, cb = flat_model.to_model()
+#     breakpoint()
+#     import logging
 
-    from archetypal.idfclass.idf import IDF
+#     from archetypal.idfclass.idf import IDF
 
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(level=logging.INFO)
+#     logger = logging.getLogger(__name__)
+#     logging.basicConfig(level=logging.INFO)
 
-    def callback(idf: IDF) -> IDF:
-        """Callback to add the schedules to the IDF."""
-        idf = cb(idf)
+#     def callback(idf: IDF) -> IDF:
+#         """Callback to add the schedules to the IDF."""
+#         idf = cb(idf)
 
-        logger.info("Adding schedules to the IDF.")
-        logger.info("Generating stochastic values.")
-        schedules = generator.generate_schedules(42)
-        logger.info("Stochastic values generated.")
+#         logger.info("Adding schedules to the IDF.")
+#         logger.info("Generating stochastic values.")
+#         schedules = generator.generate_schedules(42)
+#         logger.info("Stochastic values generated.")
 
-        breakpoint()
+#         breakpoint()
 
-        if schedules.lighting is None:
-            msg = "Lighting schedule is not set"
-            raise ValueError(msg)
-        if schedules.equipment is None:
-            msg = "Equipment schedule is not set"
-            raise ValueError(msg)
-        if schedules.occupancy is None:
-            msg = "Occupancy schedule is not set"
-            raise ValueError(msg)
-        if schedules.water_use is None:
-            msg = "Water use schedule is not set"
-            raise ValueError(msg)
-        if schedules.heating_setpoint is None:
-            msg = "Heating setpoint schedule is not set"
-            raise ValueError(msg)
-        if schedules.cooling_setpoint is None:
-            msg = "Cooling setpoint schedule is not set"
-            raise ValueError(msg)
-        equipment_kWh = (
-            schedules.equipment.peak_value
-            * np.array(schedules.equipment.normalized_timeseries).sum()
-            / (60 / generator.config.resolution_minutes)
-            / 1000
-        )
-        print(f"Equipment kWh: {equipment_kWh}")
-        # get the total occupied floor area of the building
-        # TODO: deal with the fact that some zones, e.g. the basement and attic, use a different use fraction
-        total_occupied_floor_area = sum([
-            get_zone_floor_area(idf, zone.Name) for zone in idf.idfobjects["ZONE"]
-        ])
-        print(f"Total occupied floor area: {total_occupied_floor_area}")
+#         if schedules.lighting is None:
+#             msg = "Lighting schedule is not set"
+#             raise ValueError(msg)
+#         if schedules.equipment is None:
+#             msg = "Equipment schedule is not set"
+#             raise ValueError(msg)
+#         if schedules.occupancy is None:
+#             msg = "Occupancy schedule is not set"
+#             raise ValueError(msg)
+#         if schedules.water_use is None:
+#             msg = "Water use schedule is not set"
+#             raise ValueError(msg)
+#         if schedules.heating_setpoint is None:
+#             msg = "Heating setpoint schedule is not set"
+#             raise ValueError(msg)
+#         if schedules.cooling_setpoint is None:
+#             msg = "Cooling setpoint schedule is not set"
+#             raise ValueError(msg)
+#         equipment_kWh = (
+#             schedules.equipment.peak_value
+#             * np.array(schedules.equipment.normalized_timeseries).sum()
+#             / (60 / generator.config.resolution_minutes)
+#             / 1000
+#         )
+#         print(f"Equipment kWh: {equipment_kWh}")
+#         # get the total occupied floor area of the building
+#         # TODO: deal with the fact that some zones, e.g. the basement and attic, use a different use fraction
+#         total_occupied_floor_area = sum([
+#             get_zone_floor_area(idf, zone.Name) for zone in idf.idfobjects["ZONE"]
+#         ])
+#         print(f"Total occupied floor area: {total_occupied_floor_area}")
 
-        logger.info("Constructing schedules.")
-        lighting_year = schedules.lighting.construct_idf_object()
-        equipment_year = schedules.equipment.construct_idf_object()
-        occupancy_year = schedules.occupancy.construct_idf_object()
-        water_use_year = schedules.water_use.construct_idf_object()
-        heating_setpoint_year = schedules.heating_setpoint.construct_idf_object()
-        cooling_setpoint_year = schedules.cooling_setpoint.construct_idf_object()
-        logger.info("Schedules constructed.")
-        logger.info("Adding schedules to the IDF.")
+#         logger.info("Constructing schedules.")
+#         lighting_year = schedules.lighting.construct_idf_object()
+#         equipment_year = schedules.equipment.construct_idf_object()
+#         occupancy_year = schedules.occupancy.construct_idf_object()
+#         water_use_year = schedules.water_use.construct_idf_object()
+#         heating_setpoint_year = schedules.heating_setpoint.construct_idf_object()
+#         cooling_setpoint_year = schedules.cooling_setpoint.construct_idf_object()
+#         logger.info("Schedules constructed.")
+#         logger.info("Adding schedules to the IDF.")
 
-        lighting_year.add(idf)
-        equipment_year.add(idf)
-        occupancy_year.add(idf)
-        water_use_year.add(idf)
-        heating_setpoint_year.add(idf)
-        cooling_setpoint_year.add(idf)
-        logger.info("Schedules added to the IDF.")
+#         lighting_year.add(idf)
+#         equipment_year.add(idf)
+#         occupancy_year.add(idf)
+#         water_use_year.add(idf)
+#         heating_setpoint_year.add(idf)
+#         cooling_setpoint_year.add(idf)
+#         logger.info("Schedules added to the IDF.")
 
-        # lighting is already normalized
-        lpd = schedules.lighting.peak_value
-        # equipment is not normalized since its based off of discrete pieces of equipment etc
-        epd = schedules.equipment.peak_value / total_occupied_floor_area
-        occ_density = schedules.occupancy.peak_value / total_occupied_floor_area
+#         # lighting is already normalized
+#         lpd = schedules.lighting.peak_value
+#         # equipment is not normalized since its based off of discrete pieces of equipment etc
+#         epd = schedules.equipment.peak_value / total_occupied_floor_area
+#         occ_density = schedules.occupancy.peak_value / total_occupied_floor_area
 
-        logger.info("Mutating IDF objects to assign schedules.")
-        for lightsobj in idf.idfobjects["LIGHTS"]:
-            lightsobj.Schedule_Name = lighting_year.Name
-            lightsobj.Watts_per_Zone_Floor_Area  = lpd
+#         logger.info("Mutating IDF objects to assign schedules.")
+#         for lightsobj in idf.idfobjects["LIGHTS"]:
+#             lightsobj.Schedule_Name = lighting_year.Name
+#             lightsobj.Watts_per_Zone_Floor_Area = lpd
 
-        for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
-            equipmentobj.Schedule_Name = equipment_year.Name
-            equipmentobj.Watts_per_Zone_Floor_Area  = epd
+#         for equipmentobj in idf.idfobjects["ELECTRICEQUIPMENT"]:
+#             equipmentobj.Schedule_Name = equipment_year.Name
+#             equipmentobj.Watts_per_Zone_Floor_Area = epd
 
-        for peopleobj in idf.idfobjects["PEOPLE"]:
-            peopleobj.Number_of_People_Schedule_Name = occupancy_year.Name
-            peopleobj.People_per_Floor_Area = occ_density
+#         for peopleobj in idf.idfobjects["PEOPLE"]:
+#             peopleobj.Number_of_People_Schedule_Name = occupancy_year.Name
+#             peopleobj.People_per_Floor_Area = occ_density
 
-        #breakpoint()
+#         # breakpoint()
 
-        for water_use_obj in idf.idfobjects["WATERUSE:EQUIPMENT"]:
-            water_use_obj.Flow_Rate_Fraction_Schedule_Name = water_use_year.Name
-        for heating_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
-            heating_setpoint_obj.Heating_Setpoint_Schedule_Name = (
-                heating_setpoint_year.Name
-            )
-        for cooling_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
-            cooling_setpoint_obj.Cooling_Setpoint_Schedule_Name = (
-                cooling_setpoint_year.Name
-            )
-        logger.info("Mutating IDF objects to assign schedules complete.")
-        logger.info("Stochastic schedules injected and assigned to IDF objects.")
+#         for water_use_obj in idf.idfobjects["WATERUSE:EQUIPMENT"]:
+#             water_use_obj.Flow_Rate_Fraction_Schedule_Name = water_use_year.Name
+#         for heating_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
+#             heating_setpoint_obj.Heating_Setpoint_Schedule_Name = (
+#                 heating_setpoint_year.Name
+#             )
+#         for cooling_setpoint_obj in idf.idfobjects["HVACTEMPLATE:THERMOSTAT"]:
+#             cooling_setpoint_obj.Cooling_Setpoint_Schedule_Name = (
+#                 cooling_setpoint_year.Name
+#             )
+#         logger.info("Mutating IDF objects to assign schedules complete.")
+#         logger.info("Stochastic schedules injected and assigned to IDF objects.")
 
-        return idf
+#         return idf
 
-    r = model.run(eplus_parent_dir=outdir, post_zone_callback=callback)
-    breakpoint()
-    print(r.energy_and_peak.groupby(level=["Measurement", "Aggregation"]).sum())
-    
-    # print(yaml.dump(schedules.model_dump(mode="json"), indent=2, sort_keys=False))
+#     r = model.run(eplus_parent_dir=outdir, post_zone_callback=callback)
+#     breakpoint()
+#     print(r.energy_and_peak.groupby(level=["Measurement", "Aggregation"]).sum())
+
+#     # print(yaml.dump(schedules.model_dump(mode="json"), indent=2, sort_keys=False))

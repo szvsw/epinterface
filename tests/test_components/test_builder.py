@@ -47,6 +47,7 @@ def test_builder(preseeded_readonly_db: Prisma):
 
 
 def test_build_output_meter_requests_includes_whole_building_meter_at_zone_timestep():
+    """Test zone-timestep requests always include the whole-building meter set."""
     requests = build_output_meter_requests(
         ep_version_major=24,
         include_zone_timestep_meters=True,
