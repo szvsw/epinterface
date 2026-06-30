@@ -1,6 +1,7 @@
 """Interface for EnergyPlus IDF objects."""
 
 from collections.abc import Sequence
+from datetime import date, timedelta
 from logging import getLogger
 from typing import Annotated, Any, ClassVar, Literal
 
@@ -709,6 +710,58 @@ class Lights(BaseObj, extra="ignore"):
         return data
 
 
+class DaylightingControls(BaseObj, extra="ignore"):
+    """Daylighting:Controls object."""
+
+    key = "DAYLIGHTING:CONTROLS"
+    Name: str
+    Zone_or_Space_Name: str
+    Daylighting_Method: Literal["SplitFlux", "DElight"] = "SplitFlux"
+    Availability_Schedule_Name: str | None = None
+    Lighting_Control_Type: Literal["Continuous", "Stepped", "ContinuousOff"]
+    Minimum_Input_Power_Fraction_for_Continuous_or_ContinuousOff_Dimming_Control: (
+        float | None
+    ) = 0.3
+    Minimum_Light_Output_Fraction_for_Continuous_or_ContinuousOff_Dimming_Control: (
+        float | None
+    ) = 0.2
+    Number_of_Stepped_Control_Steps: int | None = None
+    Probability_Lighting_will_be_Reset_When_Needed_in_Manual_Stepped_Control: (
+        float | None
+    ) = 1.0
+    Glare_Calculation_Daylighting_Reference_Point_Name: str | None = None
+    Glare_Calculation_Azimuth_Angle_of_View_Direction_Clockwise_from_Zone_yAxis: (
+        float | None
+    ) = None
+    Maximum_Allowable_Discomfort_Glare_Index: float | None = None
+    DElight_Gridding_Resolution: float | None = None
+    Daylighting_Reference_Point_1_Name: str
+    Fraction_of_Lights_Controlled_by_Reference_Point_1: float = 1.0
+    Illuminance_Setpoint_at_Reference_Point_1: float = 300
+
+    def add(self, idf: IDF):
+        """Add the object to the IDF with one daylighting reference point."""
+        obj = idf.newidfobject(self.key, **self.model_dump(exclude_none=True))
+
+        # Eppy emits default values for unused extensible reference point groups.
+        # Keep only the one reference point currently represented by this model.
+        last_idx = obj.fieldnames.index("Illuminance_Setpoint_at_Reference_Point_1")
+        obj.obj = obj.obj[: last_idx + 1]
+
+        return idf
+
+
+class DaylightingReferencePoint(BaseObj, extra="ignore"):
+    """Daylighting:ReferencePoint object."""
+
+    key = "DAYLIGHTING:REFERENCEPOINT"
+    Name: str
+    Zone_or_Space_Name: str
+    XCoordinate_of_Reference_Point: float
+    YCoordinate_of_Reference_Point: float
+    ZCoordinate_of_Reference_Point: float
+
+
 InfDesignFlowRateCalculationMethodType = Literal[
     "Flow/Zone",
     "Flow/Area",
@@ -834,6 +887,124 @@ class ScheduleDayHourly(BaseObj, extra="ignore"):
     Hour_24: float
 
 
+InterpolateToTimestepType = Literal["Average", "Linear", "No"]
+
+
+class ScheduleDayInterval(BaseObj, extra="ignore"):
+    """Schedule:Day:Interval object for sub-hourly schedule data.
+
+    Each value covers a fixed minute window ending at the corresponding time.
+    """
+
+    key: ClassVar[str] = "SCHEDULE:DAY:INTERVAL"
+    Name: str
+    Schedule_Type_Limits_Name: str
+    Interpolate_to_Timestep: InterpolateToTimestepType = "No"
+    Minutes_per_Item: int = Field(default=15, ge=1, le=60)
+    Values: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _validate_values_length(self) -> Self:
+        """Validate that the number of values matches Minutes_per_Item."""
+        if 60 % self.Minutes_per_Item != 0:
+            msg = f"Minutes_per_Item ({self.Minutes_per_Item}) must evenly divide 60"
+            raise ValueError(msg)
+        expected = 24 * 60 // self.Minutes_per_Item
+        if len(self.Values) != expected:
+            msg = (
+                f"Expected {expected} values for "
+                f"{self.Minutes_per_Item}-minute intervals, "
+                f"got {len(self.Values)}"
+            )
+            raise ValueError(msg)
+        return self
+
+    def add(self, idf: IDF):
+        """Add the object to the IDF.
+
+        Generates the Time/Value field pairs for the configured interval.
+
+        Args:
+            idf (IDF): The IDF object to add the schedule to.
+
+        Returns:
+            idf (IDF): The updated IDF object.
+        """
+        fields: dict[str, Any] = {
+            "Name": self.Name,
+            "Schedule_Type_Limits_Name": self.Schedule_Type_Limits_Name,
+            "Interpolate_to_Timestep": self.Interpolate_to_Timestep,
+        }
+        for i, val in enumerate(self.Values):
+            idx = i + 1
+            total_minutes = idx * self.Minutes_per_Item
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
+            fields[f"Time_{idx}"] = f"{hours:02d}:{minutes:02d}"
+            fields[f"Value_Until_Time_{idx}"] = val
+        idf.newidfobject(self.key, **fields)
+        return idf
+
+
+class ScheduleDayList(BaseObj, extra="ignore"):
+    """Schedule:Day:List object for sub-hourly schedule data.
+
+    Uses a flat list of values at a fixed minute interval to describe
+    a complete 24-hour day.  Defaults to 15-minute intervals (96 values).
+    """
+
+    key: ClassVar[str] = "SCHEDULE:DAY:LIST"
+    Name: str
+    Schedule_Type_Limits_Name: str
+    Interpolate_to_Timestep: InterpolateToTimestepType = "No"
+    Minutes_per_Item: int = Field(default=15, ge=1, le=60)
+    Values: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _validate_values_length(self) -> Self:
+        """Validate that the number of values matches Minutes_per_Item."""
+        if 60 % self.Minutes_per_Item != 0:
+            msg = f"Minutes_per_Item ({self.Minutes_per_Item}) must evenly divide 60"
+            raise ValueError(msg)
+        expected = 24 * 60 // self.Minutes_per_Item
+        if len(self.Values) != expected:
+            msg = (
+                f"Expected {expected} values for "
+                f"{self.Minutes_per_Item}-minute intervals, "
+                f"got {len(self.Values)}"
+            )
+            raise ValueError(msg)
+        return self
+
+    def add(self, idf: IDF):
+        """Add the object to the IDF.
+
+        Generates the Minutes_per_Item and Value_N fields.
+
+        Args:
+            idf (IDF): The IDF object to add the schedule to.
+
+        Returns:
+            idf (IDF): The updated IDF object.
+        """
+        fields: dict[str, Any] = {
+            "Name": self.Name,
+            "Schedule_Type_Limits_Name": self.Schedule_Type_Limits_Name,
+            "Interpolate_to_Timestep": self.Interpolate_to_Timestep,
+            "Minutes_per_Item": self.Minutes_per_Item,
+        }
+        for i, val in enumerate(self.Values):
+            fields[f"Value_{i + 1}"] = val
+
+        obj = idf.newidfobject(self.key, **fields)
+
+        # Eppy exposes all 1440 possible value fields from the IDD. Keep only
+        # the values represented by this object's Minutes_per_Item setting.
+        last_idx = obj.fieldnames.index(f"Value_{len(self.Values)}")
+        obj.obj = obj.obj[: last_idx + 1]
+        return idf
+
+
 class ScheduleWeekDaily(BaseObj, extra="ignore"):
     """ScheduleWeekDaily object."""
 
@@ -957,6 +1128,203 @@ class ScheduleYear(BaseObj, extra="ignore"):
     End_Day_12: int | None = None
 
 
+DayOfWeekType = Literal[
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+]
+
+_DOW_TO_INDEX: dict[str, int] = {
+    "Monday": 0,
+    "Tuesday": 1,
+    "Wednesday": 2,
+    "Thursday": 3,
+    "Friday": 4,
+    "Saturday": 5,
+    "Sunday": 6,
+}
+
+_DOW_FIELDS = [
+    "Monday_ScheduleDay_Name",
+    "Tuesday_ScheduleDay_Name",
+    "Wednesday_ScheduleDay_Name",
+    "Thursday_ScheduleDay_Name",
+    "Friday_ScheduleDay_Name",
+    "Saturday_ScheduleDay_Name",
+    "Sunday_ScheduleDay_Name",
+]
+
+
+class ScheduleYearEntry(BaseModel):
+    """A single date-range entry within a Schedule:Year."""
+
+    week_schedule_name: str
+    start_month: int = Field(..., ge=1, le=12)
+    start_day: int = Field(..., ge=1, le=31)
+    end_month: int = Field(..., ge=1, le=12)
+    end_day: int = Field(..., ge=1, le=31)
+
+
+class DynamicScheduleYear(BaseObj, extra="ignore"):
+    """Schedule:Year with a dynamic number of week entries (up to 53).
+
+    Use this instead of ScheduleYear when more than 12 date-range entries
+    are needed (e.g. when every week of the year has a unique schedule).
+    """
+
+    key: ClassVar[str] = "SCHEDULE:YEAR"
+    Name: str
+    Schedule_Type_Limits_Name: str
+    entries: Sequence[ScheduleYearEntry] = Field(..., min_length=1, max_length=53)
+
+    def add(self, idf: IDF):
+        """Add the Schedule:Year to the IDF with all date-range entries.
+
+        Args:
+            idf (IDF): The IDF object to add the schedule to.
+
+        Returns:
+            idf (IDF): The updated IDF object.
+        """
+        fields: dict[str, Any] = {
+            "Name": self.Name,
+            "Schedule_Type_Limits_Name": self.Schedule_Type_Limits_Name,
+        }
+        for i, entry in enumerate(self.entries):
+            idx = i + 1
+            fields[f"ScheduleWeek_Name_{idx}"] = entry.week_schedule_name
+            fields[f"Start_Month_{idx}"] = entry.start_month
+            fields[f"Start_Day_{idx}"] = entry.start_day
+            fields[f"End_Month_{idx}"] = entry.end_month
+            fields[f"End_Day_{idx}"] = entry.end_day
+        idf.newidfobject(self.key, **fields)
+        return idf
+
+
+class ScheduleYearFromDays(BaseModel):
+    """Builds a complete Schedule:Year hierarchy from per-day schedules.
+
+    Takes a sequence of 365 (or 366) ScheduleDayList or ScheduleDayInterval
+    objects -- one per
+    calendar day -- and groups them into calendar weeks based on the
+    simulation start day of week.  Intermediate Schedule:Week:Daily objects
+    are created so that EnergyPlus can resolve day-of-week correctly within
+    each week-long date range.  The resulting Schedule:Year has at most 53
+    entries, which is the EnergyPlus maximum.
+
+    Attributes:
+        Name: Name for the resulting Schedule:Year. Also used as a prefix for
+            generated `Schedule:Week:Daily` names.
+        Schedule_Type_Limits_Name: Reference to a `ScheduleTypeLimits` object.
+        day_schedules: Exactly 365 day schedules, or 366 for leap years,
+            ordered Jan 1 through Dec 31.
+        start_day_of_week: Day of week for January 1. This must match
+            `RunPeriod.Day_of_Week_for_Start_Day`.
+        summer_design_day_schedule: Optional schedule used for the
+            `SummerDesignDay` slot in each generated week schedule.
+        winter_design_day_schedule: Optional schedule used for the
+            `WinterDesignDay` slot in each generated week schedule.
+    """
+
+    Name: str
+    Schedule_Type_Limits_Name: str
+    day_schedules: Sequence[ScheduleDayList | ScheduleDayInterval]
+    start_day_of_week: DayOfWeekType = "Sunday"
+    summer_design_day_schedule: ScheduleDayList | ScheduleDayInterval | None = None
+    winter_design_day_schedule: ScheduleDayList | ScheduleDayInterval | None = None
+
+    @model_validator(mode="after")
+    def _validate_day_count(self) -> Self:
+        n = len(self.day_schedules)
+        if n not in (365, 366):
+            msg = f"Expected 365 or 366 day schedules, got {n}"
+            raise ValueError(msg)
+        return self
+
+    def add(self, idf: IDF) -> IDF:
+        """Add all day, week, and year schedule objects to the IDF.
+
+        For each calendar week the method creates a Schedule:Week:Daily
+        whose day-of-week slots point to the corresponding ScheduleDayList.
+        Day-of-week slots that fall outside the week's date range are filled
+        with the first day of that week (they are never accessed by the
+        simulation because the Schedule:Year date range excludes them).
+
+        Args:
+            idf (IDF): The IDF object to add schedules to.
+
+        Returns:
+            idf (IDF): The updated IDF object.
+        """
+        n_days = len(self.day_schedules)
+        ref_year = 2001 if n_days == 365 else 2000
+        ref_start = date(ref_year, 1, 1)
+
+        for ds in self.day_schedules:
+            ds.add(idf)
+        if self.summer_design_day_schedule is not None:
+            self.summer_design_day_schedule.add(idf)
+        if self.winter_design_day_schedule is not None:
+            self.winter_design_day_schedule.add(idf)
+
+        start_dow = _DOW_TO_INDEX[self.start_day_of_week]
+        entries: list[ScheduleYearEntry] = []
+        day_idx = 0
+        week_num = 0
+
+        while day_idx < n_days:
+            week_num += 1
+            week_start = ref_start + timedelta(days=day_idx)
+            mapping: dict[str, str] = {}
+            first_name = self.day_schedules[day_idx].Name
+
+            while day_idx < n_days:
+                dow = (start_dow + day_idx) % 7
+                mapping[_DOW_FIELDS[dow]] = self.day_schedules[day_idx].Name
+                day_idx += 1
+                if dow == 6:  # Sunday ends the EnergyPlus week
+                    break
+
+            week_end = ref_start + timedelta(days=day_idx - 1)
+            week_name = f"{self.Name}_wk_{week_num}"
+
+            week_kwargs = {
+                field: mapping.get(field, first_name) for field in _DOW_FIELDS
+            }
+            week_sched = ScheduleWeekDaily(
+                Name=week_name,
+                **week_kwargs,
+                SummerDesignDay_ScheduleDay_Name=(
+                    self.summer_design_day_schedule.Name
+                    if self.summer_design_day_schedule
+                    else None
+                ),
+                WinterDesignDay_ScheduleDay_Name=(
+                    self.winter_design_day_schedule.Name
+                    if self.winter_design_day_schedule
+                    else None
+                ),
+            )
+            week_sched.add(idf)
+
+            entries.append(
+                ScheduleYearEntry(
+                    week_schedule_name=week_name,
+                    start_month=week_start.month,
+                    start_day=week_start.day,
+                    end_month=week_end.month,
+                    end_day=week_end.day,
+                )
+            )
+
+        year_sched = DynamicScheduleYear(
+            Name=self.Name,
+            Schedule_Type_Limits_Name=self.Schedule_Type_Limits_Name,
+            entries=entries,
+        )
+        year_sched.add(idf)
+
+        return idf
+
+
 class ZoneList(BaseModel, extra="ignore"):
     """ZoneList object."""
 
@@ -979,11 +1347,12 @@ class ZoneList(BaseModel, extra="ignore"):
         return idf
 
 
-def add_default_sim_controls(idf: IDF) -> IDF:
+def add_default_sim_controls(idf: IDF, timesteps_per_hour: int = 6) -> IDF:
     """Helper to add default simulation controls to the IDF model.
 
     Args:
         idf (IDF): The IDF model to add the simulation controls to.
+        timesteps_per_hour (int): Number of simulation timesteps per hour.
 
     Returns:
         IDF: The IDF model with the added simulation controls.
@@ -1016,9 +1385,7 @@ def add_default_sim_controls(idf: IDF) -> IDF:
     run_period.add(idf)
 
     # configure timestep
-    timestep = Timestep(
-        Number_of_Timesteps_per_Hour=6,
-    )
+    timestep = Timestep(Number_of_Timesteps_per_Hour=timesteps_per_hour)
     timestep.add(idf)
 
     sizing = SizingParameters(

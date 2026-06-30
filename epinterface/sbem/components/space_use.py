@@ -8,7 +8,14 @@ from archetypal.schedule import Schedule, ScheduleTypeLimits
 from pydantic import Field
 
 from epinterface.constants import assumed_constants, physical_constants
-from epinterface.interface import ElectricEquipment, Lights, People
+from epinterface.geometry import get_zone_center_point
+from epinterface.interface import (
+    DaylightingControls,
+    DaylightingReferencePoint,
+    ElectricEquipment,
+    Lights,
+    People,
+)
 from epinterface.sbem.common import BoolStr, MetadataMixin, NamedObject
 from epinterface.sbem.components.schedules import YearComponent
 from epinterface.sbem.exceptions import NotImplementedParameter
@@ -96,8 +103,9 @@ class OccupancyComponent(NamedObject, MetadataMixin, extra="forbid"):
         idf = people.add(idf)
         return idf
 
-
-DimmingTypeType = Literal["Off", "Stepped", "Continuous"]
+# Allow legacy/database dimming values to deserialize; unsupported modes
+# are rejected when translating the component into EnergyPlus objects.
+DimmingTypeType = Literal["Off", "Continuous", "Stepped", "ContinuousOff"]
 
 
 class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
@@ -133,10 +141,48 @@ class LightingComponent(NamedObject, MetadataMixin, extra="forbid"):
         if not self.IsOn:
             return idf
 
-        if self.DimmingType != "Off":
-            raise NotImplementedParameter("DimmingType:On", self.Name, "Lights")
-
         name_prefix = f"{target_zone_or_zone_list_name}_{self.safe_name}_LIGHTS"
+
+        if self.DimmingType not in ("Off", "Continuous"):
+            raise NotImplementedParameter(
+                f"DimmingType:{self.DimmingType}", self.Name, "Lights"
+            )
+
+        if self.DimmingType != "Off":
+            if idf.getobject("ZONELIST", target_zone_or_zone_list_name) is not None:
+                msg = (
+                    "Daylighting controls must be assigned to a single zone, "
+                    f"not zone list {target_zone_or_zone_list_name}."
+                )
+                raise ValueError(msg)
+            if idf.getobject("ZONE", target_zone_or_zone_list_name) is None:
+                msg = (
+                    "Daylighting target zone not found: "
+                    f"{target_zone_or_zone_list_name}"
+                )
+                raise ValueError(msg)
+
+            x, y, z = get_zone_center_point(idf, target_zone_or_zone_list_name)
+
+            ref_point = DaylightingReferencePoint(
+                Name=f"{name_prefix}_DaylightRefPt",
+                Zone_or_Space_Name=target_zone_or_zone_list_name,
+                XCoordinate_of_Reference_Point=x,
+                YCoordinate_of_Reference_Point=y,
+                ZCoordinate_of_Reference_Point=z,
+            )
+            idf = ref_point.add(idf)
+
+            controls = DaylightingControls(
+                Name=f"{name_prefix}_DaylightControls",
+                Zone_or_Space_Name=target_zone_or_zone_list_name,
+                Lighting_Control_Type=self.DimmingType,
+                Daylighting_Reference_Point_1_Name=ref_point.Name,
+                Illuminance_Setpoint_at_Reference_Point_1= 300,
+                Fraction_of_Lights_Controlled_by_Reference_Point_1=1.0,
+            )
+            idf = controls.add(idf)
+
         idf, year_name = self.Schedule.add_year_to_idf(
             idf,
             name_prefix=None,

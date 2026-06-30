@@ -8,7 +8,11 @@ from archetypal.idfclass import IDF
 from shapely import Polygon
 
 from epinterface.data import DefaultEPWPath, DefaultMinimalIDFPath
-from epinterface.geometry import ShoeboxGeometry, match_idf_to_building_and_neighbors
+from epinterface.geometry import (
+    ShoeboxGeometry,
+    get_zone_center_point,
+    match_idf_to_building_and_neighbors,
+)
 from epinterface.settings import energyplus_settings
 
 
@@ -22,6 +26,62 @@ def minimal_idf():
         file_version=energyplus_settings.energyplus_version,
     )
     yield idf
+
+
+def _add_simple_shoebox(idf: IDF) -> tuple[IDF, str]:
+    """Add one simple zone and return its name."""
+    geom = ShoeboxGeometry(
+        x=0,
+        y=0,
+        w=10,
+        d=10,
+        h=3.5,
+        num_stories=1,
+        zoning="by_storey",
+        basement=False,
+        wwr=0.15,
+        roof_height=None,
+    )
+    idf = geom.add(idf)
+    return idf, idf.idfobjects["ZONE"][0].Name
+
+
+def test_get_zone_center_point_returns_numeric_floor_center(minimal_idf):
+    """Test the daylighting center-point helper on generated shoebox geometry."""
+    idf, zone_name = _add_simple_shoebox(minimal_idf)
+
+    x, y, z = get_zone_center_point(idf, zone_name)
+
+    # This is a coarse daylighting sensor assumption, not a daylight-quality check.
+    assert isinstance(x, float)
+    assert isinstance(y, float)
+    assert np.isfinite(x)
+    assert np.isfinite(y)
+    assert z == pytest.approx(0.8)
+
+
+def test_get_zone_center_point_handles_autocalculate_vertex_count(minimal_idf):
+    """Test the center helper reads vertex fields even with autocalculate count."""
+    idf, zone_name = _add_simple_shoebox(minimal_idf)
+    floor = next(
+        surface
+        for surface in idf.idfobjects["BUILDINGSURFACE:DETAILED"]
+        if surface.Zone_Name == zone_name and surface.Surface_Type.lower() == "floor"
+    )
+    floor.Number_of_Vertices = "autocalculate"
+
+    x, y, z = get_zone_center_point(idf, zone_name)
+
+    # Current geometry rules use compatible world coordinates for this helper.
+    assert np.isfinite(x)
+    assert np.isfinite(y)
+    assert z == pytest.approx(0.8)
+
+
+def test_get_zone_center_point_unknown_zone_raises(minimal_idf):
+    """Test missing zones fail clearly."""
+    with pytest.raises(ValueError, match="No floor surface"):
+        get_zone_center_point(minimal_idf, "missing_zone")
 
 
 # Full factorial parameter combinations

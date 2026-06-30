@@ -4,7 +4,13 @@ from prisma import Prisma
 
 from epinterface.data import DefaultEPWZipPath
 from epinterface.geometry import ShoeboxGeometry
-from epinterface.sbem.builder import AtticAssumptions, BasementAssumptions, Model
+from epinterface.sbem.builder import (
+    ZONE_TIMESTEP_WHOLE_BUILDING_METERS,
+    AtticAssumptions,
+    BasementAssumptions,
+    Model,
+    build_output_meter_requests,
+)
 from epinterface.sbem.prisma.client import deep_fetcher
 
 
@@ -38,6 +44,23 @@ def test_builder(preseeded_readonly_db: Prisma):
     )
 
     _r = model.run()
+
+
+def test_build_output_meter_requests_includes_whole_building_meter_at_zone_timestep():
+    """Test zone-timestep requests always include the whole-building meter set."""
+    requests = build_output_meter_requests(
+        ep_version_major=24,
+        include_zone_timestep_meters=True,
+    )
+
+    zone_timestep_meters = {
+        request["Key_Name"]
+        for request in requests
+        if request["key"] == "OUTPUT:METER"
+        and request["Reporting_Frequency"] == "Zone Timestep"
+    }
+
+    assert set(ZONE_TIMESTEP_WHOLE_BUILDING_METERS).issubset(zone_timestep_meters)
 
 
 # TODO: add parameterized tests for different attic/basement configurations
